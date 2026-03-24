@@ -26,4 +26,7 @@ pub enum ContractError {
     TemplateAmountMismatch = 20,
     MigrationAlreadyApplied = 21,
     MigrationVersionMismatch = 22,
+    BridgeOracleNotSet = 23,
+    BridgeTradeExpired = 24,
+    BridgeTradeNotExpired = 25,
 }

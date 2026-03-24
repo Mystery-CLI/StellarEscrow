@@ -45,6 +45,7 @@ pub enum TradeStatus {
     Completed,
     Disputed,
     Cancelled,
+    AwaitingBridge, // cross-chain: waiting for bridge oracle confirmation
 }
 
 #[contracttype]
@@ -125,4 +126,20 @@ pub struct TradeTemplate {
     pub active: bool,
     pub created_at: u32,
     pub updated_at: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Cross-Chain Bridge Support
+// ---------------------------------------------------------------------------
+
+/// Metadata for a cross-chain trade, stored alongside the base Trade.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CrossChainInfo {
+    /// Identifier of the source chain (e.g. "ethereum", "polygon")
+    pub source_chain: String,
+    /// The deposit transaction hash on the source chain (as reported by the oracle)
+    pub source_tx_hash: String,
+    /// Ledger sequence after which the trade can be expired and funds reclaimed
+    pub expires_at_ledger: u32,
 }

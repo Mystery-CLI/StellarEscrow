@@ -16,8 +16,9 @@ use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
 
 pub use errors::ContractError;
 pub use types::{
-    DisputeResolution, MetadataEntry, OptionalMetadata, TierConfig, TemplateTerms, TemplateVersion,
-    Trade, TradeMetadata, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
+    CrossChainInfo, DisputeResolution, MetadataEntry, OptionalMetadata, TierConfig,
+    TemplateTerms, TemplateVersion, Trade, TradeMetadata, TradeStatus, TradeTemplate,
+    UserTier, UserTierInfo,
 };
 
 use storage::{
@@ -26,6 +27,7 @@ use storage::{
     is_paused, remove_arbitrator, save_arbitrator, save_trade, set_accumulated_fees, set_admin,
     set_fee_bps, set_initialized, set_paused, set_trade_counter, set_usdc_token,
     get_version, set_version,
+    get_bridge_oracle, set_bridge_oracle, save_cross_chain_info, get_cross_chain_info,
 };
 
 #[inline]
@@ -573,6 +575,125 @@ impl StellarEscrowContract {
     /// Returns the current contract version.
     pub fn version(env: Env) -> u32 {
         get_version(&env)
+    }
+
+    // -------------------------------------------------------------------------
+    // Cross-Chain Bridge Support
+    // -------------------------------------------------------------------------
+
+    /// Set the trusted bridge oracle address (admin only).
+    /// The oracle is an off-chain relayer that submits deposit confirmations.
+    pub fn set_bridge_oracle(env: Env, oracle: Address) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        set_bridge_oracle(&env, &oracle);
+        events::emit_bridge_oracle_set(&env, oracle);
+        Ok(())
+    }
+
+    /// Create a cross-chain trade. Funds arrive via bridge; status starts as AwaitingBridge.
+    /// `expiry_ledgers`: how many ledgers from now before the trade can be expired.
+    pub fn create_cross_chain_trade(
+        env: Env,
+        seller: Address,
+        buyer: Address,
+        amount: u64,
+        arbitrator: Option<Address>,
+        source_chain: soroban_sdk::String,
+        expiry_ledgers: u32,
+    ) -> Result<u64, ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        if amount == 0 {
+            return Err(ContractError::InvalidAmount);
+        }
+        get_bridge_oracle(&env).ok_or(ContractError::BridgeOracleNotSet)?;
+        seller.require_auth();
+        if let Some(ref arb) = arbitrator {
+            if !has_arbitrator(&env, arb) {
+                return Err(ContractError::ArbitratorNotRegistered);
+            }
+        }
+        let trade_id = increment_trade_counter(&env)?;
+        let fee = calc_fee(&env, &seller, amount)?;
+        let expires_at_ledger = env.ledger().sequence()
+            .checked_add(expiry_ledgers)
+            .ok_or(ContractError::Overflow)?;
+
+        let trade = Trade {
+            id: trade_id,
+            seller: seller.clone(),
+            buyer: buyer.clone(),
+            amount,
+            fee,
+            arbitrator,
+            status: TradeStatus::AwaitingBridge,
+            metadata: OptionalMetadata::None,
+        };
+        save_trade(&env, trade_id, &trade);
+        save_cross_chain_info(&env, trade_id, &CrossChainInfo {
+            source_chain: source_chain.clone(),
+            source_tx_hash: soroban_sdk::String::from_str(&env, ""),
+            expires_at_ledger,
+        });
+        events::emit_bridge_trade_created(&env, trade_id, source_chain);
+        Ok(trade_id)
+    }
+
+    /// Called by the bridge oracle to confirm a deposit arrived from the source chain.
+    /// Transitions the trade from AwaitingBridge → Funded.
+    pub fn confirm_bridge_deposit(
+        env: Env,
+        trade_id: u64,
+        source_tx_hash: soroban_sdk::String,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let oracle = get_bridge_oracle(&env).ok_or(ContractError::BridgeOracleNotSet)?;
+        oracle.require_auth();
+
+        let mut trade = get_trade(&env, trade_id)?;
+        if trade.status != TradeStatus::AwaitingBridge {
+            return Err(ContractError::InvalidStatus);
+        }
+        let mut info = get_cross_chain_info(&env, trade_id)
+            .ok_or(ContractError::TradeNotFound)?;
+        if env.ledger().sequence() > info.expires_at_ledger {
+            return Err(ContractError::BridgeTradeExpired);
+        }
+        // Record the source tx hash for auditability
+        info.source_tx_hash = source_tx_hash;
+        save_cross_chain_info(&env, trade_id, &info);
+
+        trade.status = TradeStatus::Funded;
+        save_trade(&env, trade_id, &trade);
+        events::emit_bridge_deposit_confirmed(&env, trade_id);
+        Ok(())
+    }
+
+    /// Expire a cross-chain trade that was never confirmed by the oracle.
+    /// Callable by the seller after the expiry ledger has passed.
+    pub fn expire_bridge_trade(env: Env, trade_id: u64) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let mut trade = get_trade(&env, trade_id)?;
+        if trade.status != TradeStatus::AwaitingBridge {
+            return Err(ContractError::InvalidStatus);
+        }
+        let info = get_cross_chain_info(&env, trade_id)
+            .ok_or(ContractError::TradeNotFound)?;
+        if env.ledger().sequence() <= info.expires_at_ledger {
+            return Err(ContractError::BridgeTradeNotExpired);
+        }
+        trade.seller.require_auth();
+        trade.status = TradeStatus::Cancelled;
+        save_trade(&env, trade_id, &trade);
+        events::emit_bridge_trade_expired(&env, trade_id);
+        Ok(())
+    }
+
+    /// Get cross-chain info for a trade.
+    pub fn get_cross_chain_info(env: Env, trade_id: u64) -> Option<CrossChainInfo> {
+        get_cross_chain_info(&env, trade_id)
     }
 }
 

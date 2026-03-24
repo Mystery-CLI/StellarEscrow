@@ -127,3 +127,19 @@ pub fn emit_upgraded(env: &Env, new_version: u32) {
 pub fn emit_migrated(env: &Env, from_version: u32, to_version: u32) {
     env.events().publish((symbol_short!("migrated"),), (from_version, to_version));
 }
+
+pub fn emit_bridge_oracle_set(env: &Env, oracle: Address) {
+    env.events().publish((symbol_short!("brg_set"),), oracle);
+}
+
+pub fn emit_bridge_trade_created(env: &Env, trade_id: u64, source_chain: soroban_sdk::String) {
+    env.events().publish((symbol_short!("brg_cr"),), (trade_id, source_chain));
+}
+
+pub fn emit_bridge_deposit_confirmed(env: &Env, trade_id: u64) {
+    env.events().publish((symbol_short!("brg_ok"),), trade_id);
+}
+
+pub fn emit_bridge_trade_expired(env: &Env, trade_id: u64) {
+    env.events().publish((symbol_short!("brg_exp"),), trade_id);
+}

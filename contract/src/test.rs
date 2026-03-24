@@ -2,7 +2,7 @@
 
 extern crate std;
 
-use soroban_sdk::{testutils::Address as _, token, Address, Env};
+use soroban_sdk::{testutils::{Address as _, Ledger}, token, Address, Env};
 
 use crate::{OptionalMetadata, StellarEscrowContract, StellarEscrowContractClient, TradeStatus};
 
@@ -190,4 +190,101 @@ fn test_migrate_double_application_fails() {
     client.migrate(&1u32); // version -> 2
     // applying again with old expected_version should fail
     assert!(client.try_migrate(&1u32).is_err());
+}
+
+// ---------------------------------------------------------------------------
+// Cross-chain bridge tests
+// ---------------------------------------------------------------------------
+
+fn setup_bridge() -> (Env, Address, Address, Address, Address, StellarEscrowContractClient<'static>) {
+    let (env, token_addr, admin, seller, buyer, _, client) = setup();
+    let oracle = Address::generate(&env);
+    client.set_bridge_oracle(&oracle);
+    (env, token_addr, admin, seller, buyer, client)
+}
+
+#[test]
+fn test_set_bridge_oracle() {
+    let (env, _, _, _, _, client) = setup_bridge();
+    // oracle is set — creating a cross-chain trade should not fail with BridgeOracleNotSet
+    let seller = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let id = client.create_cross_chain_trade(
+        &seller, &buyer, &1_000_000u64, &None,
+        &soroban_sdk::String::from_str(&env, "ethereum"), &1000u32,
+    );
+    assert_eq!(id, 1);
+}
+
+#[test]
+fn test_create_cross_chain_trade_no_oracle_fails() {
+    let (env, _, _, seller, buyer, _, client) = setup();
+    assert!(client.try_create_cross_chain_trade(
+        &seller, &buyer, &1_000_000u64, &None,
+        &soroban_sdk::String::from_str(&env, "ethereum"), &1000u32,
+    ).is_err());
+}
+
+#[test]
+fn test_confirm_bridge_deposit() {
+    let (env, _, _, seller, buyer, client) = setup_bridge();
+    let oracle = client.get_cross_chain_info(&{
+        // create a trade first to get the oracle address indirectly
+        let id = client.create_cross_chain_trade(
+            &seller, &buyer, &1_000_000u64, &None,
+            &soroban_sdk::String::from_str(&env, "ethereum"), &1000u32,
+        );
+        id
+    });
+    // trade should be AwaitingBridge
+    let _ = oracle; // cross_chain_info returned
+
+    // re-create cleanly
+    let id = client.create_cross_chain_trade(
+        &seller, &buyer, &1_000_000u64, &None,
+        &soroban_sdk::String::from_str(&env, "polygon"), &1000u32,
+    );
+    assert_eq!(client.get_trade(&id).status, TradeStatus::AwaitingBridge);
+
+    client.confirm_bridge_deposit(&id, &soroban_sdk::String::from_str(&env, "0xabc123"));
+    assert_eq!(client.get_trade(&id).status, TradeStatus::Funded);
+
+    let info = client.get_cross_chain_info(&id).unwrap();
+    assert_eq!(info.source_chain, soroban_sdk::String::from_str(&env, "polygon"));
+}
+
+#[test]
+fn test_expire_bridge_trade() {
+    let (env, _, _, seller, buyer, client) = setup_bridge();
+    let id = client.create_cross_chain_trade(
+        &seller, &buyer, &1_000_000u64, &None,
+        &soroban_sdk::String::from_str(&env, "ethereum"), &10u32,
+    );
+    // advance ledger past expiry
+    env.ledger().with_mut(|l| l.sequence_number += 11);
+    client.expire_bridge_trade(&id);
+    assert_eq!(client.get_trade(&id).status, TradeStatus::Cancelled);
+}
+
+#[test]
+fn test_expire_bridge_trade_before_expiry_fails() {
+    let (env, _, _, seller, buyer, client) = setup_bridge();
+    let id = client.create_cross_chain_trade(
+        &seller, &buyer, &1_000_000u64, &None,
+        &soroban_sdk::String::from_str(&env, "ethereum"), &1000u32,
+    );
+    assert!(client.try_expire_bridge_trade(&id).is_err());
+}
+
+#[test]
+fn test_confirm_expired_bridge_trade_fails() {
+    let (env, _, _, seller, buyer, client) = setup_bridge();
+    let id = client.create_cross_chain_trade(
+        &seller, &buyer, &1_000_000u64, &None,
+        &soroban_sdk::String::from_str(&env, "ethereum"), &10u32,
+    );
+    env.ledger().with_mut(|l| l.sequence_number += 11);
+    assert!(client.try_confirm_bridge_deposit(
+        &id, &soroban_sdk::String::from_str(&env, "0xabc")
+    ).is_err());
 }

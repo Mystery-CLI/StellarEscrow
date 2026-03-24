@@ -1,7 +1,7 @@
 use soroban_sdk::{symbol_short, Address, Env, Symbol};
 
 use crate::errors::ContractError;
-use crate::types::{TierConfig, Trade, TradeTemplate, UserTierInfo};
+use crate::types::{CrossChainInfo, TierConfig, Trade, TradeTemplate, UserTierInfo};
 
 // Instance storage keys (short symbols, cheapest encoding)
 fn key_init() -> Symbol { symbol_short!("INIT") }
@@ -14,12 +14,14 @@ fn key_paused() -> Symbol { symbol_short!("PAUSED") }
 fn key_tier_cfg() -> Symbol { symbol_short!("TIER_CFG") }
 fn key_tmpl_ctr() -> Symbol { symbol_short!("TMPL_CTR") }
 fn key_version() -> Symbol { symbol_short!("VERSION") }
+fn key_bridge() -> Symbol { symbol_short!("BRIDGE") }
 
 // Persistent storage key prefixes
 const TRADE_PREFIX: &str = "T";
 const ARB_PREFIX: &str = "A";
 const USER_TIER_PREFIX: &str = "U";
 const TEMPLATE_PREFIX: &str = "P";
+const XCHAIN_PREFIX: &str = "X";
 
 // Initialization
 pub fn is_initialized(env: &Env) -> bool {
@@ -198,4 +200,24 @@ pub fn get_version(env: &Env) -> u32 {
 
 pub fn set_version(env: &Env, version: u32) {
     env.storage().instance().set(&key_version(), &version);
+}
+
+// Bridge oracle
+pub fn set_bridge_oracle(env: &Env, oracle: &Address) {
+    env.storage().instance().set(&key_bridge(), oracle);
+}
+
+pub fn get_bridge_oracle(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&key_bridge())
+}
+
+// Cross-chain info (keyed by trade_id)
+pub fn save_cross_chain_info(env: &Env, trade_id: u64, info: &CrossChainInfo) {
+    let key = (XCHAIN_PREFIX, trade_id);
+    env.storage().persistent().set(&key, info);
+}
+
+pub fn get_cross_chain_info(env: &Env, trade_id: u64) -> Option<CrossChainInfo> {
+    let key = (XCHAIN_PREFIX, trade_id);
+    env.storage().persistent().get(&key)
 }
