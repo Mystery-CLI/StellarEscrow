@@ -10,7 +10,7 @@ mod types;
 #[cfg(test)]
 mod test;
 
-use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, Env};
+use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, Env};
 
 use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
 
@@ -25,6 +25,7 @@ use storage::{
     get_usdc_token, has_arbitrator, increment_trade_counter, is_initialized,
     is_paused, remove_arbitrator, save_arbitrator, save_trade, set_accumulated_fees, set_admin,
     set_fee_bps, set_initialized, set_paused, set_trade_counter, set_usdc_token,
+    get_version, set_version,
 };
 
 #[inline]
@@ -89,6 +90,7 @@ impl StellarEscrowContract {
         set_trade_counter(&env, 0);
         set_accumulated_fees(&env, 0);
         set_initialized(&env);
+        set_version(&env, 1);
         Ok(())
     }
 
@@ -532,6 +534,45 @@ impl StellarEscrowContract {
     /// Get a template by ID.
     pub fn get_template(env: Env, template_id: u64) -> Result<TradeTemplate, ContractError> {
         storage::get_template(&env, template_id)
+    }
+
+    // -------------------------------------------------------------------------
+    // Upgrade Mechanism
+    // -------------------------------------------------------------------------
+
+    /// Upgrade the contract WASM (admin only).
+    /// After calling this, invoke `migrate()` if state changes are needed.
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        events::emit_upgraded(&env, get_version(&env));
+        Ok(())
+    }
+
+    /// Run post-upgrade state migration.
+    /// `expected_version` must match the current stored version to prevent
+    /// accidental double-application. Sets version to `expected_version + 1`.
+    pub fn migrate(env: Env, expected_version: u32) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        let current = get_version(&env);
+        if current != expected_version {
+            return Err(ContractError::MigrationVersionMismatch);
+        }
+        // --- place version-specific migration logic here ---
+        // e.g. if expected_version == 1 { backfill_new_field(&env); }
+        let next = current.checked_add(1).ok_or(ContractError::Overflow)?;
+        set_version(&env, next);
+        events::emit_migrated(&env, current, next);
+        Ok(())
+    }
+
+    /// Returns the current contract version.
+    pub fn version(env: Env) -> u32 {
+        get_version(&env)
     }
 }
 

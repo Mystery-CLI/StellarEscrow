@@ -24,4 +24,6 @@ pub enum ContractError {
     TemplateNameTooLong = 18,
     TemplateVersionLimitExceeded = 19,
     TemplateAmountMismatch = 20,
+    MigrationAlreadyApplied = 21,
+    MigrationVersionMismatch = 22,
 }

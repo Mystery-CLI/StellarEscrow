@@ -162,3 +162,32 @@ fn test_no_fees_to_withdraw_fails() {
     let recipient = Address::generate(&env);
     assert!(client.try_withdraw_fees(&recipient).is_err());
 }
+
+#[test]
+fn test_version_starts_at_1() {
+    let (_, _, _, _, _, _, client) = setup();
+    assert_eq!(client.version(), 1);
+}
+
+#[test]
+fn test_migrate_increments_version() {
+    let (_, _, _, _, _, _, client) = setup();
+    assert_eq!(client.version(), 1);
+    client.migrate(&1u32);
+    assert_eq!(client.version(), 2);
+}
+
+#[test]
+fn test_migrate_wrong_version_fails() {
+    let (_, _, _, _, _, _, client) = setup();
+    // current version is 1, passing 2 should fail
+    assert!(client.try_migrate(&2u32).is_err());
+}
+
+#[test]
+fn test_migrate_double_application_fails() {
+    let (_, _, _, _, _, _, client) = setup();
+    client.migrate(&1u32); // version -> 2
+    // applying again with old expected_version should fail
+    assert!(client.try_migrate(&1u32).is_err());
+}

@@ -13,6 +13,7 @@ fn key_acc_fees() -> Symbol { symbol_short!("ACC_FEES") }
 fn key_paused() -> Symbol { symbol_short!("PAUSED") }
 fn key_tier_cfg() -> Symbol { symbol_short!("TIER_CFG") }
 fn key_tmpl_ctr() -> Symbol { symbol_short!("TMPL_CTR") }
+fn key_version() -> Symbol { symbol_short!("VERSION") }
 
 // Persistent storage key prefixes
 const TRADE_PREFIX: &str = "T";
@@ -188,4 +189,13 @@ pub fn get_template(env: &Env, template_id: u64) -> Result<TradeTemplate, Contra
         .persistent()
         .get(&key)
         .ok_or(ContractError::TemplateNotFound)
+}
+
+// Contract version
+pub fn get_version(env: &Env) -> u32 {
+    env.storage().instance().get(&key_version()).unwrap_or(1)
+}
+
+pub fn set_version(env: &Env, version: u32) {
+    env.storage().instance().set(&key_version(), &version);
 }
