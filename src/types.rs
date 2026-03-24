@@ -148,3 +148,30 @@ pub struct UserAnalytics {
     pub disputed_trades: u32,
     pub cancelled_trades: u32,
 }
+
+// =============================================================================
+// Admin Panel (Issue #35)
+// =============================================================================
+
+/// Aggregated platform-wide analytics for the admin panel
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlatformAnalytics {
+    pub total_trades: u64,
+    pub total_volume: u64,
+    pub total_fees_collected: u64,
+    pub active_trades: u64,
+    pub completed_trades: u64,
+    pub disputed_trades: u64,
+    pub cancelled_trades: u64,
+}
+
+/// System configuration snapshot returned to admin
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SystemConfig {
+    pub fee_bps: u32,
+    pub is_paused: bool,
+    pub trade_counter: u64,
+    pub accumulated_fees: u64,
+}

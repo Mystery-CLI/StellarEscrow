@@ -174,3 +174,39 @@ pub fn get_analytics(env: &Env, address: &Address) -> UserAnalytics {
             cancelled_trades: 0,
         })
 }
+
+// =============================================================================
+// Admin Panel storage (Issue #35)
+// =============================================================================
+
+use crate::types::PlatformAnalytics;
+
+const PAUSED: &str = "PAUSED";
+const PLATFORM_STATS: &str = "PSTATS";
+
+pub fn set_paused(env: &Env, paused: bool) {
+    env.storage().instance().set(&PAUSED, &paused);
+}
+
+pub fn is_paused(env: &Env) -> bool {
+    env.storage().instance().get(&PAUSED).unwrap_or(false)
+}
+
+pub fn get_platform_analytics(env: &Env) -> PlatformAnalytics {
+    env.storage()
+        .instance()
+        .get(&PLATFORM_STATS)
+        .unwrap_or(PlatformAnalytics {
+            total_trades: 0,
+            total_volume: 0,
+            total_fees_collected: 0,
+            active_trades: 0,
+            completed_trades: 0,
+            disputed_trades: 0,
+            cancelled_trades: 0,
+        })
+}
+
+pub fn save_platform_analytics(env: &Env, stats: &PlatformAnalytics) {
+    env.storage().instance().set(&PLATFORM_STATS, stats);
+}

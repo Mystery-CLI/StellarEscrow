@@ -1,5 +1,6 @@
 #![no_std]
 
+mod admin;
 mod errors;
 mod events;
 mod history;
@@ -17,8 +18,9 @@ use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
 
 pub use errors::ContractError;
 pub use types::{
-    DisputeResolution, HistoryFilter, HistoryPage, SortOrder, Trade, TradeStatus,
-    TransactionRecord, UserAnalytics, UserPreference, UserProfile, VerificationStatus,
+    DisputeResolution, HistoryFilter, HistoryPage, PlatformAnalytics, SortOrder, SystemConfig,
+    Trade, TradeStatus, TransactionRecord, UserAnalytics, UserPreference, UserProfile,
+    VerificationStatus,
 };
 
 use storage::{
@@ -137,6 +139,7 @@ impl StellarEscrowContract {
         if amount == 0 {
             return Err(ContractError::InvalidAmount);
         }
+        admin::check_not_paused(&env)?;
         seller.require_auth();
         if let Some(ref arb) = arbitrator {
             if !has_arbitrator(&env, arb) {
@@ -173,6 +176,7 @@ impl StellarEscrowContract {
         index_trade_for_address(&env, &buyer, trade_id);
         // Update analytics
         users::record_trade_created(&env, &seller, &buyer, amount);
+        admin::on_trade_created(&env, amount);
         events::emit_trade_created(&env, trade_id, seller, buyer, amount);
         Ok(trade_id)
     }
@@ -240,6 +244,7 @@ impl StellarEscrowContract {
         let new_fees = current_fees.checked_add(trade.fee).ok_or(ContractError::Overflow)?;
         set_accumulated_fees(&env, new_fees);
         users::record_trade_completed(&env, &trade.seller, &trade.buyer);
+        admin::on_trade_completed(&env, trade.fee);
         events::emit_trade_confirmed(&env, trade_id, payout, trade.fee);
         Ok(())
     }
@@ -264,6 +269,7 @@ impl StellarEscrowContract {
         trade.updated_at = env.ledger().sequence();
         save_trade(&env, trade_id, &trade);
         users::record_trade_disputed(&env, &trade.seller, &trade.buyer);
+        admin::on_trade_disputed(&env);
         events::emit_dispute_raised(&env, trade_id, caller);
         Ok(())
     }
@@ -316,6 +322,7 @@ impl StellarEscrowContract {
         trade.updated_at = env.ledger().sequence();
         save_trade(&env, trade_id, &trade);
         users::record_trade_cancelled(&env, &trade.seller);
+        admin::on_trade_cancelled(&env);
         events::emit_trade_cancelled(&env, trade_id);
         Ok(())
     }
@@ -619,5 +626,58 @@ impl StellarEscrowContract {
     /// Get analytics for a user.
     pub fn get_user_analytics(env: Env, address: Address) -> UserAnalytics {
         users::get_user_analytics(&env, &address)
+    }
+
+    // -------------------------------------------------------------------------
+    // Admin Panel (Issue #35)
+    // -------------------------------------------------------------------------
+
+    /// Transfer admin role to a new address (current admin only).
+    pub fn transfer_admin(env: Env, new_admin: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let current_admin = get_admin(&env)?;
+        admin::transfer_admin(&env, current_admin, new_admin)
+    }
+
+    /// Pause the contract — prevents new trades (admin only).
+    pub fn pause_contract(env: Env) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let a = get_admin(&env)?;
+        a.require_auth();
+        admin::pause_contract(&env);
+        Ok(())
+    }
+
+    /// Unpause the contract (admin only).
+    pub fn unpause_contract(env: Env) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let a = get_admin(&env)?;
+        a.require_auth();
+        admin::unpause_contract(&env);
+        Ok(())
+    }
+
+    /// Get platform-wide analytics (total trades, volume, fees, disputes, etc.).
+    pub fn get_platform_analytics(env: Env) -> Result<PlatformAnalytics, ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        Ok(admin::get_analytics(&env))
+    }
+
+    /// Get system configuration snapshot (fee, pause state, counters).
+    pub fn get_system_config(env: Env) -> Result<SystemConfig, ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let a = get_admin(&env)?;
+        a.require_auth();
+        admin::get_system_config(&env)
     }
 }
