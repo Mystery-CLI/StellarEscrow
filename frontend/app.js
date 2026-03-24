@@ -986,6 +986,11 @@
             window.DisputeManager.initDisputeUI();
         }
 
+        // Initialize arbitrator dashboard
+        if (window.ArbitratorDashboard) {
+            window.ArbitratorDashboard.initArbitratorDashboard();
+        }
+
         // Initialize high contrast toggle
         const contrastToggle = $('#contrast-toggle');
         if (contrastToggle) {
