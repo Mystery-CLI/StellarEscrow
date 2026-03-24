@@ -21,9 +21,9 @@ use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
 
 pub use errors::ContractError;
 pub use types::{
-    DisputeResolution, HistoryFilter, HistoryPage, MetadataEntry, SortOrder,
+    DashboardStats, DisputeResolution, HistoryFilter, HistoryPage, MetadataEntry, SortOrder,
     TierConfig, Trade, TradeMetadata, TradeStatus, TradeTemplate, TemplateTerms,
-    TemplateVersion, TransactionRecord, UserTier, UserTierInfo,
+    TemplateVersion, TransactionRecord, UserTier, UserTierInfo, VolumeInRange,
 };
 
 use storage::{
@@ -974,6 +974,27 @@ impl StellarEscrowContract {
             return Err(ContractError::NotInitialized);
         }
         Ok(admin::get_analytics(&env))
+    }
+
+    /// Get full dashboard snapshot: platform stats, success rate, dispute rate, avg volume.
+    pub fn get_dashboard(env: Env) -> Result<DashboardStats, ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        Ok(admin::get_dashboard(&env))
+    }
+
+    /// Get trade volume and counts for an address within a ledger range (date-range charts).
+    pub fn get_volume_in_range(
+        env: Env,
+        address: Address,
+        from_ledger: u32,
+        to_ledger: u32,
+    ) -> Result<VolumeInRange, ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        admin::get_volume_in_range(&env, &address, from_ledger, to_ledger)
     }
 
     /// Get system configuration snapshot (fee, pause state, counters).
