@@ -165,3 +165,42 @@ impl Database {
         Ok(events)
     }
 }
+
+    /// Total number of indexed events, optionally filtered by contract.
+    pub async fn get_event_count(&self, contract_id: Option<&str>) -> Result<i64, AppError> {
+        let count: i64 = if let Some(cid) = contract_id {
+            sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE contract_id = $1")
+                .bind(cid)
+                .fetch_one(&self.pool)
+                .await?
+        } else {
+            sqlx::query_scalar("SELECT COUNT(*) FROM events")
+                .fetch_one(&self.pool)
+                .await?
+        };
+        Ok(count)
+    }
+
+    /// Event counts grouped by event_type — used for stats/dashboard.
+    pub async fn get_event_type_counts(&self) -> Result<Vec<(String, i64)>, AppError> {
+        let rows = sqlx::query("SELECT event_type, COUNT(*) as cnt FROM events GROUP BY event_type ORDER BY cnt DESC")
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.get::<String, _>("event_type"), r.get::<i64, _>("cnt")))
+            .collect())
+    }
+
+    /// Latest indexed ledger and its timestamp across all contracts.
+    pub async fn get_latest_ledger_global(&self) -> Result<Option<(i64, DateTime<Utc>)>, AppError> {
+        let row = sqlx::query(
+            "SELECT ledger, timestamp FROM events ORDER BY ledger DESC LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|r| (r.get::<i64, _>("ledger"), r.get::<DateTime<Utc>, _>("timestamp"))))
+    }
+}

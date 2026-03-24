@@ -101,3 +101,50 @@ pub struct WebSocketMessage {
     pub data: serde_json::Value,
     pub timestamp: DateTime<Utc>,
 }
+
+// ---- Loading state / status models ----
+
+/// Wraps a paginated list response with metadata for progressive loading.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedResponse<T> {
+    pub data: Vec<T>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+    pub has_more: bool,
+}
+
+impl<T> PaginatedResponse<T> {
+    pub fn new(data: Vec<T>, total: i64, limit: i64, offset: i64) -> Self {
+        let has_more = offset + limit < total;
+        Self { data, total, limit, offset, has_more }
+    }
+}
+
+/// Indexer sync / health status — drives loading indicators on the frontend.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IndexerStatus {
+    /// Whether the indexer is actively polling.
+    pub syncing: bool,
+    /// Latest ledger sequence number indexed.
+    pub latest_ledger: Option<i64>,
+    /// Timestamp of the latest indexed ledger.
+    pub latest_ledger_time: Option<DateTime<Utc>>,
+    /// Total events stored.
+    pub total_events: i64,
+    /// Server wall-clock time (UTC).
+    pub server_time: DateTime<Utc>,
+}
+
+/// Per-event-type counts for dashboard skeleton/stats panels.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EventStats {
+    pub event_type: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatsResponse {
+    pub total_events: i64,
+    pub by_type: Vec<EventStats>,
+}
