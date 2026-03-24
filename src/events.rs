@@ -132,3 +132,13 @@ pub fn emit_trade_from_template(env: &Env, trade_id: u64, template_id: u64, vers
     env.events()
         .publish((symbol_short!("tmpl_tr"),), (trade_id, template_id, version));
 }
+
+pub fn emit_avatar_updated(env: &Env, address: Address) {
+    env.events()
+        .publish((symbol_short!("avtr_up"),), address);
+}
+
+pub fn emit_security_updated(env: &Env, address: Address, two_fa_enabled: bool) {
+    env.events()
+        .publish((symbol_short!("sec_up"),), (address, two_fa_enabled));
+}

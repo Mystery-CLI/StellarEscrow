@@ -913,6 +913,26 @@ impl StellarEscrowContract {
         users::get_user_analytics(&env, &address)
     }
 
+    /// Update the avatar hash for a user (SHA-256 of the off-chain image).
+    /// Pass `None` to remove the avatar.
+    pub fn update_avatar(
+        env: Env,
+        address: Address,
+        avatar_hash: Option<soroban_sdk::Bytes>,
+    ) -> Result<(), ContractError> {
+        users::update_avatar(&env, address, avatar_hash)
+    }
+
+    /// Update security settings: 2FA flag and session timeout (seconds).
+    pub fn update_security_settings(
+        env: Env,
+        address: Address,
+        two_fa_enabled: bool,
+        session_timeout_secs: u32,
+    ) -> Result<(), ContractError> {
+        users::update_security_settings(&env, address, two_fa_enabled, session_timeout_secs)
+    }
+
     // -------------------------------------------------------------------------
     // Admin Panel (Issue #35)
     // -------------------------------------------------------------------------

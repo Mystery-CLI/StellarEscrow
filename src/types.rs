@@ -217,7 +217,13 @@ pub struct UserProfile {
     pub username_hash: soroban_sdk::Bytes,
     /// SHA-256 hash of off-chain contact info
     pub contact_hash: soroban_sdk::Bytes,
+    /// SHA-256 hash of off-chain avatar image (None if not set)
+    pub avatar_hash: Option<soroban_sdk::Bytes>,
     pub verification: VerificationStatus,
+    /// Whether two-factor authentication is enabled
+    pub two_fa_enabled: bool,
+    /// Preferred session timeout in seconds (0 = platform default)
+    pub session_timeout_secs: u32,
     pub registered_at: u32,
     pub updated_at: u32,
 }

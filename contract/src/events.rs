@@ -73,6 +73,8 @@ pub fn emit_unpaused(env: &Env, admin: Address) {
 pub fn emit_emergency_withdraw(env: &Env, to: Address, amount: u64) {
     env.events()
         .publish((symbol_short!("emrg_wd"),), (to, amount));
+}
+
 pub fn emit_metadata_updated(env: &Env, trade_id: u64) {
     env.events()
         .publish((symbol_short!("meta_upd"),), trade_id);
@@ -121,4 +123,43 @@ pub fn emit_trade_from_template(env: &Env, trade_id: u64, template_id: u64, vers
 pub fn emit_time_released(env: &Env, trade_id: u64, seller: Address, payout: u64) {
     env.events()
         .publish((symbol_short!("time_rel"),), (trade_id, seller, payout));
+}
+pub fn emit_upgraded(env: &Env, new_version: u32) {
+    env.events().publish((symbol_short!("upgraded"),), new_version);
+}
+
+pub fn emit_migrated(env: &Env, from_version: u32, to_version: u32) {
+    env.events().publish((symbol_short!("migrated"),), (from_version, to_version));
+}
+
+pub fn emit_bridge_oracle_set(env: &Env, oracle: Address) {
+    env.events().publish((symbol_short!("brg_set"),), oracle);
+}
+
+pub fn emit_bridge_trade_created(env: &Env, trade_id: u64, source_chain: soroban_sdk::String) {
+    env.events().publish((symbol_short!("brg_cr"),), (trade_id, source_chain));
+}
+
+pub fn emit_bridge_deposit_confirmed(env: &Env, trade_id: u64) {
+    env.events().publish((symbol_short!("brg_ok"),), trade_id);
+}
+
+pub fn emit_bridge_trade_expired(env: &Env, trade_id: u64) {
+    env.events().publish((symbol_short!("brg_exp"),), trade_id);
+}
+
+pub fn emit_insurance_provider_registered(env: &Env, provider: Address) {
+    env.events().publish((symbol_short!("ins_reg"),), provider);
+}
+
+pub fn emit_insurance_provider_removed(env: &Env, provider: Address) {
+    env.events().publish((symbol_short!("ins_rem"),), provider);
+}
+
+pub fn emit_insurance_purchased(env: &Env, trade_id: u64, provider: Address, premium: u64, coverage: u64) {
+    env.events().publish((symbol_short!("ins_buy"),), (trade_id, provider, premium, coverage));
+}
+
+pub fn emit_insurance_claimed(env: &Env, trade_id: u64, payout: u64, recipient: Address) {
+    env.events().publish((symbol_short!("ins_pay"),), (trade_id, payout, recipient));
 }

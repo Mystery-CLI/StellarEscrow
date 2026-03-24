@@ -4,7 +4,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::models::{Event, EventQuery};
+use crate::models::{
+    DiscoveryQuery, DiscoveryResult, Event, EventQuery, SearchHistoryEntry, SearchSuggestion,
+    TradeSearchQuery, TradeSearchResult,
+};
 
 pub struct Database {
     pool: PgPool,
@@ -133,6 +136,33 @@ impl Database {
         Ok(row.and_then(|r| r.get("latest_ledger")))
     }
 
+    pub async fn count_events(&self, query: &EventQuery) -> Result<i64, AppError> {
+        let mut sql = "SELECT COUNT(*) FROM events WHERE 1=1".to_string();
+        let mut bindings: Vec<String> = vec![];
+
+        if let Some(event_type) = &query.event_type {
+            sql.push_str(&format!(" AND event_type = ${}", bindings.len() + 1));
+            bindings.push(event_type.clone());
+        }
+        if let Some(trade_id) = query.trade_id {
+            sql.push_str(&format!(" AND data->>'trade_id' = ${}", bindings.len() + 1));
+            bindings.push(trade_id.to_string());
+        }
+        if let Some(from_ledger) = query.from_ledger {
+            sql.push_str(&format!(" AND ledger >= ${}", bindings.len() + 1));
+            bindings.push(from_ledger.to_string());
+        }
+        if let Some(to_ledger) = query.to_ledger {
+            sql.push_str(&format!(" AND ledger <= ${}", bindings.len() + 1));
+            bindings.push(to_ledger.to_string());
+        }
+
+        let mut q = sqlx::query(&sql);
+        for b in &bindings { q = q.bind(b); }
+        let row = q.fetch_one(&self.pool).await?;
+        Ok(row.get::<i64, _>(0))
+    }
+
     pub async fn get_events_in_range(&self, from_ledger: i64, to_ledger: i64, contract_id: &str) -> Result<Vec<Event>, AppError> {
         let rows = sqlx::query(
             r#"
@@ -163,5 +193,164 @@ impl Database {
             .collect();
 
         Ok(events)
+    }
+
+    pub async fn record_search(&self, query_text: &str, search_type: &str) -> Result<(), AppError> {
+        sqlx::query(
+            r#"
+            INSERT INTO search_history (query_text, search_type)
+            VALUES ($1, $2)
+            "#,
+        )
+        .bind(query_text)
+        .bind(search_type)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn search_trades(&self, query: &TradeSearchQuery) -> Result<Vec<TradeSearchResult>, AppError> {
+        let limit = query.limit.unwrap_or(25).clamp(1, 100);
+        let offset = query.offset.unwrap_or(0).max(0);
+        let q = query.q.clone().unwrap_or_default();
+        let q_pattern = format!("%{}%", q);
+
+        let rows = sqlx::query_as::<_, TradeSearchResult>(
+            r#"
+            WITH latest_trade_events AS (
+                SELECT DISTINCT ON ((data->>'trade_id'))
+                    (data->>'trade_id')::BIGINT AS trade_id,
+                    event_type
+                FROM events
+                WHERE data->>'trade_id' IS NOT NULL
+                ORDER BY (data->>'trade_id'), ledger DESC, timestamp DESC
+            ),
+            trade_base AS (
+                SELECT
+                    (e.data->>'trade_id')::BIGINT AS trade_id,
+                    e.data->>'seller' AS seller,
+                    e.data->>'buyer' AS buyer,
+                    (e.data->>'amount')::BIGINT AS amount,
+                    e.timestamp AS created_at
+                FROM events e
+                WHERE e.event_type = 'trade_created'
+            )
+            SELECT
+                tb.trade_id,
+                tb.seller,
+                tb.buyer,
+                tb.amount,
+                lte.event_type AS status,
+                tb.created_at
+            FROM trade_base tb
+            JOIN latest_trade_events lte ON lte.trade_id = tb.trade_id
+            WHERE
+                ($1 = '' OR tb.trade_id::TEXT ILIKE $2 OR tb.seller ILIKE $2 OR tb.buyer ILIKE $2)
+                AND ($3::TEXT IS NULL OR lte.event_type = $3)
+                AND ($4::TEXT IS NULL OR tb.seller = $4)
+                AND ($5::TEXT IS NULL OR tb.buyer = $5)
+                AND ($6::BIGINT IS NULL OR tb.amount >= $6)
+                AND ($7::BIGINT IS NULL OR tb.amount <= $7)
+            ORDER BY tb.created_at DESC
+            LIMIT $8 OFFSET $9
+            "#,
+        )
+        .bind(q.as_str())
+        .bind(q_pattern.as_str())
+        .bind(query.status.as_deref())
+        .bind(query.seller.as_deref())
+        .bind(query.buyer.as_deref())
+        .bind(query.min_amount.map(|v| v as i64))
+        .bind(query.max_amount.map(|v| v as i64))
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    pub async fn discover_entities(&self, query: &DiscoveryQuery) -> Result<Vec<DiscoveryResult>, AppError> {
+        let limit = query.limit.unwrap_or(25).clamp(1, 100);
+        let q = query.q.clone().unwrap_or_default();
+        let q_pattern = format!("%{}%", q);
+
+        let rows = sqlx::query_as::<_, DiscoveryResult>(
+            r#"
+            WITH entities AS (
+                SELECT data->>'seller' AS address, 'user' AS role, timestamp
+                FROM events
+                WHERE event_type = 'trade_created' AND data->>'seller' IS NOT NULL
+                UNION ALL
+                SELECT data->>'buyer' AS address, 'user' AS role, timestamp
+                FROM events
+                WHERE event_type = 'trade_created' AND data->>'buyer' IS NOT NULL
+                UNION ALL
+                SELECT data->>'arbitrator' AS address, 'arbitrator' AS role, timestamp
+                FROM events
+                WHERE event_type = 'arb_reg' AND data->>'arbitrator' IS NOT NULL
+            )
+            SELECT
+                address,
+                role,
+                COUNT(*)::BIGINT AS seen_count,
+                MAX(timestamp) AS last_seen
+            FROM entities
+            WHERE
+                ($1 = '' OR address ILIKE $2)
+                AND ($3::TEXT IS NULL OR role = $3)
+            GROUP BY address, role
+            ORDER BY seen_count DESC, last_seen DESC
+            LIMIT $4
+            "#,
+        )
+        .bind(q.as_str())
+        .bind(q_pattern.as_str())
+        .bind(query.role.as_deref())
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    pub async fn get_search_suggestions(
+        &self,
+        prefix: &str,
+        limit: i64,
+    ) -> Result<Vec<SearchSuggestion>, AppError> {
+        let q_pattern = format!("{}%", prefix);
+        let rows = sqlx::query_as::<_, SearchSuggestion>(
+            r#"
+            SELECT
+                query_text AS term,
+                COUNT(*)::BIGINT AS hits
+            FROM search_history
+            WHERE query_text ILIKE $1
+            GROUP BY query_text
+            ORDER BY hits DESC, term ASC
+            LIMIT $2
+            "#,
+        )
+        .bind(q_pattern)
+        .bind(limit.clamp(1, 20))
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn get_search_history(&self, limit: i64) -> Result<Vec<SearchHistoryEntry>, AppError> {
+        let rows = sqlx::query_as::<_, SearchHistoryEntry>(
+            r#"
+            SELECT id, query_text, search_type, created_at
+            FROM search_history
+            ORDER BY created_at DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit.clamp(1, 100))
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
     }
 }

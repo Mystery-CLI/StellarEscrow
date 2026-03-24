@@ -32,19 +32,19 @@ pub enum AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_message) = match self {
-            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
-            AppError::StellarSdk(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Stellar network error"),
-            AppError::Serialization(_) => (StatusCode::BAD_REQUEST, "Invalid data format"),
-            AppError::HttpClient(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Network error"),
-            AppError::InvalidEventData(_) => (StatusCode::BAD_REQUEST, "Invalid event data"),
-            AppError::EventNotFound => (StatusCode::NOT_FOUND, "Event not found"),
-            AppError::InternalServerError => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+        let (status, code, message) = match &self {
+            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "DATABASE_ERROR", "Database error"),
+            AppError::StellarSdk(_) => (StatusCode::INTERNAL_SERVER_ERROR, "STELLAR_ERROR", "Stellar network error"),
+            AppError::Serialization(_) => (StatusCode::BAD_REQUEST, "INVALID_FORMAT", "Invalid data format"),
+            AppError::HttpClient(_) => (StatusCode::INTERNAL_SERVER_ERROR, "NETWORK_ERROR", "Network error"),
+            AppError::InvalidEventData(_) => (StatusCode::BAD_REQUEST, "INVALID_EVENT_DATA", "Invalid event data"),
+            AppError::EventNotFound => (StatusCode::NOT_FOUND, "EVENT_NOT_FOUND", "Event not found"),
+            AppError::InternalServerError => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Internal server error"),
         };
 
+        let detail = self.to_string();
         let body = Json(json!({
-            "error": error_message,
-            "message": self.to_string()
+            "error": { "code": code, "message": message, "detail": detail }
         }));
 
         (status, body).into_response()

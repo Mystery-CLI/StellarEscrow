@@ -83,12 +83,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build application with routes
     let app = Router::new()
+        .route("/", get(api_index))
         .route("/health", get(health_check))
         .route("/events", get(get_events))
         .route("/events/:id", get(get_event_by_id))
         .route("/events/trade/:trade_id", get(get_events_by_trade_id))
         .route("/events/type/:event_type", get(get_events_by_type))
         .route("/events/replay", post(replay_events))
+        .route("/search", get(global_search))
+        .route("/search/trades", get(search_trades))
+        .route("/search/discovery", get(discover_entities))
+        .route("/search/suggestions", get(search_suggestions))
+        .route("/search/history", get(search_history))
         .route("/ws", get(ws_handler))
         // Help center
         .route("/help", get(help_index))
