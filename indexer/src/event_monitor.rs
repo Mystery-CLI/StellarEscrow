@@ -12,6 +12,7 @@ use crate::database::Database;
 use crate::error::AppError;
 use crate::models::{Event, WebSocketMessage};
 use crate::websocket::WebSocketManager;
+use crate::fraud_service::FraudDetectionService;
 
 #[derive(Debug, Deserialize)]
 struct HorizonResponse<T> {
@@ -58,6 +59,7 @@ pub struct EventMonitor {
     ws_manager: Arc<WebSocketManager>,
     client: Client,
     last_ledger: Option<i64>,
+    fraud_service: Arc<FraudDetectionService>,
 }
 
 impl EventMonitor {
@@ -65,11 +67,13 @@ impl EventMonitor {
         config: StellarConfig,
         database: Arc<Database>,
         ws_manager: Arc<WebSocketManager>,
+        fraud_service: Arc<FraudDetectionService>,
     ) -> Self {
         Self {
             config,
             database,
             ws_manager,
+            fraud_service,
             client: Client::new(),
             last_ledger: config.start_ledger.map(|l| l as i64),
         }
@@ -116,8 +120,6 @@ impl EventMonitor {
 
         for effect in effects {
             if let Some(event) = self.parse_effect_to_event(effect).await? {
-                self.database.insert_event(&event).await?;
-
                 // Broadcast to WebSocket clients
                 let ws_message = WebSocketMessage {
                     event_type: event.event_type.clone(),
@@ -125,6 +127,34 @@ impl EventMonitor {
                     timestamp: event.timestamp,
                 };
                 self.ws_manager.broadcast(ws_message).await;
+
+                // Process fraud detection
+                let report = if event.event_type == "trade_created" {
+                    self.fraud_service.process_event(&event).await
+                } else if event.event_type == "trade_confirmed" {
+                    self.fraud_service.process_confirmed_event(&event).await
+                } else {
+                    None
+                };
+
+                if let Some(report) = report {
+                    if let Err(e) = self.database.insert_fraud_alert(&report).await {
+                        error!("Error inserting fraud alert: {}", e);
+                    }
+                    if report.status == "high_risk" {
+                        warn!("!!! HIGH RISK TRANSACTION DETECTED !!!");
+                        warn!("Trade ID: {}", report.trade_id);
+                        warn!("Score: {}/100", report.risk_score);
+                        warn!("Rules: {:?}", report.rules_triggered);
+                        
+                        // Emit a special "fraud_alert" websocket message for real-time dashboard updates
+                        self.ws_manager.broadcast(WebSocketMessage {
+                            event_type: "fraud_alert".to_string(),
+                            data: serde_json::to_value(&report).unwrap_or_default(),
+                            timestamp: Utc::now(),
+                        }).await;
+                    }
+                }
             }
         }
 

@@ -2,9 +2,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
     routing::{get, post},
     Router,
 };
@@ -22,6 +19,7 @@ mod handlers;
 mod help;
 mod models;
 mod websocket;
+mod fraud_service;
 
 #[cfg(test)]
 mod test;
@@ -34,6 +32,7 @@ use websocket::WebSocketManager;
 use help::{
     get_contact, get_docs, get_faqs, get_tutorial_by_id, get_tutorials, help_index, search_help,
 };
+use fraud_service::FraudDetectionService;
 
 #[derive(Parser)]
 #[command(name = "stellar-escrow-indexer")]
@@ -67,11 +66,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx, _rx) = broadcast::channel(100);
     let ws_manager = Arc::new(WebSocketManager::new(tx.clone()));
 
+    // Initialize Fraud Detection Service
+    let fraud_service = Arc::new(FraudDetectionService::new(database.clone()).await);
+
     // Initialize event monitor
     let event_monitor = EventMonitor::new(
         config.stellar.clone(),
         database.clone(),
         ws_manager.clone(),
+        fraud_service.clone(),
     );
 
     // Start event monitoring in background
@@ -95,6 +98,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/search/discovery", get(discover_entities))
         .route("/search/suggestions", get(search_suggestions))
         .route("/search/history", get(search_history))
+        .route("/fraud/alerts", get(get_fraud_alerts))
+        .route("/fraud/review", post(update_fraud_review))
         .route("/ws", get(ws_handler))
         // Help center
         .route("/help", get(help_index))
@@ -108,6 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(AppState {
             database,
             ws_manager,
+            fraud_service,
         });
 
     // Start server
@@ -121,10 +127,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     monitor_handle.await?;
 
     Ok(())
-}
-
-#[derive(Clone)]
-struct AppState {
-    database: Arc<Database>,
-    ws_manager: Arc<WebSocketManager>,
 }

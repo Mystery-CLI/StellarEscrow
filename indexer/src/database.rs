@@ -8,6 +8,7 @@ use crate::models::{
     DiscoveryQuery, DiscoveryResult, Event, EventQuery, SearchHistoryEntry, SearchSuggestion,
     TradeSearchQuery, TradeSearchResult,
 };
+use crate::fraud_service::FraudReport;
 
 pub struct Database {
     pool: PgPool,
@@ -352,5 +353,101 @@ impl Database {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+
+    pub async fn insert_fraud_alert(&self, report: &FraudReport) -> Result<(), AppError> {
+        let rules_json = serde_json::to_value(&report.rules_triggered).unwrap_or(serde_json::Value::Null);
+        let status = if report.risk_score >= 80 { "pending" } else { "approved" };
+
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO fraud_alerts (trade_id, risk_score, rules_triggered, ml_score)
+            VALUES ($1, $2, $3, $4)
+            "#
+        )
+        .bind(report.trade_id as i64)
+        .bind(report.risk_score)
+        .bind(&rules_json)
+        .bind(report.ml_result.score as f64)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO fraud_reviews (trade_id, status)
+            VALUES ($1, $2)
+            ON CONFLICT (trade_id) DO NOTHING
+            "#
+        )
+        .bind(report.trade_id as i64)
+        .bind(status)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn get_fraud_alerts(&self) -> Result<Vec<serde_json::Value>, AppError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT a.id, a.trade_id, a.risk_score, a.rules_triggered, a.ml_score, a.created_at,
+                   r.status, r.reviewer, r.review_notes, r.updated_at
+            FROM fraud_alerts a
+            LEFT JOIN fraud_reviews r ON a.trade_id = r.trade_id
+            ORDER BY a.risk_score DESC, a.created_at DESC
+            LIMIT 50
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut alerts = Vec::new();
+        for row in rows {
+            alerts.push(serde_json::json!({
+                "id": row.try_get::<uuid::Uuid, _>("id").ok(),
+                "trade_id": row.get::<i64, _>("trade_id"),
+                "risk_score": row.get::<i32, _>("risk_score"),
+                "rules_triggered": row.get::<serde_json::Value, _>("rules_triggered"),
+                "ml_score": row.try_get::<f64, _>("ml_score").ok(),
+                "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+                "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "pending".to_string()),
+                "reviewer": row.try_get::<String, _>("reviewer").ok(),
+                "review_notes": row.try_get::<String, _>("review_notes").ok(),
+                "updated_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("updated_at").ok(),
+            }));
+        }
+
+        Ok(alerts)
+    }
+
+    pub async fn update_fraud_review(
+        &self,
+        trade_id: u64,
+        status: &str,
+        reviewer: &str,
+        notes: &str,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            r#"
+            INSERT INTO fraud_reviews (trade_id, status, reviewer, review_notes)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (trade_id) DO UPDATE SET
+                status = EXCLUDED.status,
+                reviewer = EXCLUDED.reviewer,
+                review_notes = EXCLUDED.review_notes,
+                updated_at = NOW()
+            "#
+        )
+        .bind(trade_id as i64)
+        .bind(status)
+        .bind(reviewer)
+        .bind(notes)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 }

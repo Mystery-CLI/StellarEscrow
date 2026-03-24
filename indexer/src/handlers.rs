@@ -15,6 +15,7 @@ use crate::models::{
     SuggestionQuery, TradeSearchQuery, WebSocketMessage,
 };
 use crate::websocket::WebSocketManager;
+use crate::fraud_service::FraudDetectionService;
 use crate::{database::Database, models::Event};
 
 /// Default page size — kept small for mobile clients.
@@ -34,6 +35,8 @@ pub async fn api_index() -> Json<serde_json::Value> {
             "events_by_type":  "GET  /events/type/:event_type",
             "replay":          "POST /events/replay  {from_ledger, to_ledger?}",
             "websocket":       "GET  /ws",
+            "fraud_alerts":    "GET  /fraud/alerts",
+            "fraud_review":    "POST /fraud/review  {trade_id, status, reviewer, notes}",
             "help":            "GET  /help"
         }
     }))
@@ -226,8 +229,38 @@ pub async fn search_history(
     Ok(Json(rows))
 }
 
+pub async fn get_fraud_alerts(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<serde_json::Value>>, AppError> {
+    let alerts = state.database.get_fraud_alerts().await?;
+    Ok(Json(alerts))
+}
+
+#[derive(Deserialize)]
+pub struct FraudReviewRequest {
+    pub trade_id: u64,
+    pub status: String,
+    pub reviewer: String,
+    pub notes: String,
+}
+
+pub async fn update_fraud_review(
+    State(state): State<AppState>,
+    Json(payload): Json<FraudReviewRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    state.database.update_fraud_review(
+        payload.trade_id,
+        &payload.status,
+        &payload.reviewer,
+        &payload.notes,
+    ).await?;
+    
+    Ok(Json(json!({ "status": "updated", "trade_id": payload.trade_id })))
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub database: Arc<Database>,
     pub ws_manager: Arc<WebSocketManager>,
+    pub fraud_service: Arc<FraudDetectionService>,
 }
