@@ -52,6 +52,10 @@ pub enum TradeStatus {
 pub enum DisputeResolution {
     ReleaseToBuyer,
     ReleaseToSeller,
+    /// Split the net payout (after fee) between buyer and seller.
+    /// `buyer_bps` is the buyer's share in basis points (0–10000).
+    /// 0 = all to seller, 10000 = all to buyer.
+    Partial { buyer_bps: u32 },
 }
 
 /// A single metadata key-value entry

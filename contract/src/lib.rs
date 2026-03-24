@@ -268,7 +268,9 @@ impl StellarEscrowContract {
         Ok(())
     }
 
-    /// Resolve a dispute (arbitrator only)
+    /// Resolve a dispute (arbitrator only).
+    /// Use `DisputeResolution::Partial { buyer_bps }` for a split:
+    /// `buyer_bps` is the buyer's share of the net payout in basis points (0–10000).
     pub fn resolve_dispute(
         env: Env,
         trade_id: u64,
@@ -287,20 +289,43 @@ impl StellarEscrowContract {
         arbitrator.require_auth();
         let token = get_usdc_token(&env)?;
         let token_client = token::Client::new(&env, &token);
-        let recipient = match resolution {
-            DisputeResolution::ReleaseToBuyer => trade.buyer.clone(),
-            DisputeResolution::ReleaseToSeller => trade.seller.clone(),
-        };
-        let payout = trade.amount.checked_sub(trade.fee).ok_or(ContractError::Overflow)?;
-        token_client.transfer(
-            &env.current_contract_address(),
-            &recipient,
-            &(payout as i128),
-        );
+
+        // Net payout after platform fee
+        let net = trade.amount.checked_sub(trade.fee).ok_or(ContractError::Overflow)?;
+
+        match resolution {
+            DisputeResolution::ReleaseToBuyer => {
+                token_client.transfer(&env.current_contract_address(), &trade.buyer, &(net as i128));
+                events::emit_dispute_resolved(&env, trade_id, DisputeResolution::ReleaseToBuyer, trade.buyer);
+            }
+            DisputeResolution::ReleaseToSeller => {
+                token_client.transfer(&env.current_contract_address(), &trade.seller, &(net as i128));
+                events::emit_dispute_resolved(&env, trade_id, DisputeResolution::ReleaseToSeller, trade.seller);
+            }
+            DisputeResolution::Partial { buyer_bps } => {
+                if buyer_bps > 10000 {
+                    return Err(ContractError::InvalidSplitBps);
+                }
+                // buyer_amount = net * buyer_bps / 10000
+                let buyer_amount = net
+                    .checked_mul(buyer_bps as u64)
+                    .ok_or(ContractError::Overflow)?
+                    .checked_div(10000)
+                    .ok_or(ContractError::Overflow)?;
+                let seller_amount = net.checked_sub(buyer_amount).ok_or(ContractError::Overflow)?;
+                if buyer_amount > 0 {
+                    token_client.transfer(&env.current_contract_address(), &trade.buyer, &(buyer_amount as i128));
+                }
+                if seller_amount > 0 {
+                    token_client.transfer(&env.current_contract_address(), &trade.seller, &(seller_amount as i128));
+                }
+                events::emit_partial_resolved(&env, trade_id, buyer_amount, seller_amount, trade.fee);
+            }
+        }
+
         let current_fees = get_accumulated_fees(&env)?;
         let new_fees = current_fees.checked_add(trade.fee).ok_or(ContractError::Overflow)?;
         set_accumulated_fees(&env, new_fees);
-        events::emit_dispute_resolved(&env, trade_id, resolution, recipient);
         Ok(())
     }
 

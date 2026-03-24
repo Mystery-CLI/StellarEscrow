@@ -24,4 +24,6 @@ pub enum ContractError {
     TemplateNameTooLong = 17,
     TemplateVersionLimitExceeded = 18,
     TemplateAmountMismatch = 19,
+    /// buyer_bps in a Partial resolution must be 0–10000
+    InvalidSplitBps = 20,
 }

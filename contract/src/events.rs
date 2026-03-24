@@ -38,6 +38,17 @@ pub fn emit_dispute_resolved(
         .publish((symbol_short!("resolved"),), (trade_id, resolution, recipient));
 }
 
+pub fn emit_partial_resolved(
+    env: &Env,
+    trade_id: u64,
+    buyer_amount: u64,
+    seller_amount: u64,
+    fee: u64,
+) {
+    env.events()
+        .publish((symbol_short!("part_res"),), (trade_id, buyer_amount, seller_amount, fee));
+}
+
 pub fn emit_trade_cancelled(env: &Env, trade_id: u64) {
     env.events()
         .publish((symbol_short!("cancel"),), trade_id);
