@@ -1,7 +1,7 @@
 use soroban_sdk::{symbol_short, Address, Env, Symbol};
 
 use crate::errors::ContractError;
-use crate::types::{CrossChainInfo, TierConfig, Trade, TradeTemplate, UserTierInfo};
+use crate::types::{CrossChainInfo, InsurancePolicy, TierConfig, Trade, TradeTemplate, UserTierInfo};
 
 // Instance storage keys (short symbols, cheapest encoding)
 fn key_init() -> Symbol { symbol_short!("INIT") }
@@ -22,6 +22,8 @@ const ARB_PREFIX: &str = "A";
 const USER_TIER_PREFIX: &str = "U";
 const TEMPLATE_PREFIX: &str = "P";
 const XCHAIN_PREFIX: &str = "X";
+const INS_PROVIDER_PREFIX: &str = "IP";
+const INS_POLICY_PREFIX: &str = "IPL";
 
 // Initialization
 pub fn is_initialized(env: &Env) -> bool {
@@ -219,5 +221,32 @@ pub fn save_cross_chain_info(env: &Env, trade_id: u64, info: &CrossChainInfo) {
 
 pub fn get_cross_chain_info(env: &Env, trade_id: u64) -> Option<CrossChainInfo> {
     let key = (XCHAIN_PREFIX, trade_id);
+    env.storage().persistent().get(&key)
+}
+
+// Insurance providers (registered by admin, mirrors arbitrator pattern)
+pub fn save_insurance_provider(env: &Env, provider: &Address) {
+    let key = (INS_PROVIDER_PREFIX, provider);
+    env.storage().persistent().set(&key, &true);
+}
+
+pub fn remove_insurance_provider(env: &Env, provider: &Address) {
+    let key = (INS_PROVIDER_PREFIX, provider);
+    env.storage().persistent().remove(&key);
+}
+
+pub fn has_insurance_provider(env: &Env, provider: &Address) -> bool {
+    let key = (INS_PROVIDER_PREFIX, provider);
+    env.storage().persistent().has(&key)
+}
+
+// Insurance policies (keyed by trade_id)
+pub fn save_insurance_policy(env: &Env, trade_id: u64, policy: &InsurancePolicy) {
+    let key = (INS_POLICY_PREFIX, trade_id);
+    env.storage().persistent().set(&key, policy);
+}
+
+pub fn get_insurance_policy(env: &Env, trade_id: u64) -> Option<InsurancePolicy> {
+    let key = (INS_POLICY_PREFIX, trade_id);
     env.storage().persistent().get(&key)
 }

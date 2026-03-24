@@ -143,3 +143,19 @@ pub fn emit_bridge_deposit_confirmed(env: &Env, trade_id: u64) {
 pub fn emit_bridge_trade_expired(env: &Env, trade_id: u64) {
     env.events().publish((symbol_short!("brg_exp"),), trade_id);
 }
+
+pub fn emit_insurance_provider_registered(env: &Env, provider: Address) {
+    env.events().publish((symbol_short!("ins_reg"),), provider);
+}
+
+pub fn emit_insurance_provider_removed(env: &Env, provider: Address) {
+    env.events().publish((symbol_short!("ins_rem"),), provider);
+}
+
+pub fn emit_insurance_purchased(env: &Env, trade_id: u64, provider: Address, premium: u64, coverage: u64) {
+    env.events().publish((symbol_short!("ins_buy"),), (trade_id, provider, premium, coverage));
+}
+
+pub fn emit_insurance_claimed(env: &Env, trade_id: u64, payout: u64, recipient: Address) {
+    env.events().publish((symbol_short!("ins_pay"),), (trade_id, payout, recipient));
+}

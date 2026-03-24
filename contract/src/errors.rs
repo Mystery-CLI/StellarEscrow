@@ -29,4 +29,9 @@ pub enum ContractError {
     BridgeOracleNotSet = 23,
     BridgeTradeExpired = 24,
     BridgeTradeNotExpired = 25,
+    InsuranceProviderNotRegistered = 26,
+    InsurancePremiumTooHigh = 27,
+    TradeNotInsured = 28,
+    InsuranceAlreadyClaimed = 29,
+    InsuranceClaimNotEligible = 30,
 }

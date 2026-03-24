@@ -16,9 +16,9 @@ use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
 
 pub use errors::ContractError;
 pub use types::{
-    CrossChainInfo, DisputeResolution, MetadataEntry, OptionalMetadata, TierConfig,
-    TemplateTerms, TemplateVersion, Trade, TradeMetadata, TradeStatus, TradeTemplate,
-    UserTier, UserTierInfo,
+    CrossChainInfo, DisputeResolution, InsurancePolicy, MetadataEntry, OptionalMetadata,
+    TierConfig, TemplateTerms, TemplateVersion, Trade, TradeMetadata, TradeStatus,
+    TradeTemplate, UserTier, UserTierInfo,
 };
 
 use storage::{
@@ -28,6 +28,8 @@ use storage::{
     set_fee_bps, set_initialized, set_paused, set_trade_counter, set_usdc_token,
     get_version, set_version,
     get_bridge_oracle, set_bridge_oracle, save_cross_chain_info, get_cross_chain_info,
+    has_insurance_provider, save_insurance_provider, remove_insurance_provider,
+    save_insurance_policy, get_insurance_policy,
 };
 
 #[inline]
@@ -694,6 +696,121 @@ impl StellarEscrowContract {
     /// Get cross-chain info for a trade.
     pub fn get_cross_chain_info(env: Env, trade_id: u64) -> Option<CrossChainInfo> {
         get_cross_chain_info(&env, trade_id)
+    }
+
+    // -------------------------------------------------------------------------
+    // Trade Insurance
+    // -------------------------------------------------------------------------
+
+    /// Register an insurance provider (admin only).
+    pub fn register_insurance_provider(env: Env, provider: Address) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        save_insurance_provider(&env, &provider);
+        events::emit_insurance_provider_registered(&env, provider);
+        Ok(())
+    }
+
+    /// Remove an insurance provider (admin only).
+    pub fn remove_insurance_provider(env: Env, provider: Address) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        remove_insurance_provider(&env, &provider);
+        events::emit_insurance_provider_removed(&env, provider);
+        Ok(())
+    }
+
+    /// Purchase insurance for a funded trade.
+    /// The buyer pays the premium now; it is transferred to the provider immediately.
+    /// `premium_bps`: premium as basis points of trade amount (max 1000 = 10%).
+    /// `coverage`: maximum additional payout the provider guarantees.
+    pub fn purchase_insurance(
+        env: Env,
+        trade_id: u64,
+        provider: Address,
+        premium_bps: u32,
+        coverage: u64,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        if premium_bps > types::MAX_INSURANCE_PREMIUM_BPS {
+            return Err(ContractError::InsurancePremiumTooHigh);
+        }
+        if !has_insurance_provider(&env, &provider) {
+            return Err(ContractError::InsuranceProviderNotRegistered);
+        }
+        let trade = get_trade(&env, trade_id)?;
+        // Insurance can be purchased on a Funded or Completed trade (not yet settled)
+        if trade.status != TradeStatus::Funded && trade.status != TradeStatus::Completed {
+            return Err(ContractError::InvalidStatus);
+        }
+        trade.buyer.require_auth();
+
+        let premium = trade.amount
+            .checked_mul(premium_bps as u64).ok_or(ContractError::Overflow)?
+            .checked_div(10000).ok_or(ContractError::Overflow)?;
+
+        // Transfer premium from buyer to provider
+        let token = get_usdc_token(&env)?;
+        let token_client = TokenClient::new(&env, &token);
+        token_client.transfer(&trade.buyer, &provider, &(premium as i128));
+
+        save_insurance_policy(&env, trade_id, &InsurancePolicy {
+            provider: provider.clone(),
+            premium,
+            coverage,
+            claimed: false,
+        });
+        events::emit_insurance_purchased(&env, trade_id, provider, premium, coverage);
+        Ok(())
+    }
+
+    /// File an insurance claim on a disputed trade (provider pays out).
+    /// Only callable by the registered provider for this trade's policy.
+    /// `recipient`: buyer or seller — whoever the provider decides to compensate.
+    /// The provider transfers `payout` (up to `coverage`) directly to the recipient.
+    pub fn claim_insurance(
+        env: Env,
+        trade_id: u64,
+        recipient: Address,
+        payout: u64,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let trade = get_trade(&env, trade_id)?;
+        // Claims only valid on disputed or completed trades
+        if trade.status != TradeStatus::Disputed && trade.status != TradeStatus::Completed {
+            return Err(ContractError::InsuranceClaimNotEligible);
+        }
+        let mut policy = get_insurance_policy(&env, trade_id)
+            .ok_or(ContractError::TradeNotInsured)?;
+        if policy.claimed {
+            return Err(ContractError::InsuranceAlreadyClaimed);
+        }
+        // Payout capped at coverage
+        let actual_payout = payout.min(policy.coverage);
+        policy.provider.require_auth();
+
+        // Provider transfers payout to recipient from their own balance
+        let token = get_usdc_token(&env)?;
+        let token_client = TokenClient::new(&env, &token);
+        token_client.transfer(&policy.provider, &recipient, &(actual_payout as i128));
+
+        policy.claimed = true;
+        save_insurance_policy(&env, trade_id, &policy);
+        events::emit_insurance_claimed(&env, trade_id, actual_payout, recipient);
+        Ok(())
+    }
+
+    /// Check if a provider is registered.
+    pub fn is_insurance_provider_registered(env: Env, provider: Address) -> bool {
+        has_insurance_provider(&env, &provider)
+    }
+
+    /// Get the insurance policy for a trade, if any.
+    pub fn get_insurance_policy(env: Env, trade_id: u64) -> Option<InsurancePolicy> {
+        get_insurance_policy(&env, trade_id)
     }
 }
 

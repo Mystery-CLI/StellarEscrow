@@ -143,3 +143,24 @@ pub struct CrossChainInfo {
     /// Ledger sequence after which the trade can be expired and funds reclaimed
     pub expires_at_ledger: u32,
 }
+
+// ---------------------------------------------------------------------------
+// Trade Insurance
+// ---------------------------------------------------------------------------
+
+/// Maximum insurance premium in basis points (10% of trade amount)
+pub const MAX_INSURANCE_PREMIUM_BPS: u32 = 1000;
+
+/// Insurance policy attached to a trade.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InsurancePolicy {
+    /// Registered provider that underwrites this policy
+    pub provider: Address,
+    /// Premium paid by the buyer, in USDC stroops (already deducted from escrow)
+    pub premium: u64,
+    /// Maximum payout the provider will cover beyond the escrowed amount
+    pub coverage: u64,
+    /// Whether a claim has been paid out
+    pub claimed: bool,
+}

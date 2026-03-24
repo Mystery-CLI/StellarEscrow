@@ -288,3 +288,141 @@ fn test_confirm_expired_bridge_trade_fails() {
         &id, &soroban_sdk::String::from_str(&env, "0xabc")
     ).is_err());
 }
+
+// ---------------------------------------------------------------------------
+// Insurance tests
+// ---------------------------------------------------------------------------
+
+fn setup_insurance() -> (Env, Address, Address, Address, Address, StellarEscrowContractClient<'static>) {
+    let (env, token_addr, admin, seller, buyer, _, client) = setup();
+    let provider = Address::generate(&env);
+    client.register_insurance_provider(&provider);
+    // mint tokens to buyer for premium payments and to provider for payouts
+    token::StellarAssetClient::new(&env, &token_addr).mint(&provider, &10_000_000i128);
+    (env, token_addr, admin, seller, buyer, client)
+}
+
+fn funded_trade(env: &Env, token_addr: &Address, seller: &Address, buyer: &Address, client: &StellarEscrowContractClient) -> u64 {
+    let id = client.create_trade(seller, buyer, &1_000_000u64, &None, &OptionalMetadata::None);
+    token::Client::new(env, token_addr).approve(buyer, &client.address, &1_000_000i128, &200u32);
+    client.fund_trade(&id);
+    id
+}
+
+#[test]
+fn test_register_insurance_provider() {
+    let (env, _, _, _, _, client) = setup_insurance();
+    let provider = Address::generate(&env);
+    client.register_insurance_provider(&provider);
+    assert!(client.is_insurance_provider_registered(&provider));
+    client.remove_insurance_provider(&provider);
+    assert!(!client.is_insurance_provider_registered(&provider));
+}
+
+#[test]
+fn test_purchase_insurance() {
+    let (env, token_addr, _, seller, buyer, client) = setup_insurance();
+    let provider = Address::generate(&env);
+    client.register_insurance_provider(&provider);
+    let id = funded_trade(&env, &token_addr, &seller, &buyer, &client);
+
+    let buyer_before = token::Client::new(&env, &token_addr).balance(&buyer);
+    // 100 bps = 1% of 1_000_000 = 10_000 premium
+    client.purchase_insurance(&id, &provider, &100u32, &500_000u64);
+    let buyer_after = token::Client::new(&env, &token_addr).balance(&buyer);
+    assert_eq!(buyer_before - buyer_after, 10_000i128);
+
+    let policy = client.get_insurance_policy(&id).unwrap();
+    assert_eq!(policy.premium, 10_000u64);
+    assert_eq!(policy.coverage, 500_000u64);
+    assert!(!policy.claimed);
+}
+
+#[test]
+fn test_purchase_insurance_unregistered_provider_fails() {
+    let (env, token_addr, _, seller, buyer, client) = setup_insurance();
+    let id = funded_trade(&env, &token_addr, &seller, &buyer, &client);
+    let rando = Address::generate(&env);
+    assert!(client.try_purchase_insurance(&id, &rando, &100u32, &500_000u64).is_err());
+}
+
+#[test]
+fn test_purchase_insurance_premium_too_high_fails() {
+    let (env, token_addr, _, seller, buyer, client) = setup_insurance();
+    let provider = Address::generate(&env);
+    client.register_insurance_provider(&provider);
+    let id = funded_trade(&env, &token_addr, &seller, &buyer, &client);
+    // 1001 bps > MAX_INSURANCE_PREMIUM_BPS (1000)
+    assert!(client.try_purchase_insurance(&id, &provider, &1001u32, &500_000u64).is_err());
+}
+
+#[test]
+fn test_claim_insurance() {
+    let (env, token_addr, _, seller, buyer, client) = setup_insurance();
+    let provider = Address::generate(&env);
+    client.register_insurance_provider(&provider);
+    token::StellarAssetClient::new(&env, &token_addr).mint(&provider, &10_000_000i128);
+
+    let id = funded_trade(&env, &token_addr, &seller, &buyer, &client);
+    client.purchase_insurance(&id, &provider, &100u32, &500_000u64);
+
+    // raise dispute to make trade eligible for claim
+    let arb = Address::generate(&env);
+    client.register_arbitrator(&arb);
+    // re-create a trade with arbitrator for dispute
+    let id2 = client.create_trade(&seller, &buyer, &1_000_000u64, &Some(arb.clone()), &OptionalMetadata::None);
+    token::Client::new(&env, &token_addr).approve(&buyer, &client.address, &1_000_000i128, &200u32);
+    client.fund_trade(&id2);
+    client.purchase_insurance(&id2, &provider, &100u32, &500_000u64);
+    client.raise_dispute(&id2, &buyer);
+
+    let seller_before = token::Client::new(&env, &token_addr).balance(&seller);
+    client.claim_insurance(&id2, &seller, &200_000u64);
+    let seller_after = token::Client::new(&env, &token_addr).balance(&seller);
+    assert_eq!(seller_after - seller_before, 200_000i128);
+
+    let policy = client.get_insurance_policy(&id2).unwrap();
+    assert!(policy.claimed);
+}
+
+#[test]
+fn test_claim_insurance_double_claim_fails() {
+    let (env, token_addr, _, seller, buyer, client) = setup_insurance();
+    let provider = Address::generate(&env);
+    client.register_insurance_provider(&provider);
+    token::StellarAssetClient::new(&env, &token_addr).mint(&provider, &10_000_000i128);
+
+    let arb = Address::generate(&env);
+    client.register_arbitrator(&arb);
+    let id = client.create_trade(&seller, &buyer, &1_000_000u64, &Some(arb.clone()), &OptionalMetadata::None);
+    token::Client::new(&env, &token_addr).approve(&buyer, &client.address, &1_000_000i128, &200u32);
+    client.fund_trade(&id);
+    client.purchase_insurance(&id, &provider, &100u32, &500_000u64);
+    client.raise_dispute(&id, &buyer);
+
+    client.claim_insurance(&id, &seller, &100_000u64);
+    assert!(client.try_claim_insurance(&id, &seller, &100_000u64).is_err());
+}
+
+#[test]
+fn test_claim_capped_at_coverage() {
+    let (env, token_addr, _, seller, buyer, client) = setup_insurance();
+    let provider = Address::generate(&env);
+    client.register_insurance_provider(&provider);
+    token::StellarAssetClient::new(&env, &token_addr).mint(&provider, &10_000_000i128);
+
+    let arb = Address::generate(&env);
+    client.register_arbitrator(&arb);
+    let id = client.create_trade(&seller, &buyer, &1_000_000u64, &Some(arb.clone()), &OptionalMetadata::None);
+    token::Client::new(&env, &token_addr).approve(&buyer, &client.address, &1_000_000i128, &200u32);
+    client.fund_trade(&id);
+    // coverage = 50_000
+    client.purchase_insurance(&id, &provider, &100u32, &50_000u64);
+    client.raise_dispute(&id, &buyer);
+
+    let seller_before = token::Client::new(&env, &token_addr).balance(&seller);
+    // request 999_999 but coverage is only 50_000
+    client.claim_insurance(&id, &seller, &999_999u64);
+    let seller_after = token::Client::new(&env, &token_addr).balance(&seller);
+    assert_eq!(seller_after - seller_before, 50_000i128);
+}
