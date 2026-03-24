@@ -5,6 +5,7 @@ mod errors;
 mod events;
 mod history;
 mod storage;
+mod tiers;
 mod trade_detail;
 mod types;
 mod users;
@@ -19,9 +20,8 @@ use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
 
 pub use errors::ContractError;
 pub use types::{
-    DisputeResolution, HistoryFilter, HistoryPage, PlatformAnalytics, SortOrder, SystemConfig,
-    Trade, TradeAction, TradeDetail, TradeStatus, TransactionRecord, TimelineEntry,
-    UserAnalytics, UserPreference, UserProfile, VerificationStatus,
+    DisputeResolution, HistoryFilter, HistoryPage, MetadataEntry, SortOrder,
+    TierConfig, Trade, TradeMetadata, TradeStatus, TransactionRecord, UserTier, UserTierInfo,
 };
 
 use storage::{
@@ -151,7 +151,8 @@ impl StellarEscrowContract {
             validate_metadata(meta)?;
         }
         let trade_id = increment_trade_counter(&env)?;
-        let fee_bps = get_fee_bps(&env)?;
+        let base_fee_bps = get_fee_bps(&env)?;
+        let fee_bps = tiers::effective_fee_bps(&env, &seller, base_fee_bps);
         let fee = amount
             .checked_mul(fee_bps as u64)
             .ok_or(ContractError::Overflow)?
@@ -248,6 +249,9 @@ impl StellarEscrowContract {
         let current_fees = get_accumulated_fees(&env)?;
         let new_fees = current_fees.checked_add(trade.fee).ok_or(ContractError::Overflow)?;
         set_accumulated_fees(&env, new_fees);
+        // Record volume for tier progression on both parties
+        tiers::record_volume(&env, &trade.seller, trade.amount)?;
+        tiers::record_volume(&env, &trade.buyer, trade.amount)?;
         users::record_trade_completed(&env, &trade.seller, &trade.buyer);
         admin::on_trade_completed(&env, trade.fee);
         events::emit_trade_confirmed(&env, trade_id, payout, trade.fee);
@@ -408,7 +412,8 @@ impl StellarEscrowContract {
             return Err(ContractError::BatchLimitExceeded);
         }
         seller.require_auth();
-        let fee_bps = get_fee_bps(&env)?;
+        let base_fee_bps = get_fee_bps(&env)?;
+        let fee_bps = tiers::effective_fee_bps(&env, &seller, base_fee_bps);
         let mut trade_ids = soroban_sdk::Vec::new(&env);
         let mut total_amount: u64 = 0;
         let now = env.ledger().sequence();
@@ -537,8 +542,66 @@ impl StellarEscrowContract {
         let current_fees = get_accumulated_fees(&env)?;
         let new_fees = current_fees.checked_add(total_fees).ok_or(ContractError::Overflow)?;
         set_accumulated_fees(&env, new_fees);
+        // Record volume for tier progression
+        for trade_id in trade_ids.iter() {
+            let trade = get_trade(&env, trade_id)?;
+            tiers::record_volume(&env, &trade.seller, trade.amount)?;
+            tiers::record_volume(&env, &trade.buyer, trade.amount)?;
+        }
         events::emit_batch_trades_confirmed(&env, trade_ids.len() as u32, total_payout, total_fees);
         Ok(())
+    }
+
+    // -------------------------------------------------------------------------
+    // Fee Tier System
+    // -------------------------------------------------------------------------
+
+    /// Admin: configure fee rates per tier.
+    /// Rates must satisfy: bronze_fee_bps >= silver_fee_bps >= gold_fee_bps.
+    pub fn set_tier_config(env: Env, config: TierConfig) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        tiers::set_tier_config(&env, &config)
+    }
+
+    /// Admin: assign a custom fee rate to a specific user (overrides volume tier).
+    pub fn set_user_custom_fee(env: Env, user: Address, fee_bps: u32) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        tiers::set_custom_fee(&env, &user, fee_bps)
+    }
+
+    /// Admin: remove a user's custom fee, reverting them to volume-based tier.
+    pub fn remove_user_custom_fee(env: Env, user: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        tiers::remove_custom_fee(&env, &user);
+        Ok(())
+    }
+
+    /// Query a user's current tier info (tier, volume, custom fee if any).
+    pub fn get_user_tier(env: Env, user: Address) -> Option<UserTierInfo> {
+        storage::get_user_tier(&env, &user)
+    }
+
+    /// Query the current tier fee configuration.
+    pub fn get_tier_config(env: Env) -> Option<TierConfig> {
+        storage::get_tier_config(&env)
+    }
+
+    /// Query the effective fee bps that will be applied for a given user's next trade.
+    pub fn get_effective_fee_bps(env: Env, user: Address) -> Result<u32, ContractError> {
+        let base = get_fee_bps(&env)?;
+        Ok(tiers::effective_fee_bps(&env, &user, base))
     }
 
     // -------------------------------------------------------------------------

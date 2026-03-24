@@ -5,6 +5,38 @@ pub const METADATA_MAX_VALUE_LEN: u32 = 256;
 /// Maximum number of key-value pairs in metadata
 pub const METADATA_MAX_ENTRIES: u32 = 10;
 
+// ---------------------------------------------------------------------------
+// Fee Tier System
+// ---------------------------------------------------------------------------
+
+pub const TIER_SILVER_THRESHOLD: u64 = 10_000_000_000;
+pub const TIER_GOLD_THRESHOLD: u64 = 100_000_000_000;
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UserTier {
+    Bronze,
+    Silver,
+    Gold,
+    Custom,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserTierInfo {
+    pub tier: UserTier,
+    pub total_volume: u64,
+    pub custom_fee_bps: Option<u32>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TierConfig {
+    pub bronze_fee_bps: u32,
+    pub silver_fee_bps: u32,
+    pub gold_fee_bps: u32,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TradeStatus {

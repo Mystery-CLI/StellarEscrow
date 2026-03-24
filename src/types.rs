@@ -77,6 +77,53 @@ pub struct TradeMetadata {
     pub entries: Vec<MetadataEntry>,
 }
 
+// ---------------------------------------------------------------------------
+// Fee Tier System
+// ---------------------------------------------------------------------------
+
+/// Volume thresholds (in USDC micro-units) for automatic tier upgrades.
+/// Bronze: 0+, Silver: 10_000_000_000 (10k USDC), Gold: 100_000_000_000 (100k USDC)
+pub const TIER_SILVER_THRESHOLD: u64 = 10_000_000_000;
+pub const TIER_GOLD_THRESHOLD: u64 = 100_000_000_000;
+
+/// User membership tier — determines the fee rate applied to their trades.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UserTier {
+    /// Default tier — uses the platform base fee
+    Bronze,
+    /// Mid tier — reduced fee rate
+    Silver,
+    /// Top tier — lowest fee rate
+    Gold,
+    /// Manually assigned custom fee rate (overrides volume-based tier)
+    Custom,
+}
+
+/// Per-user tier record stored on-chain.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserTierInfo {
+    /// Current tier
+    pub tier: UserTier,
+    /// Cumulative completed trade volume (sum of trade amounts)
+    pub total_volume: u64,
+    /// Custom fee in basis points — only used when tier == Custom
+    pub custom_fee_bps: Option<u32>,
+}
+
+/// Tier configuration set by admin — defines fee bps per tier.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TierConfig {
+    /// Fee bps for Bronze (default: platform base fee)
+    pub bronze_fee_bps: u32,
+    /// Fee bps for Silver
+    pub silver_fee_bps: u32,
+    /// Fee bps for Gold
+    pub gold_fee_bps: u32,
+}
+
 /// Filter options for history queries
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

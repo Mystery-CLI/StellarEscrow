@@ -16,4 +16,6 @@ pub enum ContractError {
     Unauthorized = 10,
     MetadataTooManyEntries = 11,
     MetadataValueTooLong = 12,
+    InvalidTierConfig = 13,
+    TierNotFound = 14,
 }

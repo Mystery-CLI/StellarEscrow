@@ -66,3 +66,23 @@ pub fn emit_metadata_updated(env: &Env, trade_id: u64) {
     env.events()
         .publish((symbol_short!("meta_upd"),), trade_id);
 }
+
+pub fn emit_tier_upgraded(env: &Env, user: Address, new_tier: crate::types::UserTier) {
+    env.events()
+        .publish((symbol_short!("tier_up"),), (user, new_tier));
+}
+
+pub fn emit_tier_downgraded(env: &Env, user: Address, new_tier: crate::types::UserTier) {
+    env.events()
+        .publish((symbol_short!("tier_dn"),), (user, new_tier));
+}
+
+pub fn emit_tier_config_updated(env: &Env) {
+    env.events()
+        .publish((symbol_short!("tier_cfg"),), ());
+}
+
+pub fn emit_custom_fee_set(env: &Env, user: Address, fee_bps: u32) {
+    env.events()
+        .publish((symbol_short!("cust_fee"),), (user, fee_bps));
+}

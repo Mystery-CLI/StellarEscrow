@@ -1,7 +1,7 @@
 use soroban_sdk::{Address, Env};
 
 use crate::errors::ContractError;
-use crate::types::Trade;
+use crate::types::{TierConfig, Trade, UserTierInfo};
 
 const INITIALIZED: &str = "INIT";
 const ADMIN: &str = "ADMIN";
@@ -9,9 +9,10 @@ const USDC_TOKEN: &str = "USDC";
 const FEE_BPS: &str = "FEE_BPS";
 const TRADE_COUNTER: &str = "COUNTER";
 const ACCUMULATED_FEES: &str = "ACC_FEES";
-
 const TRADE_PREFIX: &str = "TRADE";
 const ARBITRATOR_PREFIX: &str = "ARB";
+const TIER_CONFIG: &str = "TIER_CFG";
+const USER_TIER_PREFIX: &str = "UTIER";
 
 // Initialization
 pub fn is_initialized(env: &Env) -> bool {
@@ -121,4 +122,24 @@ pub fn remove_arbitrator(env: &Env, arbitrator: &Address) {
 pub fn has_arbitrator(env: &Env, arbitrator: &Address) -> bool {
     let key = (ARBITRATOR_PREFIX, arbitrator);
     env.storage().persistent().has(&key)
+}
+
+// Tier config
+pub fn save_tier_config(env: &Env, config: &TierConfig) {
+    env.storage().instance().set(&TIER_CONFIG, config);
+}
+
+pub fn get_tier_config(env: &Env) -> Option<TierConfig> {
+    env.storage().instance().get(&TIER_CONFIG)
+}
+
+// Per-user tier
+pub fn save_user_tier(env: &Env, user: &Address, info: &UserTierInfo) {
+    let key = (USER_TIER_PREFIX, user);
+    env.storage().persistent().set(&key, info);
+}
+
+pub fn get_user_tier(env: &Env, user: &Address) -> Option<UserTierInfo> {
+    let key = (USER_TIER_PREFIX, user);
+    env.storage().persistent().get(&key)
 }

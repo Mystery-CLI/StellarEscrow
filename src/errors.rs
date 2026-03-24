@@ -19,4 +19,6 @@ pub enum ContractError {
     EmptyBatch = 12,
     MetadataTooManyEntries = 13,
     MetadataValueTooLong = 14,
+    InvalidTierConfig = 15,
+    TierNotFound = 16,
 }

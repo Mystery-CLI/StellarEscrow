@@ -1,7 +1,7 @@
 use soroban_sdk::{Address, Env, Vec};
 
 use crate::errors::ContractError;
-use crate::types::Trade;
+use crate::types::{TierConfig, Trade, UserTierInfo};
 
 const INITIALIZED: &str = "INIT";
 const ADMIN: &str = "ADMIN";
@@ -12,6 +12,8 @@ const ACCUMULATED_FEES: &str = "ACC_FEES";
 const TRADE_PREFIX: &str = "TRADE";
 const ARBITRATOR_PREFIX: &str = "ARB";
 const ADDR_TRADES_PREFIX: &str = "ADDR_T";
+const TIER_CONFIG: &str = "TIER_CFG";
+const USER_TIER_PREFIX: &str = "UTIER";
 
 pub fn is_initialized(env: &Env) -> bool {
     env.storage().instance().has(&INITIALIZED)
@@ -118,6 +120,31 @@ pub fn get_trade_ids_for_address(env: &Env, address: &Address) -> Vec<u64> {
         .unwrap_or_else(|| Vec::new(env))
 }
 
+// ---------------------------------------------------------------------------
+// Tier config storage
+// ---------------------------------------------------------------------------
+
+pub fn save_tier_config(env: &Env, config: &TierConfig) {
+    env.storage().instance().set(&TIER_CONFIG, config);
+}
+
+pub fn get_tier_config(env: &Env) -> Option<TierConfig> {
+    env.storage().instance().get(&TIER_CONFIG)
+}
+
+// ---------------------------------------------------------------------------
+// Per-user tier storage
+// ---------------------------------------------------------------------------
+
+pub fn save_user_tier(env: &Env, user: &Address, info: &UserTierInfo) {
+    let key = (USER_TIER_PREFIX, user);
+    env.storage().persistent().set(&key, info);
+}
+
+pub fn get_user_tier(env: &Env, user: &Address) -> Option<UserTierInfo> {
+    let key = (USER_TIER_PREFIX, user);
+    env.storage().persistent().get(&key)
+}
 // =============================================================================
 // User Management storage (Issue #64)
 // =============================================================================
