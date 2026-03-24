@@ -73,4 +73,47 @@ pub fn emit_unpaused(env: &Env, admin: Address) {
 pub fn emit_emergency_withdraw(env: &Env, to: Address, amount: u64) {
     env.events()
         .publish((symbol_short!("emrg_wd"),), (to, amount));
+pub fn emit_metadata_updated(env: &Env, trade_id: u64) {
+    env.events()
+        .publish((symbol_short!("meta_upd"),), trade_id);
+}
+
+pub fn emit_tier_upgraded(env: &Env, user: Address, new_tier: crate::types::UserTier) {
+    env.events()
+        .publish((symbol_short!("tier_up"),), (user, new_tier));
+}
+
+pub fn emit_tier_downgraded(env: &Env, user: Address, new_tier: crate::types::UserTier) {
+    env.events()
+        .publish((symbol_short!("tier_dn"),), (user, new_tier));
+}
+
+pub fn emit_tier_config_updated(env: &Env) {
+    env.events()
+        .publish((symbol_short!("tier_cfg"),), ());
+}
+
+pub fn emit_custom_fee_set(env: &Env, user: Address, fee_bps: u32) {
+    env.events()
+        .publish((symbol_short!("cust_fee"),), (user, fee_bps));
+}
+
+pub fn emit_template_created(env: &Env, template_id: u64, owner: Address) {
+    env.events()
+        .publish((symbol_short!("tmpl_cr"),), (template_id, owner));
+}
+
+pub fn emit_template_updated(env: &Env, template_id: u64, version: u32) {
+    env.events()
+        .publish((symbol_short!("tmpl_up"),), (template_id, version));
+}
+
+pub fn emit_template_deactivated(env: &Env, template_id: u64) {
+    env.events()
+        .publish((symbol_short!("tmpl_off"),), template_id);
+}
+
+pub fn emit_trade_from_template(env: &Env, trade_id: u64, template_id: u64, version: u32) {
+    env.events()
+        .publish((symbol_short!("tmpl_tr"),), (trade_id, template_id, version));
 }

@@ -51,7 +51,7 @@ fn test_history_empty_for_new_address() {
 fn test_history_shows_created_trade() {
     let (env, client, _, seller, buyer) = setup();
 
-    let trade_id = client.create_trade(&seller, &buyer, &1000, &None);
+    let trade_id = client.create_trade(&seller, &buyer, &1000, &None, &None);
 
     let page = client.get_transaction_history(
         &seller,
@@ -72,7 +72,7 @@ fn test_history_shows_created_trade() {
 fn test_history_visible_from_buyer_address() {
     let (env, client, _, seller, buyer) = setup();
 
-    client.create_trade(&seller, &buyer, &500, &None);
+    client.create_trade(&seller, &buyer, &500, &None, &None);
 
     let page = client.get_transaction_history(
         &buyer,
@@ -89,8 +89,8 @@ fn test_history_visible_from_buyer_address() {
 fn test_history_filter_by_status() {
     let (env, client, _, seller, buyer) = setup();
 
-    client.create_trade(&seller, &buyer, &1000, &None);
-    client.create_trade(&seller, &buyer, &2000, &None);
+    client.create_trade(&seller, &buyer, &1000, &None, &None);
+    client.create_trade(&seller, &buyer, &2000, &None, &None);
 
     // Cancel the first trade
     client.cancel_trade(&1);
@@ -112,11 +112,11 @@ fn test_history_filter_by_ledger_range() {
 
     // Trade at ledger 1
     env.ledger().set_sequence_number(1);
-    client.create_trade(&seller, &buyer, &1000, &None);
+    client.create_trade(&seller, &buyer, &1000, &None, &None);
 
     // Trade at ledger 100
     env.ledger().set_sequence_number(100);
-    client.create_trade(&seller, &buyer, &2000, &None);
+    client.create_trade(&seller, &buyer, &2000, &None, &None);
 
     let filter = HistoryFilter {
         status: None,
@@ -134,10 +134,10 @@ fn test_history_sort_descending() {
     let (env, client, _, seller, buyer) = setup();
 
     env.ledger().set_sequence_number(1);
-    client.create_trade(&seller, &buyer, &100, &None);
+    client.create_trade(&seller, &buyer, &100, &None, &None);
 
     env.ledger().set_sequence_number(10);
-    client.create_trade(&seller, &buyer, &200, &None);
+    client.create_trade(&seller, &buyer, &200, &None, &None);
 
     let page = client.get_transaction_history(
         &seller,
@@ -156,7 +156,7 @@ fn test_history_pagination() {
     let (env, client, _, seller, buyer) = setup();
 
     for _ in 0..5 {
-        client.create_trade(&seller, &buyer, &1000, &None);
+        client.create_trade(&seller, &buyer, &1000, &None, &None);
     }
 
     let page1 = client.get_transaction_history(
@@ -183,7 +183,7 @@ fn test_history_pagination() {
 fn test_export_csv_returns_header_and_rows() {
     let (env, client, _, seller, buyer) = setup();
 
-    client.create_trade(&seller, &buyer, &1000, &None);
+    client.create_trade(&seller, &buyer, &1000, &None, &None);
 
     let csv = client.export_transaction_csv(
         &seller,

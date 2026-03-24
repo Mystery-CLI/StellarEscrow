@@ -15,4 +15,13 @@ pub enum ContractError {
     NoFeesToWithdraw = 9,
     Unauthorized = 10,
     ContractPaused = 11,
+    MetadataTooManyEntries = 11,
+    MetadataValueTooLong = 12,
+    InvalidTierConfig = 13,
+    TierNotFound = 14,
+    TemplateNotFound = 15,
+    TemplateInactive = 16,
+    TemplateNameTooLong = 17,
+    TemplateVersionLimitExceeded = 18,
+    TemplateAmountMismatch = 19,
 }

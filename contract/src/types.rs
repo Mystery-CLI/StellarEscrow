@@ -1,4 +1,41 @@
-use soroban_sdk::{contracttype, Address};
+use soroban_sdk::{contracttype, Address, String, Vec};
+
+/// Maximum byte length for a single metadata value string
+pub const METADATA_MAX_VALUE_LEN: u32 = 256;
+/// Maximum number of key-value pairs in metadata
+pub const METADATA_MAX_ENTRIES: u32 = 10;
+
+// ---------------------------------------------------------------------------
+// Fee Tier System
+// ---------------------------------------------------------------------------
+
+pub const TIER_SILVER_THRESHOLD: u64 = 10_000_000_000;
+pub const TIER_GOLD_THRESHOLD: u64 = 100_000_000_000;
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UserTier {
+    Bronze,
+    Silver,
+    Gold,
+    Custom,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserTierInfo {
+    pub tier: UserTier,
+    pub total_volume: u64,
+    pub custom_fee_bps: Option<u32>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TierConfig {
+    pub bronze_fee_bps: u32,
+    pub silver_fee_bps: u32,
+    pub gold_fee_bps: u32,
+}
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -17,6 +54,21 @@ pub enum DisputeResolution {
     ReleaseToSeller,
 }
 
+/// A single metadata key-value entry
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MetadataEntry {
+    pub key: String,
+    pub value: String,
+}
+
+/// Structured metadata attached to a trade (e.g. product description, shipping info)
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TradeMetadata {
+    pub entries: Vec<MetadataEntry>,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Trade {
@@ -27,4 +79,43 @@ pub struct Trade {
     pub fee: u64,
     pub arbitrator: Option<Address>,
     pub status: TradeStatus,
+    /// Optional structured metadata (product info, shipping details, etc.)
+    pub metadata: Option<TradeMetadata>,
+}
+
+// ---------------------------------------------------------------------------
+// Trade Templates
+// ---------------------------------------------------------------------------
+
+pub const TEMPLATE_NAME_MAX_LEN: u32 = 64;
+pub const TEMPLATE_MAX_VERSIONS: u32 = 10;
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TemplateTerms {
+    pub description: String,
+    pub default_arbitrator: Option<Address>,
+    pub fixed_amount: Option<u64>,
+    pub default_metadata: Option<TradeMetadata>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TemplateVersion {
+    pub version: u32,
+    pub terms: TemplateTerms,
+    pub created_at: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TradeTemplate {
+    pub id: u64,
+    pub owner: Address,
+    pub name: String,
+    pub current_version: u32,
+    pub versions: Vec<TemplateVersion>,
+    pub active: bool,
+    pub created_at: u32,
+    pub updated_at: u32,
 }

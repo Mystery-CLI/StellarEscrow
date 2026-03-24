@@ -15,6 +15,7 @@ fn to_record(trade: &Trade) -> TransactionRecord {
         status: trade.status.clone(),
         created_at: trade.created_at,
         updated_at: trade.updated_at,
+        metadata: trade.metadata.clone(),
     }
 }
 

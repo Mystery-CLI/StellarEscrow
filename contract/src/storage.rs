@@ -1,7 +1,7 @@
 use soroban_sdk::{Address, Env};
 
 use crate::errors::ContractError;
-use crate::types::Trade;
+use crate::types::{TierConfig, Trade, TradeTemplate, UserTierInfo};
 
 const INITIALIZED: &str = "INIT";
 const ADMIN: &str = "ADMIN";
@@ -12,6 +12,10 @@ const ACCUMULATED_FEES: &str = "ACC_FEES";
 const TRADE_PREFIX: &str = "TRADE";
 const ARBITRATOR_PREFIX: &str = "ARB";
 const PAUSED: &str = "PAUSED";
+const TIER_CONFIG: &str = "TIER_CFG";
+const USER_TIER_PREFIX: &str = "UTIER";
+const TEMPLATE_COUNTER: &str = "TMPL_CTR";
+const TEMPLATE_PREFIX: &str = "TMPL";
 
 // Initialization
 pub fn is_initialized(env: &Env) -> bool {
@@ -133,4 +137,48 @@ pub fn set_paused(env: &Env, paused: bool) {
 
 pub fn is_paused(env: &Env) -> bool {
     env.storage().instance().get(&PAUSED).unwrap_or(false)
+// Tier config
+pub fn save_tier_config(env: &Env, config: &TierConfig) {
+    env.storage().instance().set(&TIER_CONFIG, config);
+}
+
+pub fn get_tier_config(env: &Env) -> Option<TierConfig> {
+    env.storage().instance().get(&TIER_CONFIG)
+}
+
+// Per-user tier
+pub fn save_user_tier(env: &Env, user: &Address, info: &UserTierInfo) {
+    let key = (USER_TIER_PREFIX, user);
+    env.storage().persistent().set(&key, info);
+}
+
+pub fn get_user_tier(env: &Env, user: &Address) -> Option<UserTierInfo> {
+    let key = (USER_TIER_PREFIX, user);
+    env.storage().persistent().get(&key)
+}
+
+// Template storage
+pub fn get_template_counter(env: &Env) -> u64 {
+    env.storage().instance().get(&TEMPLATE_COUNTER).unwrap_or(0)
+}
+
+pub fn increment_template_counter(env: &Env) -> Result<u64, crate::errors::ContractError> {
+    let next = get_template_counter(env)
+        .checked_add(1)
+        .ok_or(crate::errors::ContractError::Overflow)?;
+    env.storage().instance().set(&TEMPLATE_COUNTER, &next);
+    Ok(next)
+}
+
+pub fn save_template(env: &Env, template_id: u64, template: &TradeTemplate) {
+    let key = (TEMPLATE_PREFIX, template_id);
+    env.storage().persistent().set(&key, template);
+}
+
+pub fn get_template(env: &Env, template_id: u64) -> Result<TradeTemplate, crate::errors::ContractError> {
+    let key = (TEMPLATE_PREFIX, template_id);
+    env.storage()
+        .persistent()
+        .get(&key)
+        .ok_or(crate::errors::ContractError::TemplateNotFound)
 }
