@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Vec};
+use soroban_sdk::{contracttype, Address, String, Vec};
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -38,6 +38,8 @@ pub struct Trade {
     pub created_at: u32,
     /// Ledger sequence number of the last status update
     pub updated_at: u32,
+    /// Optional structured metadata (product info, shipping details, etc.)
+    pub metadata: Option<TradeMetadata>,
 }
 
 /// A richer view of a trade used for history queries
@@ -52,6 +54,27 @@ pub struct TransactionRecord {
     pub status: TradeStatus,
     pub created_at: u32,
     pub updated_at: u32,
+    pub metadata: Option<TradeMetadata>,
+}
+
+/// Maximum byte length for a single metadata value string
+pub const METADATA_MAX_VALUE_LEN: u32 = 256;
+/// Maximum number of key-value pairs in metadata
+pub const METADATA_MAX_ENTRIES: u32 = 10;
+
+/// A single metadata key-value entry
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MetadataEntry {
+    pub key: String,
+    pub value: String,
+}
+
+/// Structured metadata attached to a trade (e.g. product description, shipping info)
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TradeMetadata {
+    pub entries: Vec<MetadataEntry>,
 }
 
 /// Filter options for history queries

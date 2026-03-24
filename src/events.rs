@@ -48,6 +48,11 @@ pub fn emit_arbitrator_registered(env: &Env, arbitrator: Address) {
         .publish((symbol_short!("arb_reg"),), arbitrator);
 }
 
+pub fn emit_metadata_updated(env: &Env, trade_id: u64) {
+    env.events()
+        .publish((symbol_short!("meta_upd"),), trade_id);
+}
+
 pub fn emit_arbitrator_removed(env: &Env, arbitrator: Address) {
     env.events()
         .publish((symbol_short!("arb_rem"),), arbitrator);

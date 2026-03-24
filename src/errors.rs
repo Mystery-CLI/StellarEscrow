@@ -16,4 +16,6 @@ pub enum ContractError {
     Unauthorized = 10,
     BatchLimitExceeded = 11,
     EmptyBatch = 12,
+    MetadataTooManyEntries = 13,
+    MetadataValueTooLong = 14,
 }

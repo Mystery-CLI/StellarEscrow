@@ -12,8 +12,13 @@ mod test;
 use soroban_sdk::{contract, contractimpl, Address, Env};
 use soroban_sdk::token::TokenClient;
 
+use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
+
 pub use errors::ContractError;
-pub use types::{DisputeResolution, HistoryFilter, HistoryPage, SortOrder, Trade, TradeStatus, TransactionRecord};
+pub use types::{
+    DisputeResolution, HistoryFilter, HistoryPage, MetadataEntry, SortOrder,
+    Trade, TradeMetadata, TradeStatus, TransactionRecord,
+};
 
 use storage::{
     get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_usdc_token,
@@ -21,6 +26,19 @@ use storage::{
     is_initialized, remove_arbitrator, save_arbitrator, save_trade, set_accumulated_fees,
     set_admin, set_fee_bps, set_initialized, set_trade_counter, set_usdc_token,
 };
+
+/// Validate metadata entries against size limits.
+fn validate_metadata(meta: &TradeMetadata) -> Result<(), ContractError> {
+    if meta.entries.len() > METADATA_MAX_ENTRIES {
+        return Err(ContractError::MetadataTooManyEntries);
+    }
+    for entry in meta.entries.iter() {
+        if entry.value.len() > METADATA_MAX_VALUE_LEN {
+            return Err(ContractError::MetadataValueTooLong);
+        }
+    }
+    Ok(())
+}
 
 #[contract]
 pub struct StellarEscrowContract;
@@ -103,13 +121,14 @@ impl StellarEscrowContract {
         Ok(())
     }
 
-    /// Create a new trade
+    /// Create a new trade with optional metadata
     pub fn create_trade(
         env: Env,
         seller: Address,
         buyer: Address,
         amount: u64,
         arbitrator: Option<Address>,
+        metadata: Option<TradeMetadata>,
     ) -> Result<u64, ContractError> {
         if !is_initialized(&env) {
             return Err(ContractError::NotInitialized);
@@ -122,6 +141,9 @@ impl StellarEscrowContract {
             if !has_arbitrator(&env, arb) {
                 return Err(ContractError::ArbitratorNotRegistered);
             }
+        }
+        if let Some(ref meta) = metadata {
+            validate_metadata(meta)?;
         }
         let trade_id = increment_trade_counter(&env)?;
         let fee_bps = get_fee_bps(&env)?;
@@ -142,10 +164,10 @@ impl StellarEscrowContract {
             status: TradeStatus::Created,
             created_at: now,
             updated_at: now,
+            metadata,
         };
 
         save_trade(&env, trade_id, &trade);
-        // Index trade for both parties so history lookups work for either address
         index_trade_for_address(&env, &seller, trade_id);
         index_trade_for_address(&env, &buyer, trade_id);
         events::emit_trade_created(&env, trade_id, seller, buyer, amount);
@@ -316,7 +338,41 @@ impl StellarEscrowContract {
         get_fee_bps(&env)
     }
 
-    /// Batch create trades - optimized for multiple trades
+    /// Update or replace metadata on an existing trade (seller only)
+    pub fn update_trade_metadata(
+        env: Env,
+        trade_id: u64,
+        metadata: Option<TradeMetadata>,
+    ) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let mut trade = get_trade(&env, trade_id)?;
+        trade.seller.require_auth();
+        if let Some(ref meta) = metadata {
+            validate_metadata(meta)?;
+        }
+        trade.metadata = metadata;
+        trade.updated_at = env.ledger().sequence();
+        save_trade(&env, trade_id, &trade);
+        events::emit_metadata_updated(&env, trade_id);
+        Ok(())
+    }
+
+    /// Get metadata for a trade
+    pub fn get_trade_metadata(
+        env: Env,
+        trade_id: u64,
+    ) -> Result<Option<TradeMetadata>, ContractError> {
+        let trade = get_trade(&env, trade_id)?;
+        Ok(trade.metadata)
+    }
+
+    // -------------------------------------------------------------------------
+    // Batch operations
+    // -------------------------------------------------------------------------
+
+    /// Batch create trades
     pub fn batch_create_trades(
         env: Env,
         seller: Address,
@@ -325,32 +381,27 @@ impl StellarEscrowContract {
         if !is_initialized(&env) {
             return Err(ContractError::NotInitialized);
         }
-
-        // Enforce batch size limits (max 100 trades per batch for gas optimization)
         if trades.is_empty() {
             return Err(ContractError::EmptyBatch);
         }
         if trades.len() > 100 {
             return Err(ContractError::BatchLimitExceeded);
         }
-
         seller.require_auth();
-
         let fee_bps = get_fee_bps(&env)?;
         let mut trade_ids = soroban_sdk::Vec::new(&env);
         let mut total_amount: u64 = 0;
+        let now = env.ledger().sequence();
 
         for (buyer, amount, arbitrator) in trades.iter() {
             if amount == 0 {
                 return Err(ContractError::InvalidAmount);
             }
-
             if let Some(ref arb) = arbitrator {
                 if !has_arbitrator(&env, arb) {
                     return Err(ContractError::ArbitratorNotRegistered);
                 }
             }
-
             let trade_id = increment_trade_counter(&env)?;
             let fee = amount
                 .checked_mul(fee_bps as u64)
@@ -366,20 +417,21 @@ impl StellarEscrowContract {
                 fee,
                 arbitrator,
                 status: TradeStatus::Created,
+                created_at: now,
+                updated_at: now,
+                metadata: None,
             };
-
             save_trade(&env, trade_id, &trade);
+            index_trade_for_address(&env, &seller, trade_id);
+            index_trade_for_address(&env, &buyer, trade_id);
             trade_ids.push_back(trade_id);
             total_amount = total_amount.checked_add(amount).ok_or(ContractError::Overflow)?;
         }
-
-        // Emit single batch event instead of multiple individual events
         events::emit_batch_trades_created(&env, trade_ids.len() as u32, total_amount);
-
         Ok(trade_ids)
     }
 
-    /// Batch fund trades - optimized for multiple funding operations
+    /// Batch fund trades
     pub fn batch_fund_trades(
         env: Env,
         buyer: Address,
@@ -388,57 +440,41 @@ impl StellarEscrowContract {
         if !is_initialized(&env) {
             return Err(ContractError::NotInitialized);
         }
-
-        // Enforce batch size limits for gas optimization
         if trade_ids.is_empty() {
             return Err(ContractError::EmptyBatch);
         }
         if trade_ids.len() > 100 {
             return Err(ContractError::BatchLimitExceeded);
         }
-
         buyer.require_auth();
-
         let token = get_usdc_token(&env)?;
-        let token_client = token::Client::new(&env, &token);
+        let token_client = TokenClient::new(&env, &token);
         let mut total_amount: u64 = 0;
 
-        // First pass: validate all trades and calculate total amount
         for trade_id in trade_ids.iter() {
             let trade = get_trade(&env, trade_id)?;
-
             if trade.status != TradeStatus::Created {
                 return Err(ContractError::InvalidStatus);
             }
-
             if trade.buyer != buyer {
                 return Err(ContractError::Unauthorized);
             }
-
             total_amount = total_amount.checked_add(trade.amount).ok_or(ContractError::Overflow)?;
         }
+        token_client.transfer(&buyer, &env.current_contract_address(), &(total_amount as i128));
 
-        // Single transfer for all trades (gas optimization)
-        token_client.transfer(
-            &buyer,
-            &env.current_contract_address(),
-            &(total_amount as i128),
-        );
-
-        // Second pass: update trade statuses
+        let now = env.ledger().sequence();
         for trade_id in trade_ids.iter() {
             let mut trade = get_trade(&env, trade_id)?;
             trade.status = TradeStatus::Funded;
+            trade.updated_at = now;
             save_trade(&env, trade_id, &trade);
         }
-
-        // Emit single batch event
         events::emit_batch_trades_funded(&env, trade_ids.len() as u32, total_amount);
-
         Ok(())
     }
 
-    /// Batch confirm trades - optimized for multiple confirmations
+    /// Batch confirm trades
     pub fn batch_confirm_trades(
         env: Env,
         buyer: Address,
@@ -447,78 +483,49 @@ impl StellarEscrowContract {
         if !is_initialized(&env) {
             return Err(ContractError::NotInitialized);
         }
-
-        // Enforce batch size limits for gas optimization
         if trade_ids.is_empty() {
             return Err(ContractError::EmptyBatch);
         }
         if trade_ids.len() > 100 {
             return Err(ContractError::BatchLimitExceeded);
         }
-
         buyer.require_auth();
-
         let token = get_usdc_token(&env)?;
-        let token_client = token::Client::new(&env, &token);
+        let token_client = TokenClient::new(&env, &token);
         let mut total_payout: u64 = 0;
         let mut total_fees: u64 = 0;
         let mut seller_payouts: soroban_sdk::Map<Address, u64> = soroban_sdk::Map::new(&env);
 
-        // First pass: validate all trades and calculate payouts
         for trade_id in trade_ids.iter() {
             let trade = get_trade(&env, trade_id)?;
-
             if trade.status != TradeStatus::Completed {
                 return Err(ContractError::InvalidStatus);
             }
-
             if trade.buyer != buyer {
                 return Err(ContractError::Unauthorized);
             }
-
             let payout = trade.amount.checked_sub(trade.fee).ok_or(ContractError::Overflow)?;
             total_payout = total_payout.checked_add(payout).ok_or(ContractError::Overflow)?;
             total_fees = total_fees.checked_add(trade.fee).ok_or(ContractError::Overflow)?;
-
-            // Accumulate payouts per seller for efficient transfers
-            let current_payout = seller_payouts.get(&trade.seller).copied().unwrap_or(0);
-            let new_payout = current_payout.checked_add(payout).ok_or(ContractError::Overflow)?;
-            seller_payouts.set(&trade.seller, new_payout);
+            let current = seller_payouts.get(trade.seller.clone()).unwrap_or(0);
+            let new_val = current.checked_add(payout).ok_or(ContractError::Overflow)?;
+            seller_payouts.set(trade.seller.clone(), new_val);
         }
-
-        // Transfer to each seller (grouped by seller for efficiency)
-        for seller in seller_payouts.keys() {
-            let payout = seller_payouts.get(&seller).copied().unwrap_or(0);
-            token_client.transfer(
-                &env.current_contract_address(),
-                &seller,
-                &(payout as i128),
-            );
+        for (seller, payout) in seller_payouts.iter() {
+            token_client.transfer(&env.current_contract_address(), &seller, &(payout as i128));
         }
-
-        // Update accumulated fees
         let current_fees = get_accumulated_fees(&env)?;
         let new_fees = current_fees.checked_add(total_fees).ok_or(ContractError::Overflow)?;
         set_accumulated_fees(&env, new_fees);
-
-        // Emit single batch event
         events::emit_batch_trades_confirmed(&env, trade_ids.len() as u32, total_payout, total_fees);
-
         Ok(())
     }
-}
 
     // -------------------------------------------------------------------------
-    // Transaction history (Issue #38)
+    // Transaction history
     // -------------------------------------------------------------------------
 
     /// Return paginated, filtered, sorted transaction history for an address.
-    ///
-    /// - `address`  : the seller or buyer address
-    /// - `filter`   : status / ledger-range filters (use None fields to skip)
-    /// - `sort`     : SortOrder::Ascending or SortOrder::Descending by created_at
-    /// - `offset`   : records to skip (for pagination)
-    /// - `limit`    : max records to return (capped at 100)
     pub fn get_transaction_history(
         env: Env,
         address: Address,
@@ -530,10 +537,8 @@ impl StellarEscrowContract {
         history::get_history(&env, address, filter, sort, offset, limit)
     }
 
-    /// Export transaction history for an address as a CSV string.
-    ///
+    /// Export transaction history as CSV.
     /// Columns: trade_id,amount,fee,status,created_at,updated_at
-    /// Status values: 0=Created 1=Funded 2=Completed 3=Disputed 4=Cancelled
     pub fn export_transaction_csv(
         env: Env,
         address: Address,

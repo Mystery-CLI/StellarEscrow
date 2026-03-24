@@ -61,3 +61,8 @@ pub fn emit_fees_withdrawn(env: &Env, amount: u64, to: Address) {
     env.events()
         .publish((symbol_short!("fees_out"),), (amount, to));
 }
+
+pub fn emit_metadata_updated(env: &Env, trade_id: u64) {
+    env.events()
+        .publish((symbol_short!("meta_upd"),), trade_id);
+}
