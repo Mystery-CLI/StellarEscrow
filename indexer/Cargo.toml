@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
-axum = { version = "0.7", features = ["ws", "json"] }
+axum = { version = "0.7", features = ["ws", "json", "multipart"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "fs"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -24,3 +24,10 @@ reqwest = { version = "0.11", features = ["json"] }
 async-stream = "0.3"
 tokio-stream = "0.1"
 dashmap = "5.5"
+tokio-util = { version = "0.7", features = ["io"] }
+mime = "0.3"
+image = { version = "0.24", default-features = false, features = ["jpeg", "png", "webp"] }
+sha2 = "0.10"
+hex = "0.4"
+bytes = "1.0"
+toml = "0.8"

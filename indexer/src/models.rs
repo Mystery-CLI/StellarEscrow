@@ -101,3 +101,26 @@ pub struct WebSocketMessage {
     pub data: serde_json::Value,
     pub timestamp: DateTime<Utc>,
 }
+
+// ---- File storage models ----
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct FileRecord {
+    pub id: Uuid,
+    pub owner_id: String,
+    pub file_type: String,
+    pub original_name: String,
+    pub stored_name: String,
+    pub mime_type: String,
+    pub size_bytes: i64,
+    pub checksum: String,
+    pub trade_id: Option<i64>,
+    pub is_compressed: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FileListQuery {
+    pub owner_id: String,
+    pub file_type: Option<String>,
+}

@@ -28,6 +28,24 @@ pub enum AppError {
 
     #[error("Internal server error")]
     InternalServerError,
+
+    #[error("File not found")]
+    FileNotFound,
+
+    #[error("File too large (max {0} bytes)")]
+    FileTooLarge(usize),
+
+    #[error("Invalid MIME type: {0}")]
+    InvalidMimeType(String),
+
+    #[error("Invalid file category")]
+    InvalidFileCategory,
+
+    #[error("Access denied: {0}")]
+    Forbidden(String),
+
+    #[error("Storage error: {0}")]
+    Storage(String),
 }
 
 impl IntoResponse for AppError {
@@ -40,6 +58,12 @@ impl IntoResponse for AppError {
             AppError::InvalidEventData(_) => (StatusCode::BAD_REQUEST, "Invalid event data"),
             AppError::EventNotFound => (StatusCode::NOT_FOUND, "Event not found"),
             AppError::InternalServerError => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+            AppError::FileNotFound => (StatusCode::NOT_FOUND, "File not found"),
+            AppError::FileTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "File too large"),
+            AppError::InvalidMimeType(_) => (StatusCode::UNSUPPORTED_MEDIA_TYPE, "Unsupported file type"),
+            AppError::InvalidFileCategory => (StatusCode::BAD_REQUEST, "Invalid file category"),
+            AppError::Forbidden(_) => (StatusCode::FORBIDDEN, "Access denied"),
+            AppError::Storage(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Storage error"),
         };
 
         let body = Json(json!({

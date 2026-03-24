@@ -6,6 +6,7 @@ pub struct Config {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub stellar: StellarConfig,
+    pub storage: StorageConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +26,12 @@ pub struct StellarConfig {
     pub horizon_url: String,
     pub start_ledger: Option<u32>,
     pub poll_interval_seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageConfig {
+    /// Base directory for uploaded files
+    pub base_dir: String,
 }
 
 impl Config {
@@ -48,6 +55,9 @@ impl Default for Config {
                 horizon_url: "https://horizon-testnet.stellar.org".to_string(),
                 start_ledger: None,
                 poll_interval_seconds: 5,
+            },
+            storage: StorageConfig {
+                base_dir: "./uploads".to_string(),
             },
         }
     }

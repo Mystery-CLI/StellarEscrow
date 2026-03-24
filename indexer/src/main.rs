@@ -2,9 +2,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
     routing::{get, post},
     Router,
 };
@@ -18,9 +15,11 @@ mod config;
 mod database;
 mod error;
 mod event_monitor;
+mod file_handlers;
 mod handlers;
 mod help;
 mod models;
+mod storage;
 mod websocket;
 
 #[cfg(test)]
@@ -29,7 +28,9 @@ mod test;
 use config::Config;
 use database::Database;
 use event_monitor::EventMonitor;
+use file_handlers::{delete_file, download_file, list_files, upload_file};
 use handlers::*;
+use storage::StorageService;
 use websocket::WebSocketManager;
 use help::{
     get_contact, get_docs, get_faqs, get_tutorial_by_id, get_tutorials, help_index, search_help,
@@ -61,11 +62,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize database
     let db_pool = PgPool::connect(&config.database.url).await?;
     sqlx::migrate!("./migrations").run(&db_pool).await?;
-    let database = Arc::new(Database::new(db_pool));
+    let database = Arc::new(Database::new(db_pool.clone()));
 
     // Initialize WebSocket manager
     let (tx, _rx) = broadcast::channel(100);
     let ws_manager = Arc::new(WebSocketManager::new(tx.clone()));
+
+    // Initialize file storage service
+    let storage_service = Arc::new(
+        StorageService::new(db_pool, &config.storage.base_dir).await?,
+    );
 
     // Initialize event monitor
     let event_monitor = EventMonitor::new(
@@ -82,6 +88,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Build application with routes
+    let file_router = Router::new()
+        .route("/files", get(list_files))
+        .route("/files/:category", post(upload_file))
+        .route("/files/:id", get(download_file).delete(delete_file))
+        .with_state(storage_service);
+
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/events", get(get_events))
@@ -98,11 +110,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/help/docs", get(get_docs))
         .route("/help/search", get(search_help))
         .route("/help/contact", get(get_contact))
-        .layer(CorsLayer::permissive())
         .with_state(AppState {
             database,
             ws_manager,
-        });
+        })
+        .merge(file_router)
+        .layer(CorsLayer::permissive());
 
     // Start server
     let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
