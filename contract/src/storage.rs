@@ -1,6 +1,7 @@
 use soroban_sdk::{symbol_short, Address, Env, Symbol};
 
 use crate::errors::ContractError;
+use crate::types::{TierConfig, Trade, TradeTemplate, UserTierInfo, Subscription, Proposal};
 use crate::types::{ArbitratorReputation, TierConfig, Trade, TradeTemplate, UserTierInfo};
 
 const INITIALIZED: &str = "INIT";
@@ -16,6 +17,12 @@ const TIER_CONFIG: &str = "TIER_CFG";
 const USER_TIER_PREFIX: &str = "UTIER";
 const TEMPLATE_COUNTER: &str = "TMPL_CTR";
 const TEMPLATE_PREFIX: &str = "TMPL";
+const SUBSCRIPTION_PREFIX: &str = "SUB";
+const GOV_TOKEN: &str = "GOV_TKN";
+const PROPOSAL_COUNTER: &str = "PROP_CTR";
+const PROPOSAL_PREFIX: &str = "PROP";
+const VOTE_PREFIX: &str = "VOTE";
+const DELEGATE_PREFIX: &str = "DELEG";
 const ARB_REP_PREFIX: &str = "ARB_REP";
 const ARB_RATED_PREFIX: &str = "ARB_RTD";
 const CURRENCY_FEES_PREFIX: &str = "CFEES";
@@ -173,6 +180,7 @@ pub fn set_paused(env: &Env, paused: bool) {
 }
 
 pub fn is_paused(env: &Env) -> bool {
+    env.storage().instance().get(&PAUSED).unwrap_or(false)
     env.storage().instance().get(&key_paused()).unwrap_or(false)
 }
 
@@ -222,6 +230,65 @@ pub fn get_template(env: &Env, template_id: u64) -> Result<TradeTemplate, Contra
         .ok_or(crate::errors::ContractError::TemplateNotFound)
 }
 
+// Subscriptions
+pub fn save_subscription(env: &Env, subscriber: &Address, sub: &Subscription) {
+    let key = (SUBSCRIPTION_PREFIX, subscriber);
+    env.storage().persistent().set(&key, sub);
+}
+
+pub fn get_subscription(env: &Env, subscriber: &Address) -> Option<Subscription> {
+    let key = (SUBSCRIPTION_PREFIX, subscriber);
+    env.storage().persistent().get(&key)
+}
+
+pub fn remove_subscription(env: &Env, subscriber: &Address) {
+    let key = (SUBSCRIPTION_PREFIX, subscriber);
+    env.storage().persistent().remove(&key);
+}
+
+
+// Governance
+pub fn set_gov_token(env: &Env, token: &Address) {
+    env.storage().instance().set(&GOV_TOKEN, token);
+}
+pub fn get_gov_token(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&GOV_TOKEN)
+}
+pub fn get_proposal_counter(env: &Env) -> u64 {
+    env.storage().instance().get(&PROPOSAL_COUNTER).unwrap_or(0)
+}
+pub fn increment_proposal_counter(env: &Env) -> Result<u64, crate::errors::ContractError> {
+    let next = get_proposal_counter(env).checked_add(1).ok_or(crate::errors::ContractError::Overflow)?;
+    env.storage().instance().set(&PROPOSAL_COUNTER, &next);
+    Ok(next)
+}
+pub fn save_proposal(env: &Env, id: u64, proposal: &Proposal) {
+    let key = (PROPOSAL_PREFIX, id);
+    env.storage().persistent().set(&key, proposal);
+}
+pub fn get_proposal(env: &Env, id: u64) -> Result<Proposal, crate::errors::ContractError> {
+    let key = (PROPOSAL_PREFIX, id);
+    env.storage().persistent().get(&key).ok_or(crate::errors::ContractError::ProposalNotFound)
+}
+pub fn has_voted(env: &Env, proposal_id: u64, voter: &Address) -> bool {
+    let key = (VOTE_PREFIX, proposal_id, voter);
+    env.storage().persistent().has(&key)
+}
+pub fn mark_voted(env: &Env, proposal_id: u64, voter: &Address) {
+    let key = (VOTE_PREFIX, proposal_id, voter);
+    env.storage().persistent().set(&key, &true);
+}
+pub fn set_delegate(env: &Env, delegator: &Address, delegatee: &Address) {
+    let key = (DELEGATE_PREFIX, delegator);
+    env.storage().persistent().set(&key, delegatee);
+}
+pub fn get_delegate(env: &Env, delegator: &Address) -> Option<Address> {
+    let key = (DELEGATE_PREFIX, delegator);
+    env.storage().persistent().get(&key)
+}
+pub fn remove_delegate(env: &Env, delegator: &Address) {
+    let key = (DELEGATE_PREFIX, delegator);
+    env.storage().persistent().remove(&key);
 // ---------------------------------------------------------------------------
 // Arbitrator Reputation
 // ---------------------------------------------------------------------------

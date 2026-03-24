@@ -126,11 +126,50 @@ pub fn emit_template_deactivated(env: &Env, template_id: u64) {
         .publish((symbol_short!("tmpl_off"),), template_id);
 }
 
-pub fn emit_trade_from_template(env: &Env, trade_id: u64, template_id: u64, version: u32) {
+pub fn emit_template_trade(env: &Env, trade_id: u64, template_id: u64, version: u32) {
     env.events()
         .publish((symbol_short!("tmpl_tr"),), (trade_id, template_id, version));
 }
 
+pub fn emit_subscribed(env: &Env, subscriber: Address, tier: crate::types::SubscriptionTier, expires_at: u32) {
+    env.events()
+        .publish((symbol_short!("sub_new"),), (subscriber, tier, expires_at));
+}
+
+pub fn emit_subscription_renewed(env: &Env, subscriber: Address, tier: crate::types::SubscriptionTier, expires_at: u32) {
+    env.events()
+        .publish((symbol_short!("sub_ren"),), (subscriber, tier, expires_at));
+}
+
+pub fn emit_subscription_cancelled(env: &Env, subscriber: Address) {
+    env.events()
+        .publish((symbol_short!("sub_can"),), subscriber);
+}
+
+pub fn emit_proposal_created(env: &Env, proposal_id: u64, proposer: Address) {
+    env.events()
+        .publish((symbol_short!("prop_cr"),), (proposal_id, proposer));
+}
+
+pub fn emit_vote_cast(env: &Env, proposal_id: u64, voter: Address, support: bool, weight: i128) {
+    env.events()
+        .publish((symbol_short!("voted"),), (proposal_id, voter, support, weight));
+}
+
+pub fn emit_proposal_executed(env: &Env, proposal_id: u64) {
+    env.events()
+        .publish((symbol_short!("prop_ex"),), proposal_id);
+}
+
+pub fn emit_delegated(env: &Env, delegator: Address, delegatee: Address) {
+    env.events()
+        .publish((symbol_short!("delegat"),), (delegator, delegatee));
+}
+
+pub fn emit_fees_distributed(env: &Env, to: Address, amount: u64) {
+    env.events()
+        .publish((symbol_short!("fee_dst"),), (to, amount));
+}
 pub fn emit_arb_rated(env: &Env, arbitrator: Address, trade_id: u64, rater: Address, stars: u32) {
     env.events()
         .publish((symbol_short!("arb_rate"),), (arbitrator, trade_id, rater, stars));

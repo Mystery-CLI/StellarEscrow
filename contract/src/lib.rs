@@ -2,11 +2,14 @@
 
 mod errors;
 mod events;
+mod governance;
 mod storage;
+mod subscription;
 mod templates;
 mod tiers;
 mod types;
 
+use soroban_sdk::{contract, contractimpl, token, Address, Env};
 #[cfg(test)]
 mod test;
 
@@ -16,6 +19,15 @@ use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
 
 pub use errors::ContractError;
 pub use types::{
+    DisputeResolution, MetadataEntry, Proposal, ProposalAction, ProposalStatus,
+    Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion,
+    Trade, TradeMetadata, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
+};
+
+use storage::{
+    get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_usdc_token,
+    has_arbitrator, has_initialized, increment_trade_counter, is_initialized, is_paused,
+    remove_arbitrator, save_arbitrator, save_trade, set_accumulated_fees, set_admin, set_fee_bps,
     ArbitratorReputation, DisputeResolution, MetadataEntry, TierConfig, TemplateTerms,
     TemplateVersion, Trade, TradeMetadata, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
 };
@@ -46,6 +58,19 @@ use storage::{
     save_insurance_policy, get_insurance_policy,
 };
 
+fn token_client<'a>(env: &'a Env, token: &Address) -> token::Client<'a> {
+    token::Client::new(env, token)
+}
+
+fn validate_metadata(meta: &TradeMetadata) -> Result<(), ContractError> {
+    if meta.entries.len() > METADATA_MAX_ENTRIES {
+        return Err(ContractError::MetadataTooManyEntries);
+    }
+    for i in 0..meta.entries.len() {
+        let entry = meta.entries.get(i).unwrap();
+        if entry.value.len() > METADATA_MAX_VALUE_LEN {
+            return Err(ContractError::MetadataValueTooLong);
+        }
 #[inline]
 fn require_initialized(env: &Env) -> Result<(), ContractError> {
     if !is_initialized(env) {
@@ -225,6 +250,16 @@ impl StellarEscrowContract {
         let token = currency.unwrap_or(get_usdc_token(&env)?);
         validate_metadata(&metadata)?;
         let trade_id = increment_trade_counter(&env)?;
+        let fee_bps = get_fee_bps(&env)?;
+        let effective_bps = tiers::effective_fee_bps(&env, &seller, fee_bps);
+        let discount = subscription::subscription_discount_bps(&env, &seller);
+        let final_bps = effective_bps.saturating_sub(discount);
+        let fee = amount
+            .checked_mul(final_bps as u64)
+            .ok_or(ContractError::Overflow)?
+            .checked_div(10000)
+            .ok_or(ContractError::Overflow)?;
+
         let fee = calc_fee(&env, &seller, amount)?;
         let trade = Trade {
             id: trade_id,
@@ -314,6 +349,9 @@ impl StellarEscrowContract {
 
     /// Raise a dispute
     pub fn raise_dispute(env: Env, trade_id: u64, caller: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
         require_initialized(&env)?;
         require_not_paused(&env)?;
         let mut trade = get_trade(&env, trade_id)?;
@@ -556,6 +594,9 @@ impl StellarEscrowContract {
 
     /// Pause all contract operations (admin only).
     pub fn pause(env: Env) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
         require_initialized(&env)?;
         let admin = get_admin(&env)?;
         admin.require_auth();
@@ -566,6 +607,9 @@ impl StellarEscrowContract {
 
     /// Unpause the contract (admin only).
     pub fn unpause(env: Env) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
         require_initialized(&env)?;
         let admin = get_admin(&env)?;
         admin.require_auth();
@@ -575,6 +619,14 @@ impl StellarEscrowContract {
     }
 
     /// Emergency withdrawal of all contract token balance (admin only).
+    pub fn emergency_withdraw(env: Env, to: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        let token = get_usdc_token(&env)?;
+        let token_client = token::Client::new(&env, &token);
     /// Allowed even while paused so funds can always be recovered.
     pub fn emergency_withdraw(env: Env, to: Address) -> Result<(), ContractError> {
         require_initialized(&env)?;
@@ -735,6 +787,15 @@ impl StellarEscrowContract {
         }
 
         let trade_id = increment_trade_counter(&env)?;
+        let base_fee_bps = get_fee_bps(&env)?;
+        let effective_bps = tiers::effective_fee_bps(&env, &seller, base_fee_bps);
+        let discount = subscription::subscription_discount_bps(&env, &seller);
+        let final_bps = effective_bps.saturating_sub(discount);
+        let fee = amount
+            .checked_mul(final_bps as u64)
+            .ok_or(ContractError::Overflow)?
+            .checked_div(10000)
+            .ok_or(ContractError::Overflow)?;
         let fee = calc_fee(&env, &seller, amount)?;
 
         let trade = Trade {
@@ -752,7 +813,7 @@ impl StellarEscrowContract {
 
         save_trade(&env, trade_id, &trade);
         events::emit_trade_created(&env, trade_id, seller, buyer, amount);
-        events::emit_trade_from_template(&env, trade_id, template_id, version);
+        events::emit_template_trade(&env, trade_id, template_id, version);
         Ok(trade_id)
     }
 
@@ -762,6 +823,129 @@ impl StellarEscrowContract {
     }
 
     // -------------------------------------------------------------------------
+    // Subscription Model
+    // -------------------------------------------------------------------------
+
+    /// Purchase a new subscription. Payment (USDC) is transferred to the admin.
+    pub fn subscribe(
+        env: Env,
+        subscriber: Address,
+        tier: SubscriptionTier,
+    ) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        require_not_paused(&env)?;
+        subscriber.require_auth();
+        let admin = get_admin(&env)?;
+        subscription::subscribe(&env, &subscriber, tier, &admin)
+    }
+
+    /// Renew an existing subscription for another period.
+    pub fn renew_subscription(env: Env, subscriber: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        require_not_paused(&env)?;
+        subscriber.require_auth();
+        let admin = get_admin(&env)?;
+        subscription::renew(&env, &subscriber, &admin)
+    }
+
+    /// Cancel a subscription immediately (no refund).
+    pub fn cancel_subscription(env: Env, subscriber: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        subscriber.require_auth();
+        subscription::cancel(&env, &subscriber)
+    }
+
+    /// Get subscription details for a user.
+    pub fn get_subscription(env: Env, subscriber: Address) -> Option<Subscription> {
+        subscription::get(&env, &subscriber)
+    }
+
+    // -------------------------------------------------------------------------
+    // Governance
+    // -------------------------------------------------------------------------
+
+    /// Admin: set the governance token address (one-time setup).
+    pub fn set_gov_token(env: Env, token: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        let admin = get_admin(&env)?;
+        admin.require_auth();
+        storage::set_gov_token(&env, &token);
+        Ok(())
+    }
+
+    /// Create a governance proposal.
+    pub fn create_proposal(
+        env: Env,
+        proposer: Address,
+        action: ProposalAction,
+    ) -> Result<u64, ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        require_not_paused(&env)?;
+        proposer.require_auth();
+        governance::create_proposal(&env, &proposer, action)
+    }
+
+    /// Vote on a proposal.
+    pub fn cast_vote(
+        env: Env,
+        voter: Address,
+        proposal_id: u64,
+        support: bool,
+    ) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        require_not_paused(&env)?;
+        voter.require_auth();
+        governance::cast_vote(&env, &voter, proposal_id, support)
+    }
+
+    /// Execute a passed proposal after voting ends.
+    pub fn execute_proposal(env: Env, proposal_id: u64) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        governance::execute_proposal(&env, proposal_id)
+    }
+
+    /// Delegate voting power to another address.
+    pub fn delegate(env: Env, delegator: Address, delegatee: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        delegator.require_auth();
+        governance::delegate(&env, &delegator, &delegatee);
+        Ok(())
+    }
+
+    /// Remove delegation, reclaiming own voting power.
+    pub fn undelegate(env: Env, delegator: Address) -> Result<(), ContractError> {
+        if !is_initialized(&env) {
+            return Err(ContractError::NotInitialized);
+        }
+        delegator.require_auth();
+        governance::undelegate(&env, &delegator);
+        Ok(())
+    }
+
+    /// Get a proposal by ID.
+    pub fn get_proposal(env: Env, proposal_id: u64) -> Result<Proposal, ContractError> {
+        governance::get(&env, proposal_id)
+    }
+
+    /// Get total number of proposals created.
+    pub fn get_proposal_count(env: Env) -> u64 {
+        governance::proposal_count(&env)
     // Upgrade Mechanism
     // -------------------------------------------------------------------------
 
