@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="StellarEscrow - Accessible decentralized escrow dashboard for peer-to-peer USDC trades on Stellar blockchain">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="StellarEscrow">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <title>StellarEscrow Dashboard</title>
+    <!-- Critical resource hints -->
+    <link rel="modulepreload" href="/app.js">
+    <link rel="modulepreload" href="/i18n.js">
+    <link rel="modulepreload" href="/pwa.js">
+    <link rel="modulepreload" href="/performance.js">
+    <link rel="preload" href="/styles.css" as="style">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Skip to main content link for screen readers -->
+    <a href="#main-content" class="skip-link" data-i18n="a11y.skipToMain">Skip to main content</a>
+    
+    <!-- High contrast mode toggle -->
+    <button 
+        id="contrast-toggle"
+        class="contrast-toggle"
+        type="button"
+        aria-pressed="false"
+        aria-label="Toggle high contrast mode"
+        data-i18n-aria="a11y.highContrast"
+    >
+        <span class="toggle-icon" aria-hidden="true">◐</span>
+        <span class="toggle-text" data-i18n="a11y.highContrast">High Contrast</span>
+    </button>
+
+    <!-- Live region for announcements -->
+    <div id="live-region" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Offline indicator -->
+    <div id="offline-indicator" class="offline-indicator" role="status" aria-live="polite" hidden>
+        <span aria-hidden="true">⚡</span> You're offline — showing cached data
+    </div>
+
+    <!-- PWA install banner -->
+    <div id="install-banner" class="install-banner" hidden>
+        <span>Install StellarEscrow for a faster, app-like experience.</span>
+        <button id="install-btn" type="button" class="btn btn-sm">Install</button>
+        <button id="install-dismiss" type="button" class="btn btn-sm btn-ghost" aria-label="Dismiss">✕</button>
+    </div>
+
+    <header role="banner">
+        <nav role="navigation" aria-label="Main navigation">
+            <div class="nav-container">
+                <h1 class="logo">
+                    <a href="/" aria-label="StellarEscrow Home">
+                        <span class="logo-icon" aria-hidden="true">◇</span>
+                        <span>StellarEscrow</span>
+                    </a>
+                </h1>
+                <button 
+                    id="mobile-menu-btn"
+                    class="mobile-menu-btn"
+                    type="button"
+                    aria-expanded="false"
+                    aria-controls="main-menu"
+                    aria-label="Toggle navigation menu"
+                >
+                    <span class="hamburger" aria-hidden="true"></span>
+                </button>
+                <ul id="main-menu" class="nav-menu" role="menubar">
+                    <li role="none"><a href="#dashboard" role="menuitem" class="nav-link active" aria-current="page" data-i18n="nav.dashboard">Dashboard</a></li>
+                    <li role="none"><a href="#events" role="menuitem" class="nav-link" data-i18n="nav.events">View Events</a></li>
+                    <li role="none"><a href="#search" role="menuitem" class="nav-link" data-i18n="nav.search">Search</a></li>
+                    <li role="none"><a href="#disputes" role="menuitem" class="nav-link" data-i18n="nav.disputes">Disputes</a></li>
+                    <li role="none"><a href="#arbitrator" role="menuitem" class="nav-link" data-i18n="nav.arbitrator">Arbitrator</a></li>
+                    <li role="none"><a href="#help" role="menuitem" class="nav-link" data-i18n="nav.help">Help Center</a></li>
+                    <li role="none"><a href="#api-docs" role="menuitem" class="nav-link" data-i18n="nav.apiDocs">API Documentation</a></li>
+                </ul>
+
+                <!-- Language Switcher -->
+                <div class="lang-switcher">
+                    <label for="lang-select" class="visually-hidden" data-i18n="common.language">Language</label>
+                    <select id="lang-select" aria-label="Select language">
+                        <option value="en">English</option>
+                        <option value="fr">Français</option>
+                        <option value="es">Español</option>
+                        <option value="ar">العربية</option>
+                    </select>
+                </div>
+                
+                <!-- Notifications -->
+                <div class="notification-controls">
+                    <button 
+                        id="notification-center-btn"
+                        type="button"
+                        class="btn btn-icon"
+                        aria-label="Notification center"
+                        aria-expanded="false"
+                        aria-controls="notification-center"
+                    >
+                        🔔
+                        <span id="notification-badge" class="notification-badge" hidden>0</span>
+                    </button>
+                    <button 
+                        id="notification-prefs-btn"
+                        type="button"
+                        class="btn btn-icon"
+                        aria-label="Notification preferences"
+                    >
+                        ⚙️
+                    </button>
+                </div>
+                
+                <!-- Wallet Connection -->
+                <div id="wallet-container" class="wallet-container" role="region" aria-label="Wallet connection">
+                    <button 
+                        id="wallet-connect-btn"
+                        class="btn btn-wallet"
+                        type="button"
+                        aria-label="Connect Stellar wallet"
+                        data-i18n-aria="wallet.connect"
+                        aria-expanded="false"
+                        aria-controls="wallet-menu"
+                    >
+                        <span class="wallet-icon" aria-hidden="true">◆</span>
+                        <span class="wallet-text" data-i18n="wallet.connect">Connect Wallet</span>
+                    </button>
+                    
+                    <!-- Wallet Menu -->
+                    <div id="wallet-menu" class="wallet-menu" hidden role="menu" aria-label="Wallet options">
+                        <div class="wallet-menu-header">
+                            <h3>Select Wallet</h3>
+                        </div>
+                        <button 
+                            type="button"
+                            class="wallet-option"
+                            data-provider="freighter"
+                            role="menuitem"
+                            aria-label="Connect with Freighter wallet"
+                        >
+                            <span class="wallet-option-icon">🔐</span>
+                            <span class="wallet-option-name">Freighter</span>
+                        </button>
+                        <button 
+                            type="button"
+                            class="wallet-option"
+                            data-provider="albedo"
+                            role="menuitem"
+                            aria-label="Connect with Albedo wallet"
+                        >
+                            <span class="wallet-option-icon">🛡️</span>
+                            <span class="wallet-option-name">Albedo</span>
+                        </button>
+                        <button 
+                            type="button"
+                            class="wallet-option"
+                            data-provider="walletconnect"
+                            role="menuitem"
+                            aria-label="Connect with WalletConnect"
+                        >
+                            <span class="wallet-option-icon">📱</span>
+                            <span class="wallet-option-name">WalletConnect</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Connected Wallet Display -->
+                    <div id="wallet-connected" class="wallet-connected" hidden>
+                        <div class="wallet-info">
+                            <span id="wallet-provider-badge" class="wallet-provider-badge"></span>
+                            <span id="wallet-address-display" class="wallet-address-display"></span>
+                        </div>
+                        <button 
+                            id="wallet-menu-toggle"
+                            type="button"
+                            class="wallet-menu-toggle"
+                            aria-label="Wallet menu"
+                            aria-expanded="false"
+                            aria-controls="wallet-dropdown"
+                        >
+                            ⋮
+                        </button>
+                        <div id="wallet-dropdown" class="wallet-dropdown" hidden role="menu">
+                            <button 
+                                type="button"
+                                class="wallet-dropdown-item"
+                                id="switch-wallet-btn"
+                                role="menuitem"
+                            >
+                                Switch Wallet
+                            </button>
+                            <button 
+                                type="button"
+                                class="wallet-dropdown-item"
+                                id="disconnect-wallet-btn"
+                                role="menuitem"
+                            >
+                                Disconnect
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main id="main-content" role="main">
+        <!-- Dashboard Section -->
+        <section id="dashboard" aria-labelledby="dashboard-heading" class="section">
+            <div class="container">
+                <h2 id="dashboard-heading" class="section-title">Dashboard</h2>
+                
+                <!-- Status Cards -->
+                <div class="status-grid" role="region" aria-label="System status overview">
+                    <article class="status-card" role="article" aria-labelledby="health-status">
+                        <h3 id="health-status" class="card-title">System Health</h3>
+                        <div id="health-indicator" class="status-indicator" role="status" aria-live="polite">
+                            <span class="indicator-dot" aria-hidden="true"></span>
+                            <span class="indicator-text">Checking...</span>
+                        </div>
+                    </article>
+                    <article class="status-card" role="article" aria-labelledby="events-count">
+                        <h3 id="events-count" class="card-title">Total Events</h3>
+                        <p class="card-value" id="total-events">--</p>
+                    </article>
+                    <article class="status-card" role="article" aria-labelledby="ws-status">
+                        <h3 id="ws-status" class="card-title">WebSocket</h3>
+                        <div id="ws-indicator" class="status-indicator" role="status" aria-live="polite">
+                            <span class="indicator-dot disconnected" aria-hidden="true"></span>
+                            <span class="indicator-text">Disconnected</span>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- Real-time Events Feed -->
+                <div class="events-feed" role="region" aria-label="Real-time events feed">
+                    <div class="feed-header">
+                        <h3 id="feed-heading">Real-time Events</h3>
+                        <button 
+                            id="clear-feed-btn"
+                            type="button"
+                            class="btn btn-secondary"
+                            aria-label="Clear events feed"
+                        >
+                            Clear Feed
+                        </button>
+                    </div>
+                    <div 
+                        id="events-list" 
+                        class="events-list"
+                        role="log"
+                        aria-live="polite"
+                        aria-label="Events log"
+                        aria-relevant="additions"
+                        tabindex="0"
+                    >
+                        <p class="empty-state">Connecting to event stream...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Events Section -->
+        <section id="events" aria-labelledby="events-heading" class="section">
+            <div class="container">
+                <h2 id="events-heading" class="section-title">Event Explorer</h2>
+                
+                <!-- Search Filters -->
+                <form id="events-filter-form" class="filter-form" role="search" aria-label="Events filter form">
+                    <div class="filter-group">
+                        <label for="event-type-filter" class="filter-label">Event Type</label>
+                        <select 
+                            id="event-type-filter" 
+                            class="filter-select"
+                            aria-describedby="event-type-help"
+                        >
+                            <option value="">All Events</option>
+                            <option value="trade_created">Trade Created</option>
+                            <option value="trade_funded">Trade Funded</option>
+                            <option value="trade_completed">Trade Completed</option>
+                            <option value="trade_confirmed">Trade Confirmed</option>
+                            <option value="trade_disputed">Trade Disputed</option>
+                            <option value="trade_cancelled">Trade Cancelled</option>
+                            <option value="dispute_resolved">Dispute Resolved</option>
+                        </select>
+                        <span id="event-type-help" class="visually-hidden">
+                            Filter events by type to narrow down results
+                        </span>
+                    </div>
+                    <div class="filter-group">
+                        <label for="trade-id-filter" class="filter-label">Trade ID</label>
+                        <input 
+                            type="number" 
+                            id="trade-id-filter" 
+                            class="filter-input"
+                            placeholder="Enter trade ID"
+                            min="0"
+                            aria-describedby="trade-id-help"
+                        >
+                        <span id="trade-id-help" class="visually-hidden">
+                            Enter a specific trade ID to filter events
+                        </span>
+                    </div>
+                    <div class="filter-group">
+                        <label for="limit-select" class="filter-label">Results per Page</label>
+                        <select id="limit-select" class="filter-select" aria-label="Number of results to display">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="offset-input" class="filter-label">Page Offset</label>
+                        <input 
+                            type="number" 
+                            id="offset-input" 
+                            class="filter-input"
+                            placeholder="0"
+                            min="0"
+                            aria-label="Pagination offset"
+                        >
+                    </div>
+                    <button type="submit" class="btn btn-primary" aria-label="Apply filters to events">
+                        Apply Filters
+                    </button>
+                </form>
+
+                <!-- Events Table -->
+                <div class="table-container" role="region" aria-label="Events table">
+                    <table 
+                        id="events-table" 
+                        class="data-table"
+                        aria-describedby="events-table-caption"
+                    >
+                        <caption id="events-table-caption" class="visually-hidden">
+                            List of indexed contract events with columns for timestamp, type, trade ID, and details
+                        </caption>
+                        <thead>
+                            <tr>
+                                <th scope="col" abbr="Timestamp">Time</th>
+                                <th scope="col">Type</th>
+                                <th scope="col">Trade ID</th>
+                                <th scope="col">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="events-table-body">
+                            <tr>
+                                <td colspan="4" class="empty-state">No events loaded. Apply filters to search.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <nav id="events-pagination" class="pagination" aria-label="Events pagination">
+                    <button 
+                        type="button" 
+                        class="btn btn-secondary pagination-btn"
+                        data-action="prev"
+                        aria-label="Previous page of events"
+                    >
+                        ← Previous
+                    </button>
+                    <span id="pagination-info" class="pagination-info" aria-live="polite">
+                        Page 1
+                    </span>
+                    <button 
+                        type="button" 
+                        class="btn btn-secondary pagination-btn"
+                        data-action="next"
+                        aria-label="Next page of events"
+                    >
+                        Next →
+                    </button>
+                </nav>
+            </div>
+        </section>
+
+        <!-- Search Section -->
+        <section id="search" aria-labelledby="search-heading" class="section">
+            <div class="container">
+                <h2 id="search-heading" class="section-title">Global Search</h2>
+                
+                <!-- Search Form -->
+                <form id="search-form" class="search-form" role="search" aria-label="Global search">
+                    <div class="search-input-group">
+                        <label for="search-input" class="visually-hidden">Search trades, users, and arbitrators</label>
+                        <input 
+                            type="search" 
+                            id="search-input" 
+                            class="search-input"
+                            placeholder="Search trades, users, arbitrators..."
+                            aria-describedby="search-help"
+                            autocomplete="off"
+                        >
+                        <button 
+                            type="submit" 
+                            class="btn btn-primary search-btn"
+                            aria-label="Submit search"
+                        >
+                            Search
+                        </button>
+                        <button 
+                            type="button"
+                            id="voice-search-btn"
+                            class="btn btn-icon"
+                            aria-label="Voice search (coming soon)"
+                            disabled
+                        >
+                            🎤
+                        </button>
+                    </div>
+                    <span id="search-help" class="visually-hidden">
+                        Enter keywords to search across trades, users, and arbitrators
+                    </span>
+                </form>
+
+                <!-- Search Results -->
+                <div id="search-results" class="search-results" role="region" aria-label="Search results" aria-live="polite">
+                    <p class="empty-state">Enter a search term to find trades, users, or arbitrators.</p>
+                </div>
+
+                <!-- Search History -->
+                <details id="search-history-panel" class="history-panel">
+                    <summary class="history-summary" aria-label="Toggle search history">
+                        Recent Searches
+                    </summary>
+                    <ul id="search-history-list" class="history-list" role="list" aria-label="Recent search terms">
+                        <!-- Populated dynamically -->
+                    </ul>
+                </details>
+            </div>
+        </section>
+
+        <!-- Disputes Section -->
+        <section id="disputes" aria-labelledby="disputes-heading" class="section" data-route="disputes">
+            <div class="container">
+                <h2 id="disputes-heading" class="section-title">Dispute Management</h2>
+                
+                <div class="disputes-header">
+                    <button 
+                        id="raise-dispute-btn"
+                        type="button"
+                        class="btn btn-primary"
+                        aria-label="Raise a new dispute"
+                    >
+                        Raise Dispute
+                    </button>
+                </div>
+
+                <!-- Disputes List -->
+                <div class="disputes-container" role="region" aria-label="Disputes list">
+                    <div id="disputes-list" class="disputes-list">
+                        <p class="empty-state">No disputes found</p>
+                    </div>
+                </div>
+
+                <!-- Dispute Details -->
+                <div id="dispute-details" class="dispute-details" role="region" aria-label="Dispute details">
+                </div>
+            </div>
+        </section>
+
+        <!-- Dispute Modal -->
+        <div id="dispute-modal" class="modal" hidden role="dialog" aria-labelledby="dispute-modal-title" aria-modal="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="dispute-modal-title">Raise Dispute</h3>
+                    <button 
+                        id="dispute-modal-close"
+                        type="button"
+                        class="btn btn-close"
+                        aria-label="Close dialog"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <form id="dispute-form" class="dispute-form">
+                    <div class="form-group">
+                        <label for="dispute-trade-id" class="form-label">Trade ID *</label>
+                        <input 
+                            type="number"
+                            id="dispute-trade-id"
+                            class="form-input"
+                            required
+                            min="1"
+                            aria-describedby="trade-id-help"
+                        >
+                        <span id="trade-id-help" class="form-help">Enter the trade ID to dispute</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dispute-reason" class="form-label">Reason for Dispute *</label>
+                        <textarea 
+                            id="dispute-reason"
+                            class="form-textarea"
+                            required
+                            rows="4"
+                            placeholder="Describe the issue..."
+                            aria-describedby="reason-help"
+                        ></textarea>
+                        <span id="reason-help" class="form-help">Provide details about the dispute</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="evidence-input" class="form-label">Upload Evidence</label>
+                        <input 
+                            type="file"
+                            id="evidence-input"
+                            class="form-input"
+                            multiple
+                            accept=".jpg,.jpeg,.png,.pdf,.txt"
+                            aria-describedby="evidence-help"
+                        >
+                        <span id="evidence-help" class="form-help">
+                            Supported: JPG, PNG, PDF, TXT (max 5MB each)
+                        </span>
+                    </div>
+
+                    <div id="evidence-list" class="evidence-list">
+                        <p class="empty-state">No evidence uploaded</p>
+                    </div>
+
+                    <div class="form-actions">
+                        <button 
+                            type="submit"
+                            class="btn btn-primary"
+                            aria-label="Submit dispute"
+                        >
+                            Submit Dispute
+                        </button>
+                        <button 
+                            type="button"
+                            class="btn btn-secondary"
+                            id="dispute-cancel-btn"
+                            aria-label="Cancel"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Arbitrator Dashboard Section -->
+        <section id="arbitrator" aria-labelledby="arbitrator-heading" class="section" data-route="arbitrator">
+            <div class="container">
+                <h2 id="arbitrator-heading" class="section-title">Arbitrator Dashboard</h2>
+                
+                <div id="arbitrator-dashboard" role="region" aria-label="Arbitrator dashboard">
+                    <!-- Performance Metrics -->
+                    <div id="performance-metrics" class="performance-section">
+                    </div>
+
+                    <!-- Statistics -->
+                    <div id="arbitrator-stats" class="stats-section">
+                    </div>
+
+                    <!-- Assigned Disputes -->
+                    <div class="disputes-section">
+                        <h3>Assigned Disputes</h3>
+                        <div id="assigned-disputes" class="assigned-disputes-list">
+                            <p class="empty-state">Loading disputes...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Resolution Modal -->
+        <div id="resolution-modal" class="modal" hidden role="dialog" aria-labelledby="resolution-modal-title" aria-modal="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="resolution-modal-title">Resolve Dispute</h3>
+                    <button 
+                        type="button"
+                        class="btn btn-close"
+                        id="resolution-modal-close"
+                        aria-label="Close dialog"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <div id="resolution-dispute-info" class="dispute-info">
+                </div>
+
+                <form id="resolution-form" class="resolution-form">
+                    <div class="form-group">
+                        <input type="hidden" id="resolution-dispute-id">
+                        
+                        <label class="form-label">Resolution Decision *</label>
+                        <div class="resolution-options">
+                            <label class="radio-label">
+                                <input 
+                                    type="radio"
+                                    name="resolution"
+                                    value="ReleaseToBuyer"
+                                    required
+                                >
+                                <span>Release to Buyer</span>
+                            </label>
+                            <label class="radio-label">
+                                <input 
+                                    type="radio"
+                                    name="resolution"
+                                    value="ReleaseToSeller"
+                                    required
+                                >
+                                <span>Release to Seller</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="resolution-notes" class="form-label">Resolution Notes</label>
+                        <textarea 
+                            id="resolution-notes"
+                            class="form-textarea"
+                            rows="4"
+                            placeholder="Explain your decision..."
+                        ></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button 
+                            type="submit"
+                            class="btn btn-primary"
+                            aria-label="Submit resolution"
+                        >
+                            Submit Resolution
+                        </button>
+                        <button 
+                            type="button"
+                            class="btn btn-secondary"
+                            id="resolution-cancel-btn"
+                            aria-label="Cancel"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Help Center Section -->
+        <section id="help" aria-labelledby="help-heading" class="section">
+            <div class="container">
+                <h2 id="help-heading" class="section-title">Help Center</h2>
+                
+                <!-- Help Navigation -->
+                <nav id="help-nav" class="help-nav" aria-label="Help center sections">
+                    <button 
+                        type="button"
+                        class="help-nav-btn active"
+                        data-target="faqs"
+                        aria-pressed="true"
+                    >
+                        FAQs
+                    </button>
+                    <button 
+                        type="button"
+                        class="help-nav-btn"
+                        data-target="tutorials"
+                        aria-pressed="false"
+                    >
+                        Tutorials
+                    </button>
+                    <button 
+                        type="button"
+                        class="help-nav-btn"
+                        data-target="docs"
+                        aria-pressed="false"
+                    >
+                        Documentation
+                    </button>
+                    <button 
+                        type="button"
+                        class="help-nav-btn"
+                        data-target="contact"
+                        aria-pressed="false"
+                    >
+                        Contact
+                    </button>
+                </nav>
+
+                <!-- FAQ Content -->
+                <div id="faqs-content" class="help-content active" role="region" aria-label="Frequently Asked Questions">
+                    <div class="faq-list" role="list">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Tutorials Content -->
+                <div id="tutorials-content" class="help-content" role="region" aria-label="Tutorials" hidden>
+                    <div class="tutorial-list" role="list">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Documentation Content -->
+                <div id="docs-content" class="help-content" role="region" aria-label="API Documentation" hidden>
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- Contact Content -->
+                <div id="contact-content" class="help-content" role="region" aria-label="Contact Information" hidden>
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Notification Center -->
+        <div id="notification-center" class="notification-center" hidden role="region" aria-label="Notification center">
+            <div class="notification-center-header">
+                <h3>Notifications</h3>
+                <button 
+                    type="button"
+                    class="btn btn-close"
+                    id="notification-center-close"
+                    aria-label="Close notification center"
+                >
+                    ✕
+                </button>
+            </div>
+            <div class="notification-center-list">
+                <p class="empty-state">No notifications</p>
+            </div>
+        </div>
+
+        <!-- Notification Preferences Modal -->
+        <div id="notification-prefs-modal" class="modal" hidden role="dialog" aria-labelledby="notification-prefs-title" aria-modal="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="notification-prefs-title">Notification Preferences</h3>
+                    <button 
+                        type="button"
+                        class="btn btn-close"
+                        id="notification-prefs-close"
+                        aria-label="Close dialog"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <form id="notification-prefs-form" class="notification-prefs-form">
+                    <div class="form-section">
+                        <h4>Notification Types</h4>
+                        
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-trade-updates"
+                                checked
+                            >
+                            <span>Trade Updates</span>
+                        </label>
+
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-disputes"
+                                checked
+                            >
+                            <span>Disputes</span>
+                        </label>
+
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-arbitration"
+                                checked
+                            >
+                            <span>Arbitration</span>
+                        </label>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Notification Channels</h4>
+                        
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-push"
+                            >
+                            <span>Push Notifications</span>
+                        </label>
+                        <button 
+                            type="button"
+                            id="request-push-permission"
+                            class="btn btn-sm btn-secondary"
+                        >
+                            Enable Push
+                        </button>
+
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-email"
+                            >
+                            <span>Email Notifications</span>
+                        </label>
+
+                        <input 
+                            type="email"
+                            id="pref-email-address"
+                            class="form-input"
+                            placeholder="your@email.com"
+                            aria-label="Email address for notifications"
+                        >
+                    </div>
+
+                    <div class="form-actions">
+                        <button 
+                            type="submit"
+                            class="btn btn-primary"
+                            aria-label="Save preferences"
+                        >
+                            Save Preferences
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Notification Toast Container -->
+        <div id="notification-toast-container" class="notification-toast-container" role="region" aria-label="Notifications" aria-live="polite"></div>
+
+        <!-- API Documentation Section -->
+        <section id="api-docs" aria-labelledby="api-docs-heading" class="section">
+            <div class="container">
+                <h2 id="api-docs-heading" class="section-title">API Documentation</h2>
+                
+                <div class="api-docs-intro">
+                    <p>
+                        The StellarEscrow Indexer provides a RESTful API for querying contract events.
+                        All endpoints return JSON responses and support standard HTTP methods.
+                    </p>
+                </div>
+
+                <!-- Endpoint Documentation -->
+                <div class="endpoints-list" role="list" aria-label="API endpoints">
+                    
+                    <article class="endpoint-card" role="article">
+                        <div class="endpoint-header">
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <code class="endpoint-path">/health</code>
+                        </div>
+                        <p class="endpoint-description">
+                            Check the health status of the indexer service.
+                        </p>
+                        <div class="endpoint-example">
+                            <h4 class="example-title">Example Response</h4>
+                            <pre class="code-block" role="code"><code>{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00Z"
+}</code></pre>
+                        </div>
+                    </article>
+
+                    <article class="endpoint-card" role="article">
+                        <div class="endpoint-header">
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <code class="endpoint-path">/events</code>
+                        </div>
+                        <p class="endpoint-description">
+                            Retrieve a paginated list of contract events with optional filtering.
+                        </p>
+                        <dl class="endpoint-params">
+                            <dt>event_type</dt>
+                            <dd>Filter by event type (optional)</dd>
+                            <dt>trade_id</dt>
+                            <dd>Filter by trade ID (optional)</dd>
+                            <dt>limit</dt>
+                            <dd>Maximum results (default: 50, max: 100)</dd>
+                            <dt>offset</dt>
+                            <dd>Pagination offset (default: 0)</dd>
+                        </dl>
+                    </article>
+
+                    <article class="endpoint-card" role="article">
+                        <div class="endpoint-header">
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <code class="endpoint-path">/events/{id}</code>
+                        </div>
+                        <p class="endpoint-description">
+                            Retrieve a specific event by its UUID.
+                        </p>
+                    </article>
+
+                    <article class="endpoint-card" role="article">
+                        <div class="endpoint-header">
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <code class="endpoint-path">/search</code>
+                        </div>
+                        <p class="endpoint-description">
+                            Global search across trades, users, and arbitrators.
+                        </p>
+                        <dl class="endpoint-params">
+                            <dt>q</dt>
+                            <dd>Search query string (required)</dd>
+                            <dt>limit</dt>
+                            <dd>Maximum results per category (default: 10)</dd>
+                        </dl>
+                    </article>
+
+                    <article class="endpoint-card" role="article">
+                        <div class="endpoint-header">
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <code class="endpoint-path">/search/trades</code>
+                        </div>
+                        <p class="endpoint-description">
+                            Search specifically within trades.
+                        </p>
+                        <dl class="endpoint-params">
+                            <dt>q</dt>
+                            <dd>Search query (optional)</dd>
+                            <dt>status</dt>
+                            <dd>Filter by trade status (optional)</dd>
+                            <dt>seller</dt>
+                            <dd>Filter by seller address (optional)</dd>
+                            <dt>buyer</dt>
+                            <dd>Filter by buyer address (optional)</dd>
+                        </dl>
+                    </article>
+
+                    <article class="endpoint-card" role="article">
+                        <div class="endpoint-header">
+                            <span class="method-badge method-get" aria-label="HTTP GET method">GET</span>
+                            <code class="endpoint-path">/ws</code>
+                        </div>
+                        <p class="endpoint-description">
+                            WebSocket endpoint for real-time event streaming.
+                            Connect to receive live updates as events are indexed.
+                        </p>
+                    </article>
+                </div>
+
+                <!-- Accessibility Notes -->
+                <div class="a11y-notes" role="note" aria-label="Accessibility information">
+                    <h3>API Accessibility Features</h3>
+                    <ul>
+                        <li>All responses include human-readable error messages</li>
+                        <li>Event types are provided in both machine-readable (snake_case) and human-readable formats</li>
+                        <li>Timestamps follow ISO 8601 format for consistent parsing</li>
+                        <li>Rate limiting headers indicate remaining requests for planning</li>
+                        <li>CORS support enables cross-origin API access</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer role="contentinfo">
+        <div class="container">
+            <div class="footer-content">
+                <p class="copyright">
+                    StellarEscrow &copy; 2024. Built with accessibility in mind.
+                </p>
+                <nav class="footer-links" aria-label="Footer navigation">
+                    <a href="#help" aria-label="Help Center">Help Center</a>
+                    <a href="#api-docs" aria-label="API Documentation">API Documentation</a>
+                    <a href="https://stellar.org" target="_blank" rel="noopener noreferrer" aria-label="Visit Stellar website (opens in new tab)">Stellar</a>
+                </nav>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast notifications container -->
+    <div id="toast-container" class="toast-container" role="alert" aria-live="assertive" aria-label="Notifications"></div>
+
+    <!-- Error modal -->
+    <div id="error-modal" class="error-modal" role="alertdialog" aria-modal="true" aria-labelledby="error-modal-title" aria-describedby="error-modal-message" hidden>
+        <div class="error-modal-content">
+            <h2 id="error-modal-title" class="error-modal-title">Something went wrong</h2>
+            <p id="error-modal-message" class="error-modal-message"></p>
+            <div class="error-modal-actions">
+                <button id="error-modal-retry" type="button" class="btn btn-primary" hidden>Retry</button>
+                <button id="error-modal-close" type="button" class="btn btn-ghost" onclick="document.getElementById('error-modal').hidden=true">Dismiss</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="compat.js"></script>
+    <script src="wallet.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

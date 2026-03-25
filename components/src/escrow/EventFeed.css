@@ -1,0 +1,56 @@
+.event-feed {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.event-feed-empty {
+  padding: 2rem;
+  text-align: center;
+  color: #999;
+}
+
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.event-item {
+  padding: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.event-item:last-child {
+  border-bottom: none;
+}
+
+.event-item:hover {
+  background-color: #f9f9f9;
+}
+
+.event-item:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: -2px;
+}
+
+.event-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.event-time {
+  font-size: 0.875rem;
+  color: #999;
+}
+
+.event-trade {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #666;
+  font-family: monospace;
+}

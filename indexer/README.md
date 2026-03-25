@@ -77,6 +77,11 @@ cargo build --release
 
 ### REST Endpoints
 
+#### Versioned API (v1) and Authentication
+- API versioning prefix: `/api/v1/*`
+- Auth: `Authorization: Bearer <API_KEY>` or `x-api-key: <API_KEY>`
+- Admin routes (req. `admin` key): `/admin/*` and `/api/v1/admin/*`
+
 #### Health Check
 ```
 GET /health

@@ -3,9 +3,9 @@ use soroban_sdk::{Address, Env};
 use crate::errors::ContractError;
 use crate::storage::{
     get_accumulated_fees, get_fee_bps, get_platform_analytics, get_trade_counter,
-    is_paused, save_platform_analytics, set_paused,
+    get_trade_ids_for_address, get_trade, is_paused, save_platform_analytics, set_paused,
 };
-use crate::types::{PlatformAnalytics, SystemConfig};
+use crate::types::{DashboardStats, PlatformAnalytics, SystemConfig, TradeStatus, VolumeInRange};
 
 /// Transfer admin role to a new address (current admin only).
 pub fn transfer_admin(
@@ -82,4 +82,55 @@ pub fn on_trade_cancelled(env: &Env) {
     s.cancelled_trades += 1;
     s.active_trades = s.active_trades.saturating_sub(1);
     save_platform_analytics(env, &s);
+}
+
+/// Return a full dashboard snapshot: platform stats + derived rates.
+pub fn get_dashboard(env: &Env) -> DashboardStats {
+    let p = get_platform_analytics(env);
+    let (success_rate_bps, dispute_rate_bps, avg_trade_volume) = if p.total_trades > 0 {
+        (
+            (p.completed_trades.saturating_mul(10000) / p.total_trades) as u32,
+            (p.disputed_trades.saturating_mul(10000) / p.total_trades) as u32,
+            p.total_volume / p.total_trades,
+        )
+    } else {
+        (0, 0, 0)
+    };
+    DashboardStats { platform: p, success_rate_bps, dispute_rate_bps, avg_trade_volume }
+}
+
+/// Aggregate trade volume and counts within a ledger range.
+/// Scans all trades for `address` (pass admin address to get platform-wide data
+/// by iterating all indexed trades, or a user address for per-user range stats).
+pub fn get_volume_in_range(
+    env: &Env,
+    address: &Address,
+    from_ledger: u32,
+    to_ledger: u32,
+) -> Result<VolumeInRange, ContractError> {
+    let ids = get_trade_ids_for_address(env, address);
+    let mut out = VolumeInRange {
+        from_ledger,
+        to_ledger,
+        trade_count: 0,
+        total_volume: 0,
+        completed_count: 0,
+        disputed_count: 0,
+        cancelled_count: 0,
+    };
+    for id in ids.iter() {
+        let trade = get_trade(env, id)?;
+        if trade.created_at < from_ledger || trade.created_at > to_ledger {
+            continue;
+        }
+        out.trade_count += 1;
+        out.total_volume = out.total_volume.saturating_add(trade.amount);
+        match trade.status {
+            TradeStatus::Completed => out.completed_count += 1,
+            TradeStatus::Disputed => out.disputed_count += 1,
+            TradeStatus::Cancelled => out.cancelled_count += 1,
+            _ => {}
+        }
+    }
+    Ok(out)
 }

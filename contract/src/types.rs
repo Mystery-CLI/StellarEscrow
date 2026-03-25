@@ -45,6 +45,7 @@ pub enum TradeStatus {
     Completed,
     Disputed,
     Cancelled,
+    AwaitingBridge, // cross-chain: waiting for bridge oracle confirmation
 }
 
 #[contracttype]
@@ -52,6 +53,10 @@ pub enum TradeStatus {
 pub enum DisputeResolution {
     ReleaseToBuyer,
     ReleaseToSeller,
+    /// Split the net payout (after fee) between buyer and seller.
+    /// `buyer_bps` is the buyer's share in basis points (0–10000).
+    /// 0 = all to seller, 10000 = all to buyer.
+    Partial { buyer_bps: u32 },
 }
 
 /// A single metadata key-value entry
@@ -69,6 +74,14 @@ pub struct TradeMetadata {
     pub entries: Vec<MetadataEntry>,
 }
 
+/// Option wrapper for TradeMetadata (Soroban contracttype requires enum for optional custom structs)
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OptionalMetadata {
+    None,
+    Some(TradeMetadata),
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Trade {
@@ -79,8 +92,164 @@ pub struct Trade {
     pub fee: u64,
     pub arbitrator: Option<Address>,
     pub status: TradeStatus,
+    /// Optional Unix timestamp (seconds) after which funds auto-release to seller
+    /// if no dispute has been raised. Uses Stellar ledger time (UTC).
+    pub expiry_time: Option<u64>,
+    /// Token address used for this trade (e.g. USDC, EURC, or any SAC token)
+    pub currency: Address,
     /// Optional structured metadata (product info, shipping details, etc.)
-    pub metadata: Option<TradeMetadata>,
+    pub metadata: OptionalMetadata,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum KycStatus {
+    Unverified,
+    Pending,
+    Verified,
+    Rejected,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserCompliance {
+    pub kyc_status: KycStatus,
+    pub aml_cleared: bool,
+    pub jurisdiction: String,
+}
+
+// ---------------------------------------------------------------------------
+// Arbitrator Reputation
+// ---------------------------------------------------------------------------
+
+/// Reputation record stored per registered arbitrator.
+/// Ratings are 1–5 stars; stored as cumulative sum + count for an average.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ArbitratorReputation {
+    /// Total disputes assigned to this arbitrator
+    pub total_disputes: u32,
+    /// Disputes fully resolved (any outcome)
+    pub resolved_count: u32,
+    /// Resolutions that released funds to the buyer
+    pub buyer_wins: u32,
+    /// Resolutions that released funds to the seller
+    pub seller_wins: u32,
+    /// Sum of all star ratings received (1–5 per rating)
+    pub rating_sum: u32,
+    /// Number of ratings received
+    pub rating_count: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Subscription Model
+// ---------------------------------------------------------------------------
+
+/// Duration of a subscription in ledgers (~1 ledger ≈ 5 s; 30 days ≈ 518_400 ledgers)
+pub const SUBSCRIPTION_DURATION_LEDGERS: u32 = 518_400;
+
+/// Monthly price in stroops (USDC micro-units) per tier
+pub const SUB_PRICE_BASIC: u64 = 5_000_000;   // 5 USDC
+pub const SUB_PRICE_PRO: u64 = 15_000_000;    // 15 USDC
+pub const SUB_PRICE_ENTERPRISE: u64 = 50_000_000; // 50 USDC
+
+/// Fee discounts in bps applied on top of the tier/base fee
+pub const SUB_DISCOUNT_BASIC_BPS: u32 = 20;       // −0.20 %
+pub const SUB_DISCOUNT_PRO_BPS: u32 = 50;          // −0.50 %
+pub const SUB_DISCOUNT_ENTERPRISE_BPS: u32 = 100;  // −1.00 %
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SubscriptionTier {
+    Basic,
+    Pro,
+    Enterprise,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Subscription {
+    pub subscriber: Address,
+    pub tier: SubscriptionTier,
+    /// Ledger sequence at which the subscription expires
+    pub expires_at: u32,
+    /// Ledger sequence of the last renewal / purchase
+    pub renewed_at: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Governance
+// ---------------------------------------------------------------------------
+
+/// Total supply of governance tokens minted at initialization
+pub const GOV_TOTAL_SUPPLY: i128 = 1_000_000_000_000_000; // 1 billion (7 decimals)
+
+/// Voting period in ledgers (~7 days)
+pub const GOV_VOTING_PERIOD: u32 = 1_209_600;
+
+/// Minimum tokens required to create a proposal
+pub const GOV_PROPOSAL_THRESHOLD: i128 = 10_000_000_000; // 10,000 tokens
+
+/// Minimum quorum (% of total supply * 100, i.e. 400 = 4%)
+pub const GOV_QUORUM_BPS: u32 = 400;
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProposalStatus {
+    Active,
+    Passed,
+    Rejected,
+    Executed,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProposalAction {
+    UpdateFeeBps(u32),
+    UpdateTierConfig(TierConfig),
+    DistributeFees(Address),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Proposal {
+    pub id: u64,
+    pub proposer: Address,
+    pub action: ProposalAction,
+    pub votes_for: i128,
+    pub votes_against: i128,
+    pub status: ProposalStatus,
+    pub created_at: u32,
+    pub ends_at: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Privacy Features
+// ---------------------------------------------------------------------------
+
+/// Max length for an encrypted data pointer (e.g. IPFS CID or URL)
+pub const PRIVACY_DATA_PTR_MAX_LEN: u32 = 256;
+
+/// Commitment to sensitive trade data stored off-chain (e.g. SHA-256 hex)
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TradePrivacy {
+    /// Hash of the plaintext trade details (commitment scheme)
+    pub data_hash: String,
+    /// Encrypted data pointer (e.g. IPFS CID) — only parties can decrypt
+    pub encrypted_ptr: Option<String>,
+    /// Whether arbitration is private (arbitrator identity hidden from public)
+    pub private_arbitration: bool,
+}
+
+/// A selective disclosure grant — allows `grantee` to access private trade data
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DisclosureGrant {
+    pub trade_id: u64,
+    pub grantee: Address,
+    /// Encrypted decryption key for the grantee (encrypted with grantee's public key off-chain)
+    pub encrypted_key: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +265,7 @@ pub struct TemplateTerms {
     pub description: String,
     pub default_arbitrator: Option<Address>,
     pub fixed_amount: Option<u64>,
-    pub default_metadata: Option<TradeMetadata>,
+    pub default_metadata: OptionalMetadata,
 }
 
 #[contracttype]
@@ -118,4 +287,41 @@ pub struct TradeTemplate {
     pub active: bool,
     pub created_at: u32,
     pub updated_at: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Cross-Chain Bridge Support
+// ---------------------------------------------------------------------------
+
+/// Metadata for a cross-chain trade, stored alongside the base Trade.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CrossChainInfo {
+    /// Identifier of the source chain (e.g. "ethereum", "polygon")
+    pub source_chain: String,
+    /// The deposit transaction hash on the source chain (as reported by the oracle)
+    pub source_tx_hash: String,
+    /// Ledger sequence after which the trade can be expired and funds reclaimed
+    pub expires_at_ledger: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Trade Insurance
+// ---------------------------------------------------------------------------
+
+/// Maximum insurance premium in basis points (10% of trade amount)
+pub const MAX_INSURANCE_PREMIUM_BPS: u32 = 1000;
+
+/// Insurance policy attached to a trade.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InsurancePolicy {
+    /// Registered provider that underwrites this policy
+    pub provider: Address,
+    /// Premium paid by the buyer, in USDC stroops (already deducted from escrow)
+    pub premium: u64,
+    /// Maximum payout the provider will cover beyond the escrowed amount
+    pub coverage: u64,
+    /// Whether a claim has been paid out
+    pub claimed: bool,
 }

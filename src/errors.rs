@@ -26,5 +26,8 @@ pub enum ContractError {
     TemplateNameTooLong = 20,
     TemplateVersionLimitExceeded = 21,
     TemplateAmountMismatch = 22,
-    InsufficientAllowance = 23,
+    InvalidLedgerRange = 23,
+    PresetNotFound = 24,
+    PresetNameTooLong = 25,
+    TooManyPresets = 26,
 }

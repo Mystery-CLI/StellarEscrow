@@ -10,3 +10,13 @@ contract_id = "CA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ"
 horizon_url = "https://horizon-testnet.stellar.org"
 # start_ledger = 123456  # Optional: start from specific ledger
 poll_interval_seconds = 5
+
+[rate_limit]
+# Requests per minute per IP
+default_rpm = 60
+elevated_rpm = 300
+admin_rpm = 6000
+# whitelist = ["127.0.0.1"]
+# blacklist = []
+[storage]
+base_dir = "./uploads"

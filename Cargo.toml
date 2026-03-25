@@ -1,5 +1,5 @@
 [workspace]
-members = ["contract", "indexer"]
+members = ["contract", "indexer", "mobile-sdk", "ui"]
 
 [package]
 name = "stellar-escrow"

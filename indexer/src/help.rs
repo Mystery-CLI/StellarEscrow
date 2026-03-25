@@ -254,7 +254,7 @@ static DOCS: &[HelpArticle] = &[
         id: "doc-event-types",
         category: "api",
         title: "Contract Event Types",
-        content: "The indexer tracks these event types emitted by the contract: trade_created, trade_funded, trade_completed, trade_confirmed, dispute_raised, dispute_resolved, trade_cancelled, arbitrator_registered, arbitrator_removed, fee_updated, fees_withdrawn.",
+        content: "The indexer tracks these event types emitted by the contract: trade_created, trade_funded, trade_completed, trade_confirmed, dispute_raised, dispute_resolved, trade_cancelled, arbitrator_registered, arbitrator_removed, fee_updated, fees_withdrawn, compliance_passed, compliance_failed.",
         tags: &["events", "indexer", "types"],
     },
     HelpArticle {

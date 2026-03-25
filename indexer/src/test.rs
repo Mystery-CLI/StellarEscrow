@@ -11,8 +11,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_health_check() {
-        // This would require setting up a test server
-        // For now, just ensure the function exists
+    async fn test_health_liveness() {
+        // liveness is a simple no-dep handler; just verify it returns ok status
+        let response = crate::health::liveness().await;
+        let body = response.0;
+        assert_eq!(body["status"], "ok");
     }
 }

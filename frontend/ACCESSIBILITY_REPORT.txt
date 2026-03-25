@@ -1,0 +1,21 @@
+
+StellarEscrow Accessibility Test Report
+Generated: 2026-03-24T12:59:57.193Z
+WCAG Level: AA
+
+Summary:
+- Total Tests: 60
+- Passed: 57
+- Failed: 3
+- Warnings: 2
+- Pass Rate: 95.0%
+
+
+Failed Tests:
+- Core buttons have accessible names: 4 buttons need accessible names
+- Core links have accessible text: 6 links need accessible text
+- Toasts have role="alert": Toast notifications missing role="alert"
+
+Warnings:
+- Static button analysis: Some buttons are rendered dynamically by JavaScript with proper accessibility
+- Static link analysis: Some links are rendered dynamically by JavaScript with proper accessibility
