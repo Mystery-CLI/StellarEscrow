@@ -2,9 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
+    extract::FromRef,
     routing::{get, post},
     Router,
 };
@@ -19,6 +17,7 @@ mod database;
 mod error;
 mod event_monitor;
 mod handlers;
+mod health;
 mod help;
 mod models;
 mod websocket;
@@ -29,7 +28,8 @@ mod test;
 use config::Config;
 use database::Database;
 use event_monitor::EventMonitor;
-use handlers::*;
+use handlers::{AppState, *};
+use health::{alerts, liveness, metrics, readiness, status_page, HealthMonitor, HealthState};
 use websocket::WebSocketManager;
 use help::{
     get_contact, get_docs, get_faqs, get_tutorial_by_id, get_tutorials, help_index, search_help,
@@ -61,7 +61,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize database
     let db_pool = PgPool::connect(&config.database.url).await?;
     sqlx::migrate!("./migrations").run(&db_pool).await?;
-    let database = Arc::new(Database::new(db_pool));
+    let database = Arc::new(Database::new(db_pool.clone()));
+
+    // Initialize health monitor
+    let health_monitor = Arc::new(HealthMonitor::new(
+        db_pool.clone(),
+        config.stellar.horizon_url.clone(),
+    ));
+    let health_state = HealthState {
+        monitor: health_monitor.clone(),
+    };
+
+    // Start metrics persistence loop in background
+    let metrics_monitor = health_monitor.clone();
+    tokio::spawn(async move {
+        metrics_monitor.run_metrics_loop().await;
+    });
 
     // Initialize WebSocket manager
     let (tx, _rx) = broadcast::channel(100);
@@ -84,7 +99,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build application with routes
     let app = Router::new()
         .route("/", get(api_index))
-        .route("/health", get(health_check))
+        // Legacy liveness (kept for backward compat)
+        .route("/health", get(liveness))
+        // Health monitoring endpoints
+        .route("/health/live", get(liveness))
+        .route("/health/ready", get(readiness))
+        .route("/health/metrics", get(metrics))
+        .route("/health/alerts", get(alerts))
+        .route("/status", get(status_page))
         .route("/events", get(get_events))
         .route("/events/:id", get(get_event_by_id))
         .route("/events/trade/:trade_id", get(get_events_by_trade_id))
@@ -108,6 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(AppState {
             database,
             ws_manager,
+            health: health_state,
         });
 
     // Start server
@@ -123,8 +146,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[derive(Clone)]
-struct AppState {
-    database: Arc<Database>,
-    ws_manager: Arc<WebSocketManager>,
+impl FromRef<AppState> for HealthState {
+    fn from_ref(state: &AppState) -> Self {
+        state.health.clone()
+    }
 }

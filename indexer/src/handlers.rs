@@ -1,6 +1,5 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     response::Json,
     response::Response,
 };
@@ -9,13 +8,13 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::models::{EventQuery, PagedResponse, ReplayRequest, WebSocketMessage};
+use crate::health::HealthState;
 use crate::models::{
     DiscoveryQuery, EventQuery, GlobalSearchQuery, GlobalSearchResponse, HistoryQuery, ReplayRequest,
     SuggestionQuery, TradeSearchQuery, WebSocketMessage,
 };
 use crate::websocket::WebSocketManager;
-use crate::{database::Database, models::Event};
+use crate::{database::Database, models::Event, models::PagedResponse};
 
 /// Default page size — kept small for mobile clients.
 const DEFAULT_LIMIT: i64 = 20;
@@ -27,7 +26,11 @@ pub async fn api_index() -> Json<serde_json::Value> {
         "name": "StellarEscrow Indexer API",
         "version": "1.0.0",
         "endpoints": {
-            "health":          "GET  /health",
+            "health_live":     "GET  /health/live",
+            "health_ready":    "GET  /health/ready",
+            "health_metrics":  "GET  /health/metrics",
+            "health_alerts":   "GET  /health/alerts",
+            "status_page":     "GET  /status",
             "events":          "GET  /events?limit=20&offset=0&event_type=&trade_id=&from_ledger=&to_ledger=",
             "event_by_id":     "GET  /events/:id",
             "events_by_trade": "GET  /events/trade/:trade_id",
@@ -36,13 +39,6 @@ pub async fn api_index() -> Json<serde_json::Value> {
             "websocket":       "GET  /ws",
             "help":            "GET  /help"
         }
-    }))
-}
-
-pub async fn health_check() -> Json<serde_json::Value> {
-    Json(json!({
-        "status": "healthy",
-        "timestamp": chrono::Utc::now()
     }))
 }
 
@@ -230,4 +226,5 @@ pub async fn search_history(
 pub struct AppState {
     pub database: Arc<Database>,
     pub ws_manager: Arc<WebSocketManager>,
+    pub health: HealthState,
 }
