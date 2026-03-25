@@ -17,6 +17,7 @@ use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tracing::{info, warn};
 
+mod auth;
 mod config;
 mod database;
 mod error;
@@ -31,6 +32,7 @@ mod rate_limit_handlers;
 mod storage;
 mod websocket;
 mod fraud_service;
+mod notification_service;
 
 #[cfg(test)]
 mod test;
@@ -38,6 +40,7 @@ mod test;
 use config::Config;
 use database::Database;
 use event_monitor::EventMonitor;
+use auth::auth_middleware;
 use handlers::{AppState, *};
 use health::{alerts, liveness, metrics, readiness, status_page, HealthMonitor, HealthState};
 use file_handlers::{delete_file, download_file, list_files, upload_file};
@@ -50,6 +53,7 @@ use help::{
     get_contact, get_docs, get_faqs, get_tutorial_by_id, get_tutorials, help_index, search_help,
 };
 use fraud_service::FraudDetectionService;
+use notification_service::NotificationService;
 
 #[derive(Parser)]
 #[command(name = "stellar-escrow-indexer")]
@@ -100,6 +104,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.clone()));
+    // Initialize API auth config
+    let auth_config = Arc::new(config.auth.clone());
     // Initialize file storage service
     let storage_service = Arc::new(
         StorageService::new(db_pool, &config.storage.base_dir).await?,
@@ -107,12 +113,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize Fraud Detection Service
     let fraud_service = Arc::new(FraudDetectionService::new(database.clone()).await);
 
+    // Initialize Notification Service
+    let notification_service = Arc::new(NotificationService::new(
+        database.clone(),
+        config.notification.clone(),
+    ));
+
     // Initialize event monitor
     let event_monitor = EventMonitor::new(
         config.stellar.clone(),
         database.clone(),
         ws_manager.clone(),
         fraud_service.clone(),
+        notification_service.clone(),
     );
 
     // Start event monitoring in background
@@ -135,11 +148,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/files/:id", get(download_file).delete(delete_file))
         .with_state(storage_service);
 
+    // Versioned API router (v1)
+    let v1_api = Router::new()
+        .route("/", get(api_index))
+        .route("/docs", get(api_docs))
+        .route("/events", get(get_events))
+        .route("/events/:id", get(get_event_by_id))
+        .route("/events/trade/:trade_id", get(get_events_by_trade_id))
+        .route("/events/type/:event_type", get(get_events_by_type))
+        .route("/events/replay", post(replay_events))
+        .route("/search", get(global_search))
+        .route("/search/trades", get(search_trades))
+        .route("/search/discovery", get(discover_entities))
+        .route("/search/suggestions", get(search_suggestions))
+        .route("/search/history", get(search_history))
+        .route("/fraud/alerts", get(get_fraud_alerts))
+        .route("/fraud/review", post(update_fraud_review))
+        .route("/audit", post(create_audit_log))
+        .route("/audit", get(query_audit_logs))
+        .route("/audit/stats", get(audit_stats))
+        .route("/audit/purge", delete(purge_audit_logs));
+
     let app = Router::new()
         .route("/", get(api_index))
-        // Legacy liveness (kept for backward compat)
         .route("/health", get(liveness))
-        // Health monitoring endpoints
         .route("/health/live", get(liveness))
         .route("/health/ready", get(readiness))
         .route("/health/metrics", get(metrics))
@@ -158,10 +190,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/search/discovery", get(discover_entities))
         .route("/search/suggestions", get(search_suggestions))
         .route("/search/history", get(search_history))
+        .route("/search/analytics", get(search_analytics))
         .route("/fraud/alerts", get(get_fraud_alerts))
         .route("/fraud/review", post(update_fraud_review))
+        // Notifications
+        .route("/notifications/preferences/:address", get(get_notification_preferences).put(upsert_notification_preferences))
+        .route("/notifications/log/:address", get(get_notification_log))
         .route("/ws", get(ws_handler))
-        // Help center
         .route("/help", get(help_index))
         .route("/help/faqs", get(get_faqs))
         .route("/help/tutorials", get(get_tutorials))
@@ -169,27 +204,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/help/docs", get(get_docs))
         .route("/help/search", get(search_help))
         .route("/help/contact", get(get_contact))
-        // Audit logs
         .route("/audit", post(create_audit_log))
         .route("/audit", get(query_audit_logs))
         .route("/audit/stats", get(audit_stats))
         .route("/audit/purge", delete(purge_audit_logs))
-        .layer(CorsLayer::permissive())
+        .merge(admin_router)
+        .merge(file_router)
+        .merge(Router::new().nest("/api/v1", v1_api))
         .with_state(AppState {
             database,
             ws_manager,
             health: health_state,
-        })
-        .merge(admin_router)
-        .layer(middleware::from_fn_with_state(
-            rate_limiter,
-            rate_limit_middleware,
-        ))
-        .layer(CorsLayer::permissive());
-        .merge(file_router)
-        .layer(CorsLayer::permissive());
             fraud_service,
-        });
+            notification_service,
+        })
+        .layer(middleware::from_fn_with_state(auth_config, auth_middleware))
+        .layer(middleware::from_fn_with_state(rate_limiter, rate_limit_middleware))
+        .layer(CorsLayer::permissive());
 
     // Start server
     let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));

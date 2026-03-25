@@ -29,6 +29,10 @@ const DISCLOSURE_PREFIX: &str = "DISC";
 const ARB_REP_PREFIX: &str = "ARB_REP";
 const ARB_RATED_PREFIX: &str = "ARB_RTD";
 const CURRENCY_FEES_PREFIX: &str = "CFEES";
+const USER_COMPLIANCE_PREFIX: &str = "UCOMP";
+const USER_LIMIT_PREFIX: &str = "ULIM";
+const JURISDICTION_RULES_PREFIX: &str = "JUR";
+const GLOBAL_TRADE_LIMIT: &str = "GLOB_LIM";
 use crate::types::{CrossChainInfo, InsurancePolicy, TierConfig, Trade, TradeTemplate, UserTierInfo};
 
 // Instance storage keys (short symbols, cheapest encoding)
@@ -205,6 +209,47 @@ pub fn save_user_tier(env: &Env, user: &Address, info: &UserTierInfo) {
 pub fn get_user_tier(env: &Env, user: &Address) -> Option<UserTierInfo> {
     let key = (USER_TIER_PREFIX, user);
     env.storage().persistent().get(&key)
+}
+
+// User compliance data
+pub fn save_user_compliance(env: &Env, user: &Address, compliance: &crate::types::UserCompliance) {
+    let key = (USER_COMPLIANCE_PREFIX, user);
+    env.storage().persistent().set(&key, compliance);
+}
+
+pub fn get_user_compliance(env: &Env, user: &Address) -> Option<crate::types::UserCompliance> {
+    let key = (USER_COMPLIANCE_PREFIX, user);
+    env.storage().persistent().get(&key)
+}
+
+pub fn set_user_trade_limit(env: &Env, user: &Address, limit: u64) {
+    let key = (USER_LIMIT_PREFIX, user);
+    env.storage().persistent().set(&key, &limit);
+}
+
+pub fn get_user_trade_limit(env: &Env, user: &Address) -> u64 {
+    let key = (USER_LIMIT_PREFIX, user);
+    env.storage().persistent().get(&key).unwrap_or(0)
+}
+
+// Jurisdiction restrictions
+pub fn set_jurisdiction_rule(env: &Env, jurisdiction: &String, allowed: bool) {
+    let key = (JURISDICTION_RULES_PREFIX, jurisdiction);
+    env.storage().persistent().set(&key, &allowed);
+}
+
+pub fn is_jurisdiction_allowed(env: &Env, jurisdiction: &String) -> bool {
+    let key = (JURISDICTION_RULES_PREFIX, jurisdiction);
+    env.storage().persistent().get(&key).unwrap_or(true)
+}
+
+// Global trade limit
+pub fn set_global_trade_limit(env: &Env, limit: u64) {
+    env.storage().instance().set(&GLOBAL_TRADE_LIMIT, &limit);
+}
+
+pub fn get_global_trade_limit(env: &Env) -> u64 {
+    env.storage().instance().get(&GLOBAL_TRADE_LIMIT).unwrap_or(u64::MAX)
 }
 
 // Template storage

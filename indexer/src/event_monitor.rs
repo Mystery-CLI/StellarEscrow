@@ -60,6 +60,7 @@ pub struct EventMonitor {
     client: Client,
     last_ledger: Option<i64>,
     fraud_service: Arc<FraudDetectionService>,
+    notification_service: Arc<crate::notification_service::NotificationService>,
 }
 
 impl EventMonitor {
@@ -68,12 +69,14 @@ impl EventMonitor {
         database: Arc<Database>,
         ws_manager: Arc<WebSocketManager>,
         fraud_service: Arc<FraudDetectionService>,
+        notification_service: Arc<crate::notification_service::NotificationService>,
     ) -> Self {
         Self {
             config,
             database,
             ws_manager,
             fraud_service,
+            notification_service,
             client: Client::new(),
             last_ledger: config.start_ledger.map(|l| l as i64),
         }
@@ -155,6 +158,9 @@ impl EventMonitor {
                         }).await;
                     }
                 }
+
+                // Dispatch notifications to trade parties
+                self.notification_service.process_event(&event).await;
             }
         }
 

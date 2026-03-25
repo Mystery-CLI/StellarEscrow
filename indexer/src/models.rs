@@ -384,6 +384,37 @@ pub struct AuditBucket {
     pub count: i64,
 }
 
+// =============================================================================
+// Search Analytics Models
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct SearchAnalyticsRow {
+    pub date: chrono::NaiveDate,
+    pub search_type: String,
+    pub query_count: i64,
+    pub unique_terms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchAnalyticsQuery {
+    /// ISO date lower bound (inclusive), e.g. "2026-01-01"
+    pub from: Option<chrono::NaiveDate>,
+    /// ISO date upper bound (inclusive)
+    pub to: Option<chrono::NaiveDate>,
+    /// Filter to a specific search type (global / trades / discovery)
+    pub search_type: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchAnalyticsResponse {
+    pub rows: Vec<SearchAnalyticsRow>,
+    /// Top 10 most-searched terms across the requested window
+    pub top_terms: Vec<SearchSuggestion>,
+    /// Total queries in the window
+    pub total_queries: i64,
+}
+
 /// Request body for the retention purge endpoint.
 #[derive(Debug, Deserialize)]
 pub struct RetentionRequest {
@@ -396,4 +427,58 @@ pub struct RetentionRequest {
 pub struct RetentionResponse {
     pub deleted: u64,
     pub older_than_days: i64,
+}
+
+// =============================================================================
+// Notification Models
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct NotificationPreferences {
+    pub address: String,
+    pub email_enabled: bool,
+    pub email_address: Option<String>,
+    pub sms_enabled: bool,
+    pub phone_number: Option<String>,
+    pub push_enabled: bool,
+    pub push_token: Option<String>,
+    pub on_trade_created: bool,
+    pub on_trade_funded: bool,
+    pub on_trade_completed: bool,
+    pub on_trade_confirmed: bool,
+    pub on_dispute_raised: bool,
+    pub on_dispute_resolved: bool,
+    pub on_trade_cancelled: bool,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Upsert payload — all fields optional so callers only send what they want to change.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateNotificationPreferences {
+    pub email_enabled: Option<bool>,
+    pub email_address: Option<String>,
+    pub sms_enabled: Option<bool>,
+    pub phone_number: Option<String>,
+    pub push_enabled: Option<bool>,
+    pub push_token: Option<String>,
+    pub on_trade_created: Option<bool>,
+    pub on_trade_funded: Option<bool>,
+    pub on_trade_completed: Option<bool>,
+    pub on_trade_confirmed: Option<bool>,
+    pub on_dispute_raised: Option<bool>,
+    pub on_dispute_resolved: Option<bool>,
+    pub on_trade_cancelled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct NotificationLogEntry {
+    pub id: i64,
+    pub address: String,
+    pub channel: String,
+    pub template_id: String,
+    pub subject: Option<String>,
+    pub body: String,
+    pub status: String,
+    pub error: Option<String>,
+    pub created_at: DateTime<Utc>,
 }

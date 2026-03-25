@@ -3,7 +3,9 @@
 mod errors;
 mod events;
 mod governance;
+mod oracle;
 mod privacy;
+mod queries;
 mod storage;
 mod subscription;
 mod templates;
@@ -24,6 +26,8 @@ pub use types::{
     Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion,
     Trade, TradeMetadata, TradePrivacy, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
 };
+pub use queries::{PageParams, SortDirection, TradeFilter, TradeSortField, TradeStats};
+pub use oracle::{OracleEntry, PriceData, PriceValidation};
 
 use storage::{
     get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_usdc_token,
@@ -72,6 +76,10 @@ fn validate_metadata(meta: &TradeMetadata) -> Result<(), ContractError> {
         if entry.value.len() > METADATA_MAX_VALUE_LEN {
             return Err(ContractError::MetadataValueTooLong);
         }
+    }
+    Ok(())
+}
+
 #[inline]
 fn require_initialized(env: &Env) -> Result<(), ContractError> {
     if !is_initialized(env) {
@@ -110,6 +118,42 @@ fn validate_metadata(meta: &OptionalMetadata) -> Result<(), ContractError> {
                 return Err(ContractError::MetadataValueTooLong);
             }
         }
+    }
+    Ok(())
+}
+
+fn require_admin(env: &Env, admin: &Address) -> Result<(), ContractError> {
+    let current_admin = get_admin(env)?;
+    if &current_admin != admin {
+        return Err(ContractError::Unauthorized);
+    }
+    admin.require_auth();
+    Ok(())
+}
+
+fn validate_user_compliance(env: &Env, user: &Address, amount: u64) -> Result<(), ContractError> {
+    let comp = storage::get_user_compliance(env, user).ok_or(ContractError::KycNotVerified)?;
+    if comp.kyc_status != crate::types::KycStatus::Verified {
+        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "KYC_NOT_VERIFIED"));
+        return Err(ContractError::KycNotVerified);
+    }
+    if !comp.aml_cleared {
+        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "AML_NOT_CLEARED"));
+        return Err(ContractError::AmlNotCleared);
+    }
+    if !storage::is_jurisdiction_allowed(env, &comp.jurisdiction) {
+        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "JURISDICTION_BLOCKED"));
+        return Err(ContractError::JurisdictionRestricted);
+    }
+    let user_limit = storage::get_user_trade_limit(env, user);
+    if user_limit > 0 && amount > user_limit {
+        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "USER_LIMIT_EXCEEDED"));
+        return Err(ContractError::TradeAmountLimitExceeded);
+    }
+    let global_limit = storage::get_global_trade_limit(env);
+    if amount > global_limit {
+        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "GLOBAL_LIMIT_EXCEEDED"));
+        return Err(ContractError::TradeAmountLimitExceeded);
     }
     Ok(())
 }
@@ -172,6 +216,64 @@ impl StellarEscrowContract {
         set_fee_bps(&env, fee_bps);
         events::emit_fee_updated(&env, fee_bps);
         Ok(())
+    }
+
+    pub fn set_user_compliance(
+        env: Env,
+        admin: Address,
+        user: Address,
+        compliance: crate::types::UserCompliance,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        require_admin(&env, &admin)?;
+        storage::save_user_compliance(&env, &user, &compliance);
+        Ok(())
+    }
+
+    pub fn get_user_compliance(env: Env, user: Address) -> Option<crate::types::UserCompliance> {
+        storage::get_user_compliance(&env, &user)
+    }
+
+    pub fn set_user_trade_limit(env: Env, admin: Address, user: Address, limit: u64) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        require_admin(&env, &admin)?;
+        storage::set_user_trade_limit(&env, &user, limit);
+        Ok(())
+    }
+
+    pub fn get_user_trade_limit(env: Env, user: Address) -> u64 {
+        storage::get_user_trade_limit(&env, &user)
+    }
+
+    pub fn set_jurisdiction_rule(
+        env: Env,
+        admin: Address,
+        jurisdiction: soroban_sdk::String,
+        allowed: bool,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        require_admin(&env, &admin)?;
+        storage::set_jurisdiction_rule(&env, &jurisdiction, allowed);
+        Ok(())
+    }
+
+    pub fn is_jurisdiction_allowed(env: Env, jurisdiction: soroban_sdk::String) -> bool {
+        storage::is_jurisdiction_allowed(&env, &jurisdiction)
+    }
+
+    pub fn set_global_trade_limit(env: Env, admin: Address, limit: u64) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        require_admin(&env, &admin)?;
+        storage::set_global_trade_limit(&env, limit);
+        Ok(())
+    }
+
+    pub fn get_global_trade_limit(env: Env) -> u64 {
+        storage::get_global_trade_limit(&env)
     }
 
     /// Withdraw accumulated fees for USDC (admin only) — backward-compatible
@@ -239,6 +341,8 @@ impl StellarEscrowContract {
             }
         }
         seller.require_auth();
+        validate_user_compliance(&env, &seller, amount)?;
+        validate_user_compliance(&env, &buyer, amount)?;
         if let Some(ref arb) = arbitrator {
             if !has_arbitrator(&env, arb) {
                 return Err(ContractError::ArbitratorNotRegistered);
@@ -275,7 +379,9 @@ impl StellarEscrowContract {
             metadata,
         };
         save_trade(&env, trade_id, &trade);
-        events::emit_trade_created(&env, trade_id, seller, buyer, amount);
+        events::emit_trade_created(&env, trade_id, seller.clone(), buyer.clone(), amount);
+        events::emit_compliance_passed(&env, trade_id, seller, buyer, amount);
+        events::emit_trade_created(&env, trade_id, seller, buyer, amount, trade.currency);
         Ok(trade_id)
     }
 
@@ -587,6 +693,96 @@ impl StellarEscrowContract {
     /// Get platform fee in basis points
     pub fn get_platform_fee_bps(env: Env) -> Result<u32, ContractError> {
         get_fee_bps(&env)
+    }
+
+    // -------------------------------------------------------------------------
+    // Advanced Query Functions
+    // -------------------------------------------------------------------------
+
+    /// Filter, sort, and paginate trades.
+    ///
+    /// - `filter`: optional criteria (status, participant, amount range, id range)
+    /// - `page`: pagination + sort options (offset, limit ≤ 100, sort_by, direction)
+    pub fn query_trades(
+        env: Env,
+        filter: queries::TradeFilter,
+        page: queries::PageParams,
+    ) -> Result<soroban_sdk::Vec<Trade>, ContractError> {
+        require_initialized(&env)?;
+        queries::query_trades(&env, filter, page)
+    }
+
+    /// Aggregate statistics (count, volume, fees, min/max amount) over filtered trades.
+    pub fn aggregate_trades(
+        env: Env,
+        filter: queries::TradeFilter,
+    ) -> Result<queries::TradeStats, ContractError> {
+        require_initialized(&env)?;
+        queries::aggregate_trades(&env, filter)
+    }
+
+    // -------------------------------------------------------------------------
+    // Oracle Integration
+    // -------------------------------------------------------------------------
+
+    /// Register a price oracle contract for a `base`/`quote` asset pair (admin only).
+    /// `priority`: lower = queried first. Up to 5 oracles per pair.
+    pub fn register_oracle(
+        env: Env,
+        base: Address,
+        quote: Address,
+        oracle: Address,
+        priority: u32,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        get_admin(&env)?.require_auth();
+        oracle::register_oracle(&env, &base, &quote, oracle, priority)
+    }
+
+    /// Remove a price oracle for a `base`/`quote` pair (admin only).
+    pub fn remove_oracle(
+        env: Env,
+        base: Address,
+        quote: Address,
+        oracle: Address,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        get_admin(&env)?.require_auth();
+        oracle::remove_oracle(&env, &base, &quote, &oracle)
+    }
+
+    /// List all registered oracles for a `base`/`quote` pair.
+    pub fn get_oracles(
+        env: Env,
+        base: Address,
+        quote: Address,
+    ) -> soroban_sdk::Vec<oracle::OracleEntry> {
+        oracle::get_oracles(&env, &base, &quote)
+    }
+
+    /// Fetch the current price for `base`/`quote` from registered oracles.
+    /// Queries in priority order; returns first fresh (non-stale) response.
+    /// Returns `Err(OracleUnavailable)` if all sources fail or are stale.
+    pub fn get_oracle_price(
+        env: Env,
+        base: Address,
+        quote: Address,
+    ) -> Result<oracle::PriceData, ContractError> {
+        oracle::get_price(&env, &base, &quote)
+    }
+
+    /// Validate that `trade_amount` falls within `[min_usd, max_usd]` at the
+    /// current oracle price. Bounds are in oracle-scaled units (value × 10^decimals).
+    /// Returns `Err(OracleUnavailable)` on oracle failure — caller decides whether to block.
+    pub fn validate_trade_price(
+        env: Env,
+        base: Address,
+        quote: Address,
+        trade_amount: u64,
+        min_usd: i128,
+        max_usd: i128,
+    ) -> Result<oracle::PriceValidation, ContractError> {
+        oracle::validate_trade_price(&env, &base, &quote, trade_amount, min_usd, max_usd)
     }
 
     // -------------------------------------------------------------------------

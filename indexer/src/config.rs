@@ -9,6 +9,8 @@ pub struct Config {
     pub stellar: StellarConfig,
     pub rate_limit: RateLimitConfig,
     pub storage: StorageConfig,
+    #[serde(default)]
+    pub notification: NotificationConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,9 +46,39 @@ pub struct RateLimitConfig {
     /// IPs that are always blocked.
     #[serde(default)]
     pub blacklist: Vec<IpAddr>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    /// Shared API keys for regular clients.
+    #[serde(default)]
+    pub api_keys: Vec<String>,
+    /// Admin API keys for privileged routes.
+    #[serde(default)]
+    pub admin_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageConfig {
     /// Base directory for uploaded files
     pub base_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationConfig {
+    // Email (SendGrid-compatible)
+    pub email_api_url: String,
+    pub email_api_key: String,
+    pub email_from: String,
+    // SMS (Twilio-compatible)
+    pub sms_api_url: String,
+    pub sms_account_sid: String,
+    pub sms_auth_token: String,
+    pub sms_from: String,
+    // Push (FCM v1)
+    pub push_api_url: String,
+    pub push_project_id: String,
+    pub push_server_key: String,
 }
 
 impl Config {
@@ -77,8 +109,25 @@ impl Default for Config {
                 admin_rpm: 6000,
                 whitelist: vec![],
                 blacklist: vec![],
+            },
+            auth: AuthConfig {
+                api_keys: vec!["demo-key-123".to_string()],
+                admin_keys: vec!["admin-key-123".to_string()],
+            },
             storage: StorageConfig {
                 base_dir: "./uploads".to_string(),
+            },
+            notification: NotificationConfig {
+                email_api_url: "https://api.sendgrid.com".to_string(),
+                email_api_key: String::new(),
+                email_from: "noreply@stellarescrow.io".to_string(),
+                sms_api_url: "https://api.twilio.com".to_string(),
+                sms_account_sid: String::new(),
+                sms_auth_token: String::new(),
+                sms_from: String::new(),
+                push_api_url: "https://fcm.googleapis.com".to_string(),
+                push_project_id: String::new(),
+                push_server_key: String::new(),
             },
         }
     }

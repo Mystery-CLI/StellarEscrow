@@ -10,4 +10,7 @@ module.exports = {
     '!src/**/*.stories.tsx',
     '!src/**/*.d.ts',
   ],
+  coverageThresholds: {
+    global: { branches: 70, functions: 70, lines: 70, statements: 70 },
+  },
 };

@@ -77,6 +77,72 @@ fn test_create_trade() {
 }
 
 #[test]
+fn test_create_trade_with_compliance_rules() {
+    let (env, token_addr, admin, seller, buyer, _, client) = setup();
+    let acceptable_user = crate::types::UserCompliance {
+        kyc_status: crate::types::KycStatus::Verified,
+        aml_cleared: true,
+        jurisdiction: soroban_sdk::String::from_str(&env, "US"),
+    };
+    client.set_user_compliance(&admin, &seller, &acceptable_user);
+    client.set_user_compliance(&admin, &buyer, &acceptable_user);
+    client.set_user_trade_limit(&admin, &seller, &2_000_000u64);
+    client.set_global_trade_limit(&admin, &3_000_000u64);
+
+    let id = client.create_trade(&seller, &buyer, &1_000_000u64, &None, &OptionalMetadata::None);
+    assert_eq!(id, 1);
+}
+
+#[test]
+fn test_create_trade_fails_for_unverified_kyc() {
+    let (env, token_addr, admin, seller, buyer, _, client) = setup();
+    let seller_compliance = crate::types::UserCompliance {
+        kyc_status: crate::types::KycStatus::Verified,
+        aml_cleared: true,
+        jurisdiction: soroban_sdk::String::from_str(&env, "US"),
+    };
+    let buyer_compliance = crate::types::UserCompliance {
+        kyc_status: crate::types::KycStatus::Unverified,
+        aml_cleared: true,
+        jurisdiction: soroban_sdk::String::from_str(&env, "US"),
+    };
+    client.set_user_compliance(&admin, &seller, &seller_compliance);
+    client.set_user_compliance(&admin, &buyer, &buyer_compliance);
+
+    assert!(client.try_create_trade(&seller, &buyer, &1_000_000u64, &None, &OptionalMetadata::None).is_err());
+}
+
+#[test]
+fn test_create_trade_fails_for_jurisdiction_block() {
+    let (env, token_addr, admin, seller, buyer, _, client) = setup();
+    let compliant = crate::types::UserCompliance {
+        kyc_status: crate::types::KycStatus::Verified,
+        aml_cleared: true,
+        jurisdiction: soroban_sdk::String::from_str(&env, "CN"),
+    };
+    client.set_user_compliance(&admin, &seller, &compliant);
+    client.set_user_compliance(&admin, &buyer, &compliant);
+    client.set_jurisdiction_rule(&admin, &soroban_sdk::String::from_str(&env, "CN"), false);
+
+    assert!(client.try_create_trade(&seller, &buyer, &1_000_000u64, &None, &OptionalMetadata::None).is_err());
+}
+
+#[test]
+fn test_create_trade_fails_for_amount_limit() {
+    let (env, token_addr, admin, seller, buyer, _, client) = setup();
+    let compliant = crate::types::UserCompliance {
+        kyc_status: crate::types::KycStatus::Verified,
+        aml_cleared: true,
+        jurisdiction: soroban_sdk::String::from_str(&env, "US"),
+    };
+    client.set_user_compliance(&admin, &seller, &compliant);
+    client.set_user_compliance(&admin, &buyer, &compliant);
+    client.set_user_trade_limit(&admin, &seller, &500_000u64);
+
+    assert!(client.try_create_trade(&seller, &buyer, &1_000_000u64, &None, &OptionalMetadata::None).is_err());
+}
+
+#[test]
 fn test_create_trade_zero_amount_fails() {
     let (_, _, _, seller, buyer, _, client) = setup();
     assert!(client.try_create_trade(&seller, &buyer, &0u64, &None, &OptionalMetadata::None).is_err());

@@ -98,8 +98,24 @@ pub struct Trade {
     /// Token address used for this trade (e.g. USDC, EURC, or any SAC token)
     pub currency: Address,
     /// Optional structured metadata (product info, shipping details, etc.)
-    pub metadata: Option<TradeMetadata>,
     pub metadata: OptionalMetadata,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum KycStatus {
+    Unverified,
+    Pending,
+    Verified,
+    Rejected,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserCompliance {
+    pub kyc_status: KycStatus,
+    pub aml_cleared: bool,
+    pub jurisdiction: String,
 }
 
 // ---------------------------------------------------------------------------

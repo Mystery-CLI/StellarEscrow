@@ -55,9 +55,35 @@ pub async fn api_index() -> Json<serde_json::Value> {
             "audit_query":     "GET  /audit?actor=&category=&action=&outcome=&severity=&from=&to=&limit=&offset=",
             "audit_stats":     "GET  /audit/stats",
             "audit_purge":     "DELETE /audit/purge  {older_than_days?}"
-            "fraud_alerts":    "GET  /fraud/alerts",
+            "search":          "GET  /search?q=&limit=",
+            "search_trades":   "GET  /search/trades?q=&status=&seller=&buyer=&min_amount=&max_amount=&limit=&offset=",
+            "search_discovery":"GET  /search/discovery?q=&role=&limit=",
+            "search_suggestions":"GET /search/suggestions?q=&limit=",
+            "search_history":  "GET  /search/history?limit=",
+            "search_analytics":"GET  /search/analytics?from=&to=&search_type=",
             "fraud_review":    "POST /fraud/review  {trade_id, status, reviewer, notes}",
+            "notif_prefs_get": "GET  /notifications/preferences/:address",
+            "notif_prefs_put": "PUT  /notifications/preferences/:address  {email_enabled, email_address, sms_enabled, phone_number, push_enabled, push_token, on_*}",
+            "notif_log":       "GET  /notifications/log/:address?limit=",
             "help":            "GET  /help"
+        }
+    }))
+}
+
+pub async fn api_docs() -> Json<serde_json::Value> {
+    Json(json!({
+        "api_name": "StellarEscrow Indexer API",
+        "api_version": "v1",
+        "base_url": "/api/v1",
+        "authentication": {
+            "scheme": "API_KEY",
+            "headers": ["Authorization: Bearer <API_KEY>", "x-api-key: <API_KEY>"],
+            "admin_key": "for /admin endpoints"
+        },
+        "rate_limit": {
+            "default_rpm": "config.rate_limit.default_rpm",
+            "elevated_rpm": "config.rate_limit.elevated_rpm",
+            "admin_rpm": "config.rate_limit.admin_rpm"
         }
     }))
 }
@@ -66,21 +92,6 @@ pub async fn get_events(
     Query(params): Query<EventQuery>,
     State(state): State<AppState>,
 ) -> Result<Json<PaginatedResponse<Event>>, AppError> {
-    let limit = params.limit.unwrap_or(50);
-    let offset = params.offset.unwrap_or(0);
-    let query = EventQuery {
-        limit: Some(limit),
-        offset: Some(offset),
-        ..params
-    };
-
-    let (events, total) = tokio::try_join!(
-        state.database.get_events(&query),
-        state.database.get_event_count(None),
-    )?;
-
-    Ok(Json(PaginatedResponse::new(events, total, limit, offset)))
-) -> Result<Json<PagedResponse<Event>>, AppError> {
     let limit = params.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
     let offset = params.offset.unwrap_or(0).max(0);
     let query = EventQuery { limit: Some(limit), offset: Some(offset), ..params };
@@ -90,13 +101,21 @@ pub async fn get_events(
         state.database.count_events(&query),
     )?;
 
-    Ok(Json(PagedResponse {
+    Ok(Json(PaginatedResponse {
         has_more: offset + limit < total,
         items: events,
         total,
         limit,
         offset,
     }))
+}
+
+pub async fn get_event_by_id(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<Event>, AppError> {
+    let event = state.database.get_event_by_id(id).await?;
+    Ok(Json(event))
 }
 
 pub async fn get_event_by_id(
@@ -295,6 +314,14 @@ pub async fn search_history(
     Ok(Json(rows))
 }
 
+pub async fn search_analytics(
+    Query(params): Query<crate::models::SearchAnalyticsQuery>,
+    State(state): State<AppState>,
+) -> Result<Json<crate::models::SearchAnalyticsResponse>, AppError> {
+    let result = state.database.get_search_analytics(&params).await?;
+    Ok(Json(result))
+}
+
 pub async fn get_fraud_alerts(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<serde_json::Value>>, AppError> {
@@ -330,6 +357,7 @@ pub struct AppState {
     pub ws_manager: Arc<WebSocketManager>,
     pub health: HealthState,
     pub fraud_service: Arc<FraudDetectionService>,
+    pub notification_service: Arc<NotificationService>,
 }
 
 // =============================================================================
@@ -384,4 +412,38 @@ pub async fn purge_audit_logs(
     let days = body.older_than_days.unwrap_or(90).clamp(1, 365);
     let deleted = state.database.purge_old_audit_logs(days).await?;
     Ok(Json(RetentionResponse { deleted, older_than_days: days }))
+}
+
+// =============================================================================
+// Notification Handlers
+// =============================================================================
+
+/// GET /notifications/preferences/:address
+pub async fn get_notification_preferences(
+    Path(address): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<crate::models::NotificationPreferences>, AppError> {
+    let prefs = state.database.get_notification_preferences(&address).await?
+        .ok_or_else(|| AppError::NotFound("preferences not found".into()))?;
+    Ok(Json(prefs))
+}
+
+/// PUT /notifications/preferences/:address
+pub async fn upsert_notification_preferences(
+    Path(address): Path<String>,
+    State(state): State<AppState>,
+    Json(body): Json<crate::models::UpdateNotificationPreferences>,
+) -> Result<Json<crate::models::NotificationPreferences>, AppError> {
+    let prefs = state.database.upsert_notification_preferences(&address, &body).await?;
+    Ok(Json(prefs))
+}
+
+/// GET /notifications/log/:address
+pub async fn get_notification_log(
+    Path(address): Path<String>,
+    Query(params): Query<crate::models::HistoryQuery>,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<crate::models::NotificationLogEntry>>, AppError> {
+    let entries = state.database.get_notification_log(&address, params.limit.unwrap_or(50)).await?;
+    Ok(Json(entries))
 }
