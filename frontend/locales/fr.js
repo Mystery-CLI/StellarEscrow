@@ -1,6 +1,7 @@
 export default {
   nav: {
     dashboard: 'Tableau de bord',
+    tradeDashboard: 'Mes échanges',
     events: 'Voir les événements',
     search: 'Rechercher',
     disputes: 'Litiges',

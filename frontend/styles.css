@@ -2745,3 +2745,132 @@ body.offline .offline-indicator {
     border-left: 4px solid var(--color-error);
     background: #2a1010;
 }
+
+/* ============================================
+   Trade Dashboard
+   ============================================ */
+
+.td-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+}
+
+.td-live-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* Panels */
+.td-panel {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+
+.td-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-md);
+}
+
+.td-panel-title {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+/* Filter bar */
+.td-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    align-items: center;
+    margin-bottom: var(--space-md);
+}
+
+.td-search-input {
+    flex: 1;
+    min-width: 180px;
+}
+
+/* Status badges */
+.td-status-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.td-status-created   { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+.td-status-funded    { background: rgba(34, 197, 94, 0.2);  color: #4ade80; }
+.td-status-completed { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.td-status-disputed  { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.td-status-cancelled { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+/* Table tweaks */
+.td-table .td-amount { font-variant-numeric: tabular-nums; }
+.td-table .td-addr   { font-family: monospace; font-size: var(--font-size-sm); }
+.td-table .td-actions { white-space: nowrap; }
+
+/* Action buttons */
+.td-action-btn { margin-right: var(--space-xs); }
+.td-action-primary  { background: var(--color-accent-primary); color: #fff; border: none; }
+.td-action-primary:hover { background: var(--color-accent-hover); }
+.td-action-warning  { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #fbbf24; }
+.td-action-warning:hover { background: rgba(245, 158, 11, 0.35); }
+.td-action-danger   { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #f87171; }
+.td-action-danger:hover { background: rgba(239, 68, 68, 0.3); }
+.td-action-secondary { background: var(--color-bg-tertiary); color: var(--color-text-secondary); border: 1px solid var(--color-border); }
+
+/* Pagination */
+.td-pagination { margin-top: var(--space-md); }
+
+/* Empty / error states */
+.td-empty-msg   { color: var(--color-text-muted); text-align: center; padding: var(--space-lg); }
+.td-error-state { color: var(--color-error); text-align: center; padding: var(--space-md); }
+.td-loading     { color: var(--color-text-muted); text-align: center; padding: var(--space-lg); }
+
+/* Trade Detail Modal */
+.td-detail-modal .modal-content { max-width: 560px; }
+.td-detail-content { padding: var(--space-lg); }
+
+.td-detail-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: var(--space-sm) var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+.td-detail-grid dt {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.td-detail-grid dd { color: var(--color-text-primary); word-break: break-all; }
+.td-addr-full { font-family: monospace; font-size: var(--font-size-sm); }
+
+.td-detail-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+
+/* Responsive */
+@media (max-width: 640px) {
+    .td-filter-bar { flex-direction: column; align-items: stretch; }
+    .td-search-input { min-width: unset; }
+    .td-table thead { display: none; }
+    .td-table tr { display: block; border-bottom: 1px solid var(--color-border); padding: var(--space-sm) 0; }
+    .td-table td { display: flex; justify-content: space-between; padding: var(--space-xs) var(--space-sm); }
+    .td-table td::before { content: attr(data-label); color: var(--color-text-muted); font-size: var(--font-size-sm); font-weight: 500; }
+    .td-detail-grid { grid-template-columns: 1fr; }
+}

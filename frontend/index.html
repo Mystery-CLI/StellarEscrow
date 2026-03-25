@@ -76,6 +76,7 @@
                 </button>
                 <ul id="main-menu" class="nav-menu" role="menubar">
                     <li role="none"><a href="#dashboard" role="menuitem" class="nav-link active" aria-current="page" data-i18n="nav.dashboard">Dashboard</a></li>
+                    <li role="none"><a href="#trade-dashboard" role="menuitem" class="nav-link" data-i18n="nav.tradeDashboard">My Trades</a></li>
                     <li role="none"><a href="#events" role="menuitem" class="nav-link" data-i18n="nav.events">View Events</a></li>
                     <li role="none"><a href="#search" role="menuitem" class="nav-link" data-i18n="nav.search">Search</a></li>
                     <li role="none"><a href="#disputes" role="menuitem" class="nav-link" data-i18n="nav.disputes">Disputes</a></li>
@@ -265,6 +266,156 @@
                 </div>
             </div>
         </section>
+
+        <!-- Trade Dashboard Section -->
+        <section id="trade-dashboard" aria-labelledby="trade-dashboard-heading" class="section">
+            <div class="container">
+                <div class="td-header">
+                    <h2 id="trade-dashboard-heading" class="section-title">Trade Dashboard</h2>
+                    <div class="td-live-status" role="status" aria-live="polite" aria-label="Real-time connection status">
+                        <span id="td-live-dot" class="indicator-dot disconnected" aria-hidden="true"></span>
+                        <span id="td-live-text" class="indicator-text">Connecting…</span>
+                    </div>
+                </div>
+
+                <!-- Active Trades -->
+                <div class="td-panel" role="region" aria-labelledby="td-active-heading">
+                    <div class="td-panel-header">
+                        <h3 id="td-active-heading" class="td-panel-title">Active Trades</h3>
+                    </div>
+
+                    <!-- Filter / Search / Sort -->
+                    <form id="td-active-filter-form" class="td-filter-bar" role="search" aria-label="Filter active trades">
+                        <label for="td-active-search" class="visually-hidden">Search trades</label>
+                        <input
+                            type="search"
+                            id="td-active-search"
+                            class="filter-input td-search-input"
+                            placeholder="Search by ID, buyer, or seller…"
+                            aria-label="Search active trades"
+                            autocomplete="off"
+                        >
+                        <label for="td-active-status-filter" class="visually-hidden">Filter by status</label>
+                        <select id="td-active-status-filter" class="filter-select" aria-label="Filter by trade status">
+                            <option value="">All Statuses</option>
+                            <option value="Created">Created</option>
+                            <option value="Funded">Funded</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Disputed">Disputed</option>
+                        </select>
+                        <label for="td-active-sort" class="visually-hidden">Sort by</label>
+                        <select id="td-active-sort" class="filter-select" aria-label="Sort trades">
+                            <option value="created_desc">Newest First</option>
+                            <option value="created_asc">Oldest First</option>
+                            <option value="amount_desc">Amount ↓</option>
+                            <option value="amount_asc">Amount ↑</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                    </form>
+
+                    <!-- Active Trades Table -->
+                    <div class="table-container" role="region" aria-label="Active trades table">
+                        <table class="data-table td-table" aria-describedby="td-active-caption">
+                            <caption id="td-active-caption" class="visually-hidden">Active trades with status, amount, parties, and quick actions</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Amount (USDC)</th>
+                                    <th scope="col">Buyer</th>
+                                    <th scope="col">Seller</th>
+                                    <th scope="col">Created</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="td-active-tbody">
+                                <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                        <p id="td-active-empty" class="td-empty-msg" hidden>No active trades found.</p>
+                    </div>
+
+                    <!-- Pagination -->
+                    <nav class="pagination td-pagination" aria-label="Active trades pagination">
+                        <button id="td-active-prev" type="button" class="btn btn-secondary pagination-btn" aria-label="Previous page">← Prev</button>
+                        <button id="td-active-next" type="button" class="btn btn-secondary pagination-btn" aria-label="Next page">Next →</button>
+                    </nav>
+                </div>
+
+                <!-- Trade History -->
+                <div class="td-panel" role="region" aria-labelledby="td-history-heading">
+                    <div class="td-panel-header">
+                        <h3 id="td-history-heading" class="td-panel-title">Trade History</h3>
+                    </div>
+
+                    <!-- History Filter / Search / Sort -->
+                    <form id="td-history-filter-form" class="td-filter-bar" role="search" aria-label="Filter trade history">
+                        <label for="td-history-search" class="visually-hidden">Search history</label>
+                        <input
+                            type="search"
+                            id="td-history-search"
+                            class="filter-input td-search-input"
+                            placeholder="Search by ID, buyer, or seller…"
+                            aria-label="Search trade history"
+                            autocomplete="off"
+                        >
+                        <label for="td-history-status-filter" class="visually-hidden">Filter by status</label>
+                        <select id="td-history-status-filter" class="filter-select" aria-label="Filter history by status">
+                            <option value="">All Statuses</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Cancelled">Cancelled</option>
+                            <option value="Disputed">Disputed</option>
+                        </select>
+                        <label for="td-history-sort" class="visually-hidden">Sort history</label>
+                        <select id="td-history-sort" class="filter-select" aria-label="Sort history">
+                            <option value="created_desc">Newest First</option>
+                            <option value="created_asc">Oldest First</option>
+                            <option value="amount_desc">Amount ↓</option>
+                            <option value="amount_asc">Amount ↑</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                    </form>
+
+                    <!-- History Table -->
+                    <div class="table-container" role="region" aria-label="Trade history table">
+                        <table class="data-table td-table" aria-describedby="td-history-caption">
+                            <caption id="td-history-caption" class="visually-hidden">Completed and historical trades with status, amount, and parties</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Amount (USDC)</th>
+                                    <th scope="col">Buyer</th>
+                                    <th scope="col">Seller</th>
+                                    <th scope="col">Settled</th>
+                                </tr>
+                            </thead>
+                            <tbody id="td-history-tbody">
+                                <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                        <p id="td-history-empty" class="td-empty-msg" hidden>No trade history found.</p>
+                    </div>
+
+                    <!-- Pagination -->
+                    <nav class="pagination td-pagination" aria-label="Trade history pagination">
+                        <button id="td-history-prev" type="button" class="btn btn-secondary pagination-btn" aria-label="Previous page">← Prev</button>
+                        <button id="td-history-next" type="button" class="btn btn-secondary pagination-btn" aria-label="Next page">Next →</button>
+                    </nav>
+                </div>
+            </div>
+        </section>
+
+        <!-- Trade Detail Modal -->
+        <div id="td-detail-modal" class="modal td-detail-modal" hidden role="dialog" aria-labelledby="td-detail-title" aria-modal="true" tabindex="-1">
+            <div class="modal-content td-detail-content">
+                <div class="modal-header">
+                    <h3 id="td-detail-title" class="modal-title">Trade Details</h3>
+                    <button id="td-detail-close" type="button" class="btn btn-close" aria-label="Close trade details">✕</button>
+                </div>
+                <div id="td-detail-body" class="td-detail-body"></div>
+            </div>
+        </div>
 
         <!-- Events Section -->
         <section id="events" aria-labelledby="events-heading" class="section">
@@ -992,5 +1143,6 @@
     <script src="compat.js"></script>
     <script src="wallet.js"></script>
     <script type="module" src="app.js"></script>
+    <script src="dashboard.js"></script>
 </body>
 </html>
