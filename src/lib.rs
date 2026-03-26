@@ -36,25 +36,15 @@ pub use theme::{
     THEME_DARK, THEME_LIGHT, THEME_SYSTEM,
 };
 pub use types::{
-    DisputeResolution, FilterPreset, HistoryFilter, HistoryPage, MetadataEntry,
-    PlatformAnalytics, SortCriterion, SortOrder, SystemConfig, TierConfig, Trade,
-    TradeDetail, TradeFilter, TradeMetadata, TradeSearchPage, TradeStatus, TradeTemplate,
-    TemplateTerms, TemplateVersion, TradeSortField, TransactionRecord, UserAnalytics,
-    UserProfile, UserPreference, UserTier, UserTierInfo, VerificationStatus,
-    AnalyticsFilter, ChartPoint, DisputeResolution, FeeChartData, HistoryFilter, HistoryPage,
-    MetadataEntry, PlatformAnalytics, SortOrder, StatusDistribution, SuccessRateData,
-    SystemConfig, TierConfig, Trade, TradeDetail, TradeMetadata, TradeStatus, TradeTemplate,
-    TemplateTerms, TemplateVersion, TransactionRecord, UserAnalytics, UserProfile,
-    UserPreference, UserStatsSnapshot, UserTier, UserTierInfo, VerificationStatus,
-    VolumeChartData,
-    DisputeResolution, HistoryFilter, HistoryPage, MetadataEntry, OnboardingProgress,
-    OnboardingStep, PlatformAnalytics, SortOrder, StepStatus, SystemConfig, TierConfig, Trade,
-    TradeAction, TradeDetail, TradeMetadata, TradeStatus, TradeTemplate, TemplateTerms,
-    TemplateVersion, TimelineEntry, TransactionRecord, UserAnalytics, UserPreference, UserProfile,
-    UserTier, UserTierInfo, VerificationStatus,
-    DashboardStats, DisputeResolution, HistoryFilter, HistoryPage, MetadataEntry, SortOrder,
-    TierConfig, Trade, TradeMetadata, TradeStatus, TradeTemplate, TemplateTerms,
-    TemplateVersion, TransactionRecord, UserTier, UserTierInfo, VolumeInRange,
+    AnalyticsFilter, ChartPoint, Currency, DashboardStats, DisputeResolution, FeeChartData,
+    FilterPreset, FundingPreview, HistoryFilter, HistoryPage, MetadataEntry,
+    OnboardingProgress, OnboardingStep, PlatformAnalytics, SortCriterion, SortOrder,
+    StatusDistribution, StepStatus, SuccessRateData, SystemConfig, TierConfig, Trade,
+    TradeAction, TradeDetail, TradeFilter, TradeFormInput, TradeMetadata, TradePreview,
+    TradeSearchPage, TradeSortField, TradeStatus, TradeTemplate, TemplateTerms,
+    TemplateVersion, TimelineEntry, TransactionRecord, UserAnalytics, UserPreference,
+    UserProfile, UserStatsSnapshot, UserTier, UserTierInfo, VerificationStatus,
+    VolumeChartData, VolumeInRange,
 };
 
 use storage::{
@@ -64,8 +54,6 @@ use storage::{
     set_accumulated_fees, set_admin, set_fee_bps, set_initialized, set_paused,
     set_trade_counter, set_usdc_token,
 };
-
-use types::TimelineEntry;
 
 /// Return ContractPaused if the contract is currently paused.
 fn require_not_paused(env: &Env) -> Result<(), ContractError> {
@@ -96,7 +84,7 @@ pub(crate) fn lib_create_trade(
     buyer: Address,
     amount: u64,
     arbitrator: Option<Address>,
-    metadata: OptionalTradeMetadata,
+    metadata: Option<TradeMetadata>,
 ) -> Result<u64, ContractError> {
     use types::TimelineEntry;
 
@@ -114,7 +102,7 @@ pub(crate) fn lib_create_trade(
             return Err(ContractError::ArbitratorNotRegistered);
         }
     }
-    if let OptionalTradeMetadata::Some(ref meta) = metadata {
+    if let Some(ref meta) = metadata {
         validate_metadata(meta)?;
     }
     let trade_id = increment_trade_counter(env)?;
@@ -198,10 +186,6 @@ impl StellarEscrowContract {
         Ok(())
     }
 
-    pub fn is_arbitrator_registered(env: Env, arbitrator: Address) -> bool {
-        has_arbitrator(&env, &arbitrator)
-    }
-
     // -------------------------------------------------------------------------
     // Fee management
     // -------------------------------------------------------------------------
@@ -215,10 +199,6 @@ impl StellarEscrowContract {
         set_fee_bps(&env, fee_bps);
         events::emit_fee_updated(&env, fee_bps);
         Ok(())
-    }
-
-    pub fn get_platform_fee_bps(env: Env) -> Result<u32, ContractError> {
-        get_fee_bps(&env)
     }
 
     pub fn withdraw_fees(env: Env, to: Address) -> Result<(), ContractError> {
@@ -236,10 +216,6 @@ impl StellarEscrowContract {
         Ok(())
     }
 
-    pub fn get_accumulated_fees(env: Env) -> Result<u64, ContractError> {
-        get_accumulated_fees(&env)
-    }
-
     // -------------------------------------------------------------------------
     // Trades
     // -------------------------------------------------------------------------
@@ -250,7 +226,7 @@ impl StellarEscrowContract {
         buyer: Address,
         amount: u64,
         arbitrator: Option<Address>,
-        metadata: OptionalTradeMetadata,
+        metadata: Option<TradeMetadata>,
     ) -> Result<u64, ContractError> {
         if !is_initialized(&env) { return Err(ContractError::NotInitialized); }
         require_not_paused(&env)?;
@@ -263,8 +239,6 @@ impl StellarEscrowContract {
         let trade_id = increment_trade_counter(&env)?;
         let base_fee_bps = get_fee_bps(&env)?;
         let fee_bps = tiers::effective_fee_bps(&env, &seller, base_fee_bps);
-        let fee = amount
-            .checked_mul(fee_bps as u64).ok_or(ContractError::Overflow)?
         let fee = amount.checked_mul(fee_bps as u64).ok_or(ContractError::Overflow)?
             .checked_div(10000).ok_or(ContractError::Overflow)?;
         let now = env.ledger().sequence();
@@ -328,7 +302,6 @@ impl StellarEscrowContract {
         let current_fees = get_accumulated_fees(&env)?;
         let new_fees = current_fees.checked_add(trade.fee).ok_or(ContractError::Overflow)?;
         set_accumulated_fees(&env, new_fees);
-        set_accumulated_fees(&env, current_fees.checked_add(trade.fee).ok_or(ContractError::Overflow)?);
         tiers::record_volume(&env, &trade.seller, trade.amount)?;
         tiers::record_volume(&env, &trade.buyer, trade.amount)?;
         users::record_trade_completed(&env, &trade.seller, &trade.buyer);
@@ -414,6 +387,8 @@ impl StellarEscrowContract {
 
     pub fn get_platform_fee_bps(env: Env) -> Result<u32, ContractError> {
         get_fee_bps(&env)
+    }
+
     pub fn update_trade_metadata(env: Env, trade_id: u64, metadata: Option<TradeMetadata>) -> Result<(), ContractError> {
         if !is_initialized(&env) { return Err(ContractError::NotInitialized); }
         let mut trade = get_trade(&env, trade_id)?;
@@ -427,7 +402,8 @@ impl StellarEscrowContract {
     }
 
     pub fn get_trade_metadata(env: Env, trade_id: u64) -> Result<Option<TradeMetadata>, ContractError> {
-        Ok(get_trade(&env, trade_id)?.metadata)
+        let trade = get_trade(&env, trade_id)?;
+        Ok(trade.metadata)
     }
 
     // -------------------------------------------------------------------------
@@ -474,31 +450,6 @@ impl StellarEscrowContract {
         Ok(())
     }
 
-    pub fn is_paused(env: Env) -> bool {
-        is_paused(&env)
-    }
-
-    // -------------------------------------------------------------------------
-    // Metadata
-    // -------------------------------------------------------------------------
-
-    pub fn update_trade_metadata(env: Env, trade_id: u64, metadata: Option<TradeMetadata>) -> Result<(), ContractError> {
-        if !is_initialized(&env) { return Err(ContractError::NotInitialized); }
-        let mut trade = get_trade(&env, trade_id)?;
-        trade.seller.require_auth();
-        if let Some(ref meta) = metadata { validate_metadata(meta)?; }
-        trade.metadata = metadata;
-        trade.updated_at = env.ledger().sequence();
-        save_trade(&env, trade_id, &trade);
-        events::emit_metadata_updated(&env, trade_id);
-        Ok(())
-    }
-
-    pub fn get_trade_metadata(env: Env, trade_id: u64) -> Result<Option<TradeMetadata>, ContractError> {
-        let trade = get_trade(&env, trade_id)?;
-        Ok(trade.metadata)
-    }
-
     // -------------------------------------------------------------------------
     // Batch operations
     // -------------------------------------------------------------------------
@@ -524,20 +475,6 @@ impl StellarEscrowContract {
                 if !has_arbitrator(&env, arb) { return Err(ContractError::ArbitratorNotRegistered); }
             }
             let trade_id = increment_trade_counter(&env)?;
-            let fee = amount
-                .checked_mul(fee_bps as u64).ok_or(ContractError::Overflow)?
-                .checked_div(10000).ok_or(ContractError::Overflow)?;
-            let trade = Trade {
-                id: trade_id,
-                seller: seller.clone(),
-                buyer: buyer.clone(),
-                amount,
-                fee,
-                arbitrator,
-                status: TradeStatus::Created,
-                created_at: now,
-                updated_at: now,
-                metadata: None,
             let fee = amount.checked_mul(fee_bps as u64).ok_or(ContractError::Overflow)?
                 .checked_div(10000).ok_or(ContractError::Overflow)?;
             let trade = Trade {
@@ -560,7 +497,6 @@ impl StellarEscrowContract {
         buyer: Address,
         trade_ids: soroban_sdk::Vec<u64>,
     ) -> Result<(), ContractError> {
-    pub fn batch_fund_trades(env: Env, buyer: Address, trade_ids: soroban_sdk::Vec<u64>) -> Result<(), ContractError> {
         if !is_initialized(&env) { return Err(ContractError::NotInitialized); }
         require_not_paused(&env)?;
         if trade_ids.is_empty() { return Err(ContractError::EmptyBatch); }
@@ -592,7 +528,6 @@ impl StellarEscrowContract {
         buyer: Address,
         trade_ids: soroban_sdk::Vec<u64>,
     ) -> Result<(), ContractError> {
-    pub fn batch_confirm_trades(env: Env, buyer: Address, trade_ids: soroban_sdk::Vec<u64>) -> Result<(), ContractError> {
         if !is_initialized(&env) { return Err(ContractError::NotInitialized); }
         require_not_paused(&env)?;
         if trade_ids.is_empty() { return Err(ContractError::EmptyBatch); }
@@ -702,8 +637,6 @@ impl StellarEscrowContract {
         let trade_id = increment_trade_counter(&env)?;
         let base_fee_bps = get_fee_bps(&env)?;
         let fee_bps = tiers::effective_fee_bps(&env, &seller, base_fee_bps);
-        let fee = amount
-            .checked_mul(fee_bps as u64).ok_or(ContractError::Overflow)?
         let fee = amount.checked_mul(fee_bps as u64).ok_or(ContractError::Overflow)?
             .checked_div(10000).ok_or(ContractError::Overflow)?;
         let now = env.ledger().sequence();
@@ -823,8 +756,6 @@ impl StellarEscrowContract {
         Ok(admin::get_analytics(&env))
     }
 
-    }
-
     /// Get full dashboard snapshot: platform stats, success rate, dispute rate, avg volume.
     pub fn get_dashboard(env: Env) -> Result<DashboardStats, ContractError> {
         if !is_initialized(&env) {
@@ -915,6 +846,8 @@ impl StellarEscrowContract {
     pub fn export_user_stats_csv(env: Env, address: Address) -> soroban_sdk::String {
         let snapshot = analytics::get_user_stats(&env, &address);
         analytics::export_user_stats_csv(&env, &snapshot)
+    }
+
     // Onboarding Flow
     // -------------------------------------------------------------------------
 

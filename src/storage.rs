@@ -2,10 +2,8 @@ use soroban_sdk::{Address, Env, Vec};
 
 use crate::errors::ContractError;
 use crate::types::{
-    FilterPreset, PlatformAnalytics, TierConfig, TimelineEntry, Trade, TradeTemplate,
-    PlatformAnalytics, TierConfig, TimelineEntry, Trade, TradeTemplate,
-    OnboardingProgress, PlatformAnalytics, TierConfig, TimelineEntry, Trade, TradeTemplate,
-    UserAnalytics, UserPreference, UserProfile, UserTierInfo,
+    FilterPreset, OnboardingProgress, PlatformAnalytics, TierConfig, TimelineEntry, Trade,
+    TradeTemplate, UserAnalytics, UserPreference, UserProfile, UserTierInfo,
 };
 
 // ---------------------------------------------------------------------------
@@ -237,10 +235,6 @@ pub fn save_template(env: &Env, template_id: u64, template: &TradeTemplate) {
 pub fn get_template(env: &Env, template_id: u64) -> Result<TradeTemplate, ContractError> {
     let key = (TEMPLATE_PREFIX, template_id);
     env.storage().persistent().get(&key).ok_or(ContractError::TemplateNotFound)
-    env.storage()
-        .persistent()
-        .get(&key)
-        .ok_or(ContractError::TemplateNotFound)
 }
 
 // =============================================================================
@@ -281,8 +275,15 @@ pub fn get_preference(
     address: &Address,
     pref_key: &soroban_sdk::String,
 ) -> Option<UserPreference> {
-    let key = (USER_PREF_PREFIX, address, pref_key);
-    env.storage().persistent().get(&key)
+    let map_key = (USER_PREF_PREFIX, address);
+    let map: soroban_sdk::Map<soroban_sdk::String, soroban_sdk::String> =
+        env.storage().persistent().get(&map_key).unwrap_or(soroban_sdk::Map::new(env));
+
+    map.get(pref_key.clone())
+        .map(|value| UserPreference {
+            key: pref_key.clone(),
+            value,
+        })
 }
 
 // =============================================================================

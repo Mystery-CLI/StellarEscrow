@@ -100,7 +100,7 @@ pub fn confirm_trade(
         input.buyer.clone(),
         input.amount,
         input.arbitrator.clone(),
-        crate::OptionalTradeMetadata::None,
+        None,
     )
 }
 

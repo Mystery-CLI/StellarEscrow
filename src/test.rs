@@ -2,11 +2,14 @@
 
 extern crate std;
 
-use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env};
+use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Bytes, Env};
 
 use crate::{
-    HistoryFilter, SortCriterion, SortOrder, StellarEscrowContract,
-    StellarEscrowContractClient, TradeFilter, TradeSortField, TradeStatus,
+    AnalyticsFilter, ContractError, DisputeResolution, HistoryFilter, MetadataEntry,
+    OnboardingStep, SortCriterion, SortOrder, StellarEscrowContract,
+    StellarEscrowContractClient, StepStatus, TemplateTerms, TierConfig, TradeAction,
+    TradeFilter, TradeMetadata, TradeSortField, TradeStatus, UserTier,
+    VerificationStatus,
 };
 
 fn setup() -> (Env, StellarEscrowContractClient<'static>, Address, Address, Address) {
@@ -20,6 +23,26 @@ fn setup() -> (Env, StellarEscrowContractClient<'static>, Address, Address, Addr
     let token = Address::generate(&env);
     client.initialize(&admin, &token, &100); // 1% fee
     (env, client, admin, seller, buyer)
+}
+
+fn setup_uninitialized(
+) -> (
+    Env,
+    StellarEscrowContractClient<'static>,
+    Address,
+    Address,
+    Address,
+    Address,
+) {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, StellarEscrowContract);
+    let client = StellarEscrowContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let token = Address::generate(&env);
+    (env, client, admin, seller, buyer, token)
 }
 
 fn no_filter(env: &Env) -> HistoryFilter {
@@ -40,6 +63,52 @@ fn empty_trade_filter() -> TradeFilter {
 
 fn sort_by_created_asc() -> SortCriterion {
     SortCriterion { field: TradeSortField::CreatedAt, order: SortOrder::Ascending }
+}
+
+fn sample_metadata(env: &Env) -> TradeMetadata {
+    let mut entries = soroban_sdk::Vec::new(env);
+    entries.push_back(MetadataEntry {
+        key: soroban_sdk::String::from_str(env, "item"),
+        value: soroban_sdk::String::from_str(env, "laptop"),
+    });
+    TradeMetadata { entries }
+}
+
+fn metadata_with_too_many_entries(env: &Env) -> TradeMetadata {
+    let mut entries = soroban_sdk::Vec::new(env);
+    for i in 0..11u32 {
+        let key = std::format!("k{i}");
+        let value = std::format!("v{i}");
+        entries.push_back(MetadataEntry {
+            key: soroban_sdk::String::from_str(env, key.as_str()),
+            value: soroban_sdk::String::from_str(env, value.as_str()),
+        });
+    }
+    TradeMetadata { entries }
+}
+
+fn metadata_with_oversized_value(env: &Env) -> TradeMetadata {
+    let mut entries = soroban_sdk::Vec::new(env);
+    let oversized = "a".repeat(257);
+    entries.push_back(MetadataEntry {
+        key: soroban_sdk::String::from_str(env, "notes"),
+        value: soroban_sdk::String::from_str(env, oversized.as_str()),
+    });
+    TradeMetadata { entries }
+}
+
+fn sample_template_terms(
+    env: &Env,
+    fixed_amount: Option<u64>,
+    arbitrator: Option<Address>,
+    metadata: Option<TradeMetadata>,
+) -> TemplateTerms {
+    TemplateTerms {
+        description: soroban_sdk::String::from_str(env, "Standard escrow terms"),
+        default_arbitrator: arbitrator,
+        fixed_amount,
+        default_metadata: metadata,
+    }
 }
 
 // =============================================================================
@@ -421,17 +490,16 @@ fn test_preset_persistence_across_calls() {
 // Analytics Charts & Graphs Tests
 // =============================================================================
 
-use crate::AnalyticsFilter;
-
 fn analytics_filter_all(env: &Env) -> AnalyticsFilter {
     AnalyticsFilter {
         from_ledger: None,
         to_ledger: None,
         bucket_size: 0,
+    }
+}
+
 // Onboarding tests
 // =============================================================================
-
-use crate::{OnboardingStep, StepStatus};
 
 #[test]
 fn test_onboarding_start_creates_progress() {
@@ -579,6 +647,9 @@ fn test_user_volume_chart_empty_state() {
     let data = client.get_user_volume_chart(&seller, &analytics_filter_all(&env)).unwrap();
     assert_eq!(data.total_trades, 0);
     assert_eq!(data.total_volume, 0);
+}
+
+#[test]
 fn test_onboarding_start_is_idempotent() {
     let (_, client, _, seller, _) = setup();
 
@@ -750,4 +821,323 @@ fn test_onboarding_independent_per_user() {
     // Seller's progress is unchanged
     let seller_progress = client.get_onboarding_progress(&seller).unwrap();
     assert_eq!(seller_progress.step_statuses.get(0).unwrap(), StepStatus::Done);
+}
+
+// =============================================================================
+// Expanded Edge, Security, and Integration Coverage
+// =============================================================================
+
+#[test]
+fn test_initialize_rejects_second_initialization_attempt() {
+    let (env, client, admin, _, _) = setup();
+    let second_token = Address::generate(&env);
+
+    let result = client.try_initialize(&admin, &second_token, &250);
+
+    assert_eq!(result, Err(Ok(ContractError::AlreadyInitialized)));
+}
+
+#[test]
+fn test_mutating_calls_fail_before_initialization() {
+    let (_env, client, _admin, seller, buyer, _token) = setup_uninitialized();
+
+    let create_result = client.try_create_trade(&seller, &buyer, &1_000, &None, &None);
+    let pause_result = client.try_pause();
+    let onboarding_result = client.try_start_onboarding(&seller);
+
+    assert_eq!(create_result, Err(Ok(ContractError::NotInitialized)));
+    assert_eq!(pause_result, Err(Ok(ContractError::NotInitialized)));
+    assert_eq!(onboarding_result, Err(Ok(ContractError::NotInitialized)));
+}
+
+#[test]
+fn test_trade_metadata_round_trip_and_clear() {
+    let (env, client, _, seller, buyer) = setup();
+    let metadata = sample_metadata(&env);
+
+    let trade_id = client.create_trade(&seller, &buyer, &2_000, &None, &Some(metadata.clone()));
+    assert_eq!(client.get_trade_metadata(&trade_id), Some(metadata.clone()));
+
+    client.update_trade_metadata(&trade_id, &None);
+    assert_eq!(client.get_trade_metadata(&trade_id), None);
+}
+
+#[test]
+fn test_trade_metadata_validation_rejects_oversized_payloads() {
+    let (env, client, _, seller, buyer) = setup();
+    let trade_id = client.create_trade(&seller, &buyer, &2_000, &None, &None);
+
+    let too_many = metadata_with_too_many_entries(&env);
+    let too_long = metadata_with_oversized_value(&env);
+
+    let create_too_many = client.try_create_trade(&seller, &buyer, &2_000, &None, &Some(too_many.clone()));
+    let update_too_many = client.try_update_trade_metadata(&trade_id, &Some(too_many));
+    let create_too_long = client.try_create_trade(&seller, &buyer, &2_000, &None, &Some(too_long.clone()));
+    let update_too_long = client.try_update_trade_metadata(&trade_id, &Some(too_long));
+
+    assert_eq!(create_too_many, Err(Ok(ContractError::MetadataTooManyEntries)));
+    assert_eq!(update_too_many, Err(Ok(ContractError::MetadataTooManyEntries)));
+    assert_eq!(create_too_long, Err(Ok(ContractError::MetadataValueTooLong)));
+    assert_eq!(update_too_long, Err(Ok(ContractError::MetadataValueTooLong)));
+}
+
+#[test]
+fn test_pause_blocks_mutations_until_contract_is_unpaused() {
+    let (env, client, _, seller, buyer) = setup();
+    let mut batch = soroban_sdk::Vec::new(&env);
+    batch.push_back((buyer.clone(), 750u64, None));
+
+    client.pause();
+
+    let create_result = client.try_create_trade(&seller, &buyer, &500, &None, &None);
+    let batch_result = client.try_batch_create_trades(&seller, &batch);
+
+    assert_eq!(create_result, Err(Ok(ContractError::ContractPaused)));
+    assert_eq!(batch_result, Err(Ok(ContractError::ContractPaused)));
+
+    client.unpause();
+    let trade_id = client.create_trade(&seller, &buyer, &500, &None, &None);
+    assert_eq!(client.get_trade(&trade_id).status, TradeStatus::Created);
+}
+
+#[test]
+fn test_raise_dispute_rejects_non_participant_even_when_arbitrator_exists() {
+    let (env, client, _, seller, buyer) = setup();
+    let arbitrator = Address::generate(&env);
+    let outsider = Address::generate(&env);
+
+    client.register_arbitrator(&arbitrator);
+    let trade_id = client.create_trade(&seller, &buyer, &5_000, &Some(arbitrator), &None);
+    client.fund_trade(&trade_id);
+
+    let result = client.try_raise_dispute(&trade_id, &outsider);
+
+    assert_eq!(result, Err(Ok(ContractError::Unauthorized)));
+}
+
+#[test]
+fn test_dispute_resolution_flow_exposes_arbitrator_action_and_collects_fees() {
+    let (env, client, _, seller, buyer) = setup();
+    let arbitrator = Address::generate(&env);
+
+    client.register_arbitrator(&arbitrator);
+    let trade_id = client.create_trade(&seller, &buyer, &10_000, &Some(arbitrator.clone()), &None);
+    client.fund_trade(&trade_id);
+    client.raise_dispute(&trade_id, &buyer);
+
+    let detail = client.get_trade_detail(&trade_id, &arbitrator);
+    assert_eq!(detail.trade.status, TradeStatus::Disputed);
+    assert_eq!(detail.available_actions.len(), 1);
+    assert_eq!(detail.available_actions.get(0).unwrap(), TradeAction::ResolveDispute);
+
+    client.resolve_dispute(&trade_id, &DisputeResolution::ReleaseToSeller);
+
+    let trade = client.get_trade(&trade_id);
+    assert_eq!(trade.status, TradeStatus::Disputed);
+    assert_eq!(client.get_accumulated_fees(), trade.fee);
+}
+
+#[test]
+fn test_batch_trade_flow_covers_create_fund_complete_and_confirm() {
+    let (env, client, _, seller, buyer) = setup();
+    let mut batch = soroban_sdk::Vec::new(&env);
+    batch.push_back((buyer.clone(), 1_000u64, None));
+    batch.push_back((buyer.clone(), 2_500u64, None));
+
+    let trade_ids = client.batch_create_trades(&seller, &batch);
+    assert_eq!(trade_ids.len(), 2);
+
+    client.batch_fund_trades(&buyer, &trade_ids);
+    for trade_id in trade_ids.iter() {
+        client.complete_trade(&trade_id);
+    }
+
+    client.batch_confirm_trades(&buyer, &trade_ids);
+
+    let trade_one = client.get_trade(&trade_ids.get(0).unwrap());
+    let trade_two = client.get_trade(&trade_ids.get(1).unwrap());
+    assert_eq!(trade_one.status, TradeStatus::Completed);
+    assert_eq!(trade_two.status, TradeStatus::Completed);
+    assert!(client.get_accumulated_fees() > 0);
+}
+
+#[test]
+fn test_batch_create_rejects_empty_and_oversized_batches() {
+    let (env, client, _, seller, buyer) = setup();
+    let empty = soroban_sdk::Vec::new(&env);
+    let mut oversized = soroban_sdk::Vec::new(&env);
+    for _ in 0..101 {
+        oversized.push_back((buyer.clone(), 100u64, None));
+    }
+
+    let empty_result = client.try_batch_create_trades(&seller, &empty);
+    let oversized_result = client.try_batch_create_trades(&seller, &oversized);
+
+    assert_eq!(empty_result, Err(Ok(ContractError::EmptyBatch)));
+    assert_eq!(oversized_result, Err(Ok(ContractError::BatchLimitExceeded)));
+}
+
+#[test]
+fn test_custom_fee_configuration_changes_trade_fee_and_tier_state() {
+    let (_env, client, _, seller, buyer) = setup();
+    let config = TierConfig {
+        bronze_fee_bps: 100,
+        silver_fee_bps: 80,
+        gold_fee_bps: 50,
+    };
+
+    client.set_tier_config(&config);
+    client.set_user_custom_fee(&seller, &25);
+
+    let fee_bps = client.get_effective_fee_bps(&seller);
+    let trade_id = client.create_trade(&seller, &buyer, &10_000, &None, &None);
+    let trade = client.get_trade(&trade_id);
+    let tier = client.get_user_tier(&seller).unwrap();
+
+    assert_eq!(fee_bps, 25);
+    assert_eq!(trade.fee, 25);
+    assert_eq!(tier.tier, UserTier::Custom);
+    assert_eq!(tier.custom_fee_bps, Some(25));
+
+    client.remove_user_custom_fee(&seller);
+    let tier_after_removal = client.get_user_tier(&seller).unwrap();
+    assert_eq!(tier_after_removal.tier, UserTier::Bronze);
+    assert_eq!(tier_after_removal.custom_fee_bps, None);
+}
+
+#[test]
+fn test_template_lifecycle_enforces_defaults_versions_and_deactivation() {
+    let (env, client, _, seller, buyer) = setup();
+    let arbitrator = Address::generate(&env);
+    let metadata = sample_metadata(&env);
+
+    client.register_arbitrator(&arbitrator);
+    let terms_v1 = sample_template_terms(&env, Some(5_000), Some(arbitrator.clone()), Some(metadata.clone()));
+    let template_name = soroban_sdk::String::from_str(&env, "Hardware escrow");
+    let template_id = client.create_template(&seller, &template_name, &terms_v1);
+
+    let trade_id = client.create_trade_from_template(&seller, &buyer, &template_id, &5_000);
+    let trade = client.get_trade(&trade_id);
+    assert_eq!(trade.arbitrator, Some(arbitrator.clone()));
+    assert_eq!(trade.metadata, Some(metadata.clone()));
+
+    let terms_v2 = sample_template_terms(&env, Some(7_000), Some(arbitrator), None);
+    let updated_name = soroban_sdk::String::from_str(&env, "Hardware escrow v2");
+    client.update_template(&seller, &template_id, &updated_name, &terms_v2);
+
+    let template = client.get_template(&template_id);
+    assert_eq!(template.current_version, 2);
+
+    let mismatch = client.try_create_trade_from_template(&seller, &buyer, &template_id, &5_000);
+    assert_eq!(mismatch, Err(Ok(ContractError::TemplateAmountMismatch)));
+
+    client.deactivate_template(&seller, &template_id);
+    let inactive = client.try_create_trade_from_template(&seller, &buyer, &template_id, &7_000);
+    assert_eq!(inactive, Err(Ok(ContractError::TemplateInactive)));
+}
+
+#[test]
+fn test_admin_transfer_and_fee_withdraw_flow_are_persisted() {
+    let (env, client, _, seller, buyer) = setup();
+    let new_admin = Address::generate(&env);
+    let fee_receiver = Address::generate(&env);
+
+    let trade_id = client.create_trade(&seller, &buyer, &10_000, &None, &None);
+    client.fund_trade(&trade_id);
+    client.complete_trade(&trade_id);
+    client.confirm_receipt(&trade_id);
+
+    assert!(client.get_accumulated_fees() > 0);
+
+    client.transfer_admin(&new_admin);
+    client.update_fee(&250);
+    client.withdraw_fees(&fee_receiver);
+
+    assert_eq!(client.get_platform_fee_bps(), 250);
+    assert_eq!(client.get_accumulated_fees(), 0);
+
+    let logs = client.get_audit_logs(&0, &10);
+    assert!(logs.len() >= 2);
+    assert_eq!(logs.get(0).unwrap().action, soroban_sdk::String::from_str(&env, "admin.fees_withdrawn"));
+    assert_eq!(logs.get(1).unwrap().actor, new_admin);
+}
+
+#[test]
+fn test_trade_lifecycle_updates_dashboard_detail_and_user_stats() {
+    let (_env, client, _, seller, buyer) = setup();
+
+    let trade_id = client.create_trade(&seller, &buyer, &4_000, &None, &None);
+    client.fund_trade(&trade_id);
+    client.complete_trade(&trade_id);
+    client.confirm_receipt(&trade_id);
+
+    let trade = client.get_trade(&trade_id);
+    let detail = client.get_trade_detail(&trade_id, &buyer);
+    let dashboard = client.get_dashboard();
+    let seller_stats = client.get_user_analytics(&seller);
+    let buyer_stats = client.get_user_analytics(&buyer);
+
+    assert_eq!(detail.seller_payout, trade.amount - trade.fee);
+    assert_eq!(detail.timeline.len(), 3);
+    assert_eq!(detail.timeline.get(0).unwrap().status, TradeStatus::Created);
+    assert_eq!(detail.timeline.get(1).unwrap().status, TradeStatus::Funded);
+    assert_eq!(detail.timeline.get(2).unwrap().status, TradeStatus::Completed);
+    assert_eq!(dashboard.platform.completed_trades, 1);
+    assert_eq!(seller_stats.completed_trades, 1);
+    assert_eq!(buyer_stats.completed_trades, 1);
+}
+
+#[test]
+fn test_user_profile_preference_and_security_settings_round_trip() {
+    let (env, client, _, seller, _) = setup();
+    let empty = Bytes::new(&env);
+    let avatar = Bytes::new(&env);
+    let pref_key = soroban_sdk::String::from_str(&env, "theme");
+    let pref_value = soroban_sdk::String::from_str(&env, "light");
+
+    client.register_user(&seller, &empty, &empty);
+    client.set_user_preference(&seller, &pref_key, &pref_value);
+    client.set_user_verification(&seller, &VerificationStatus::Verified);
+    client.update_avatar(&seller, &Some(avatar));
+    client.update_security_settings(&seller, &true, &900);
+
+    let preference = client.get_user_preference(&seller, &pref_key);
+    let profile = client.get_user_profile(&seller);
+
+    assert_eq!(preference.value, pref_value);
+    assert_eq!(profile.verification, VerificationStatus::Verified);
+    assert!(profile.avatar_hash.is_some());
+    assert!(profile.two_fa_enabled);
+    assert_eq!(profile.session_timeout_secs, 900);
+}
+
+#[test]
+fn test_audit_log_captures_trade_and_admin_events_in_reverse_order() {
+    let (env, client, _, seller, buyer) = setup();
+
+    client.create_trade(&seller, &buyer, &1_500, &None, &None);
+    client.pause();
+    client.unpause();
+
+    assert_eq!(client.audit_count(), 3);
+
+    let logs = client.get_audit_logs(&0, &3);
+    assert_eq!(logs.len(), 3);
+    assert_eq!(logs.get(0).unwrap().action, soroban_sdk::String::from_str(&env, "contract.unpause"));
+    assert_eq!(logs.get(1).unwrap().action, soroban_sdk::String::from_str(&env, "contract.pause"));
+    assert_eq!(logs.get(2).unwrap().action, soroban_sdk::String::from_str(&env, "trade.created"));
+}
+
+#[test]
+fn test_onboarding_rejects_invalid_or_replayed_step_completion() {
+    let (_, client, _, seller, _) = setup();
+
+    client.start_onboarding(&seller);
+
+    let out_of_range = client.try_complete_onboarding_step(&seller, &10);
+    assert_eq!(out_of_range, Err(Ok(ContractError::InvalidAmount)));
+
+    client.complete_onboarding_step(&seller, &0);
+    let duplicate = client.try_complete_onboarding_step(&seller, &0);
+    assert_eq!(duplicate, Err(Ok(ContractError::InvalidStatus)));
 }

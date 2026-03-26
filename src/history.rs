@@ -21,7 +21,7 @@ fn to_record(trade: &Trade) -> TransactionRecord {
 
 /// Check whether a trade passes the given filter
 fn matches_filter(trade: &Trade, filter: &HistoryFilter) -> bool {
-    if let crate::types::OptionalTradeStatus::Some(ref status) = filter.status {
+    if let Some(ref status) = filter.status {
         if &trade.status != status {
             return false;
         }

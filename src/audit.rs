@@ -47,7 +47,7 @@ pub enum AuditOutcome {
 pub enum AuditSeverity {
     Info,
     Warn,
-    Error,
+    ErrorLevel,
     Critical,
 }
 
@@ -234,7 +234,7 @@ pub fn log_security(
 ) -> Result<(), ContractError> {
     let severity = match outcome {
         AuditOutcome::Denied  => AuditSeverity::Warn,
-        AuditOutcome::Failure => AuditSeverity::Error,
+        AuditOutcome::Failure => AuditSeverity::ErrorLevel,
         AuditOutcome::Success => AuditSeverity::Info,
     };
     record(
