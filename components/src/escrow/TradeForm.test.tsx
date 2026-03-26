@@ -1,9 +1,11 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { TradeForm } from './TradeForm';
 
-// Suppress localStorage errors in jsdom
+// Valid 56-char Stellar addresses (G + 55 base-32 uppercase chars)
+const VALID_SELLER = 'GBM36FA7SJUDGNIH2R4LOVQPCZETW5YXKBM36FA7SJUDGNIH2R4LOVQP';
+const VALID_BUYER  = 'GGNIH2R4LOVQPCZETW5YXKBM36FA7SJUDGNIH2R4LOVQPCZETW5YXKBM';
+
 beforeEach(() => {
   localStorage.clear();
   jest.useFakeTimers();
@@ -14,8 +16,9 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-const VALID_SELLER = 'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN';
-const VALID_BUYER  = 'GBVVJJWT3JTHKBZISFYYQDKDS3HHGBYPSLFGGT27CDMBC3JTHKBZISFYY';
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
 
 describe('TradeForm — rendering', () => {
   it('renders all form fields', () => {
@@ -31,6 +34,10 @@ describe('TradeForm — rendering', () => {
     expect(screen.getByRole('button', { name: /create trade/i })).toBeDisabled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Submit-time validation
+// ---------------------------------------------------------------------------
 
 describe('TradeForm — submit-time validation', () => {
   it('shows all required errors on empty submit', () => {
@@ -68,8 +75,12 @@ describe('TradeForm — submit-time validation', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Stellar address validation
+// ---------------------------------------------------------------------------
+
 describe('TradeForm — Stellar address validation', () => {
-  it('shows address format error for invalid seller', () => {
+  it('shows address format error for invalid seller after blur', () => {
     render(<TradeForm onSubmit={jest.fn()} disableAutoSave />);
     fireEvent.change(screen.getByLabelText('Seller Address'), { target: { value: 'G123' } });
     fireEvent.blur(screen.getByLabelText('Seller Address'));
@@ -88,9 +99,9 @@ describe('TradeForm — Stellar address validation', () => {
     const onSubmit = jest.fn();
     render(<TradeForm onSubmit={onSubmit} disableAutoSave />);
 
-    fireEvent.change(screen.getByLabelText('Seller Address'),              { target: { value: VALID_SELLER } });
-    fireEvent.change(screen.getByLabelText('Buyer Address'),               { target: { value: VALID_BUYER } });
-    fireEvent.change(screen.getByLabelText('Amount (USDC)'),               { target: { value: '50' } });
+    fireEvent.change(screen.getByLabelText('Seller Address'),                { target: { value: VALID_SELLER } });
+    fireEvent.change(screen.getByLabelText('Buyer Address'),                 { target: { value: VALID_BUYER } });
+    fireEvent.change(screen.getByLabelText('Amount (USDC)'),                 { target: { value: '50' } });
     fireEvent.change(screen.getByLabelText('Arbitrator Address (Optional)'), { target: { value: VALID_SELLER } });
 
     fireEvent.click(screen.getByRole('button', { name: /create trade/i }));
@@ -105,10 +116,13 @@ describe('TradeForm — Stellar address validation', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Real-time validation
+// ---------------------------------------------------------------------------
+
 describe('TradeForm — real-time validation', () => {
-  it('does not show errors before a field is touched', () => {
+  it('does not show errors before any field is touched', () => {
     render(<TradeForm onSubmit={jest.fn()} disableAutoSave />);
-    // No interaction — no errors should be visible
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -118,15 +132,20 @@ describe('TradeForm — real-time validation', () => {
     expect(screen.getByText('Seller address is required')).toBeInTheDocument();
   });
 
-  it('clears error when field becomes valid after blur', () => {
+  it('clears error when field becomes valid after being touched', () => {
     render(<TradeForm onSubmit={jest.fn()} disableAutoSave />);
     const input = screen.getByLabelText('Seller Address');
 
+    // Touch the field — error appears
     fireEvent.blur(input);
     expect(screen.getByText('Seller address is required')).toBeInTheDocument();
 
+    // Type a valid value — error should clear on next change
+    // We fire blur first to ensure touched state is committed, then change
     fireEvent.change(input, { target: { value: VALID_SELLER } });
+    fireEvent.blur(input);
     expect(screen.queryByText('Seller address is required')).not.toBeInTheDocument();
+    expect(screen.queryByText(/valid Stellar address/i)).not.toBeInTheDocument();
   });
 
   it('shows amount error for non-numeric value', () => {
@@ -146,16 +165,23 @@ describe('TradeForm — real-time validation', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Auto-save
+// ---------------------------------------------------------------------------
+
 describe('TradeForm — auto-save', () => {
-  it('saves draft to localStorage after debounce', async () => {
+  it('saves draft to localStorage after debounce', () => {
     render(<TradeForm onSubmit={jest.fn()} />);
 
     fireEvent.change(screen.getByLabelText('Seller Address'), { target: { value: VALID_SELLER } });
 
-    act(() => { jest.advanceTimersByTime(900); });
+    act(() => {
+      jest.advanceTimersByTime(900);
+    });
 
-    expect(localStorage.getItem('stellar_escrow_trade_form_draft')).not.toBeNull();
-    const draft = JSON.parse(localStorage.getItem('stellar_escrow_trade_form_draft')!);
+    const raw = localStorage.getItem('stellar_escrow_trade_form_draft');
+    expect(raw).not.toBeNull();
+    const draft = JSON.parse(raw!);
     expect(draft.seller).toBe(VALID_SELLER);
   });
 
@@ -172,12 +198,7 @@ describe('TradeForm — auto-save', () => {
   });
 
   it('clears draft on successful submit', () => {
-    localStorage.setItem(
-      'stellar_escrow_trade_form_draft',
-      JSON.stringify({ seller: VALID_SELLER, buyer: VALID_BUYER, amount: '10', arbitrator: '' })
-    );
-
-    render(<TradeForm onSubmit={jest.fn()} />);
+    render(<TradeForm onSubmit={jest.fn()} disableAutoSave />);
 
     fireEvent.change(screen.getByLabelText('Seller Address'), { target: { value: VALID_SELLER } });
     fireEvent.change(screen.getByLabelText('Buyer Address'),  { target: { value: VALID_BUYER } });
@@ -190,7 +211,9 @@ describe('TradeForm — auto-save', () => {
   it('does not save when disableAutoSave is true', () => {
     render(<TradeForm onSubmit={jest.fn()} disableAutoSave />);
     fireEvent.change(screen.getByLabelText('Seller Address'), { target: { value: VALID_SELLER } });
-    act(() => { jest.advanceTimersByTime(1000); });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
     expect(localStorage.getItem('stellar_escrow_trade_form_draft')).toBeNull();
   });
 });
