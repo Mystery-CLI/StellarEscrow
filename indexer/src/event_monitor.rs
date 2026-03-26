@@ -11,6 +11,7 @@ use crate::config::StellarConfig;
 use crate::database::Database;
 use crate::error::AppError;
 use crate::fraud_service::FraudDetectionService;
+use crate::job_queue::{JobQueue, types::{Job, JobType}};
 use crate::models::{Event, WebSocketMessage};
 use crate::websocket::WebSocketManager;
 
@@ -62,6 +63,7 @@ pub struct EventMonitor {
     fraud_service: Arc<FraudDetectionService>,
     notification_service: Arc<crate::notification_service::NotificationService>,
     integration_service: Arc<crate::integration_service::IntegrationService>,
+    job_queue: Arc<tokio::sync::Mutex<JobQueue>>,
 }
 
 impl EventMonitor {
@@ -72,6 +74,7 @@ impl EventMonitor {
         fraud_service: Arc<FraudDetectionService>,
         notification_service: Arc<crate::notification_service::NotificationService>,
         integration_service: Arc<crate::integration_service::IntegrationService>,
+        job_queue: Arc<tokio::sync::Mutex<JobQueue>>,
     ) -> Self {
         Self {
             config: config.clone(),
@@ -80,6 +83,7 @@ impl EventMonitor {
             fraud_service,
             notification_service,
             integration_service,
+            job_queue,
             client: Client::new(),
             last_ledger: config.start_ledger.map(|l| l as i64),
         }
@@ -176,11 +180,21 @@ impl EventMonitor {
                     }
                 }
 
-                // Dispatch notifications to trade parties
-                self.notification_service.process_event(&event).await;
-
-                // Forward event to registered third-party integrations
-                self.integration_service.process_event(&event).await;
+                // Enqueue background job for event processing
+                let job = Job {
+                    job_type: JobType::Event,
+                    event_id: event.id.to_string(),
+                    trade_id: event.data.get("trade_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    payload: event.data.clone(),
+                };
+                
+                let mut queue = self.job_queue.lock().await;
+                if let Err(e) = queue.enqueue(job).await {
+                    error!("Failed to enqueue job: {}", e);
+                }
             }
         }
 
