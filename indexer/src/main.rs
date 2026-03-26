@@ -9,7 +9,6 @@ use axum::{
     Router,
 };
 use clap::Parser;
-use sqlx::PgPool;
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tracing::{info, warn};
@@ -43,9 +42,8 @@ use event_monitor::EventMonitor;
 use auth::auth_middleware;
 use gateway::{GatewayConfig, GatewayState};
 use handlers::{AppState, *};
-use health::{alerts, liveness, metrics, readiness, status_page, HealthMonitor, HealthState};
+use health::{liveness, HealthMonitor, HealthState};
 use file_handlers::{delete_file, download_file, list_files, upload_file};
-use handlers::*;
 use rate_limit::RateLimiter;
 use rate_limit_handlers::*;
 use storage::StorageService;

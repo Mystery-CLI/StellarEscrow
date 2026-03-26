@@ -76,10 +76,9 @@ impl Database {
     pub async fn get_events(&self, query: &EventQuery) -> Result<Vec<Event>, AppError> {
         let mut sql = "SELECT id, event_type, contract_id, ledger, transaction_hash, timestamp, data, created_at FROM events WHERE 1=1".to_string();
         let mut owned: Vec<String> = vec![];
-        let mut str_bindings: Vec<&str> = vec![];
 
         if let Some(event_type) = &query.event_type {
-            sql.push_str(&format!(" AND event_type = ${}", str_bindings.len() + 1));
+            sql.push_str(&format!(" AND event_type = ${}", owned.len() + 1));
             owned.push(event_type.clone());
         }
 

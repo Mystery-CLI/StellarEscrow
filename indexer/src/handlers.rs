@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     response::{Json, Response},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -18,7 +18,6 @@ use crate::models::{
     RetentionRequest, RetentionResponse, StatsResponse, SuggestionQuery, TradeSearchQuery,
     WebSocketMessage,
 };
-use crate::database::Database;
 use crate::websocket::WebSocketManager;
 
 /// Default page size — kept small for mobile clients.
@@ -445,8 +444,8 @@ pub async fn gateway_stats(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let stats = crate::gateway::get_gateway_stats(&state.gateway);
-    Ok(Json(serde_json::to_value(stats).map_err(|e| {
-        AppError::Internal(format!("Failed to serialize gateway stats: {}", e))
+    Ok(Json(serde_json::to_value(stats).map_err(|_| {
+        AppError::InternalServerError
     })?))
 }
 
