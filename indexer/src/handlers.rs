@@ -343,6 +343,7 @@ pub struct AppState {
     pub fraud_service: Arc<FraudDetectionService>,
     pub notification_service: Arc<crate::notification_service::NotificationService>,
     pub gateway: Arc<crate::gateway::GatewayState>,
+    pub performance_service: Arc<crate::performance_service::PerformanceService>,
 }
 
 // =============================================================================
@@ -445,4 +446,26 @@ pub async fn gateway_stats(
     Ok(Json(serde_json::to_value(stats).map_err(|e| {
         AppError::Internal(format!("Failed to serialize gateway stats: {}", e))
     })?))
+}
+
+// =============================================================================
+// Performance Monitoring Handlers
+// =============================================================================
+
+/// GET /performance/dashboard — full APM dashboard (routes, stats, alerts).
+pub async fn get_performance_dashboard(
+    State(state): State<AppState>,
+) -> Result<Json<crate::performance_service::PerformanceDashboard>, AppError> {
+    Ok(Json(state.performance_service.dashboard().await))
+}
+
+/// GET /performance/alerts — active performance alerts.
+pub async fn get_performance_alerts(
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let dashboard = state.performance_service.dashboard().await;
+    Json(serde_json::json!({
+        "active": dashboard.active_alerts,
+        "total": dashboard.active_alerts.len(),
+    }))
 }

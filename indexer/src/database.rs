@@ -876,4 +876,56 @@ impl Database {
         .await?;
         Ok(rows)
     }
+
+    // -----------------------------------------------------------------------
+    // Performance monitoring
+    // -----------------------------------------------------------------------
+
+    pub async fn insert_perf_sample(
+        &self,
+        route: &str,
+        method: &str,
+        status_code: u16,
+        duration_ms: u64,
+        is_error: bool,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            INSERT INTO performance_metrics (route, method, status_code, duration_ms, is_error)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+        )
+        .bind(route)
+        .bind(method)
+        .bind(status_code as i16)
+        .bind(duration_ms as i64)
+        .bind(is_error)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn insert_perf_alert(
+        &self,
+        rule_name: &str,
+        severity: &str,
+        message: &str,
+        threshold: f64,
+        observed: f64,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            INSERT INTO performance_alerts (rule_name, severity, message, threshold, observed)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+        )
+        .bind(rule_name)
+        .bind(severity)
+        .bind(message)
+        .bind(threshold)
+        .bind(observed)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }

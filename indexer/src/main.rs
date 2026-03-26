@@ -35,6 +35,7 @@ mod storage;
 mod websocket;
 mod fraud_service;
 mod notification_service;
+mod performance_service;
 
 #[cfg(test)]
 mod test;
@@ -57,6 +58,7 @@ use help::{
 };
 use fraud_service::FraudDetectionService;
 use notification_service::NotificationService;
+use performance_service::PerformanceService;
 
 #[derive(Parser)]
 #[command(name = "stellar-escrow-indexer")]
@@ -145,6 +147,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.notification.clone(),
     ));
 
+    // Initialize Performance Monitoring Service
+    let performance_service = Arc::new(PerformanceService::new(database.clone()));
+
     // Initialize event monitor
     let event_monitor = EventMonitor::new(
         config.stellar.clone(),
@@ -223,6 +228,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Notifications
         .route("/notifications/preferences/:address", get(get_notification_preferences).put(upsert_notification_preferences))
         .route("/notifications/log/:address", get(get_notification_log))
+        // Performance monitoring
+        .route("/performance/dashboard", get(get_performance_dashboard))
+        .route("/performance/alerts", get(get_performance_alerts))
         .route("/ws", get(ws_handler))
         .route("/help", get(help_index))
         .route("/help/faqs", get(get_faqs))
@@ -245,6 +253,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             fraud_service,
             notification_service,
             gateway: gateway_state.clone(),
+            performance_service,
         })
         // Apply gateway middleware for centralized routing and auth
         .layer(middleware::from_fn_with_state(gateway_state.clone(), gateway::gateway_middleware))
