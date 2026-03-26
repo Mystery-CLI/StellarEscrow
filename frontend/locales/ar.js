@@ -1,6 +1,7 @@
 export default {
   nav: {
     dashboard: 'لوحة التحكم',
+    tradeDashboard: 'صفقاتي',
     events: 'عرض الأحداث',
     search: 'بحث',
     disputes: 'النزاعات',

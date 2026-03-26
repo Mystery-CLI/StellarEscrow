@@ -1,6 +1,7 @@
 export default {
   nav: {
     dashboard: 'Panel de control',
+    tradeDashboard: 'Mis operaciones',
     events: 'Ver eventos',
     search: 'Buscar',
     disputes: 'Disputas',
