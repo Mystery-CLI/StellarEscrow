@@ -1,5 +1,6 @@
 #![no_std]
 
+mod analytics;
 mod amm;
 mod errors;
 mod events;
@@ -383,6 +384,7 @@ impl StellarEscrowContract {
         events::emit_trade_created(&env, trade_id, seller.clone(), buyer.clone(), amount);
         events::emit_compliance_passed(&env, trade_id, seller, buyer, amount);
         events::emit_trade_created(&env, trade_id, seller, buyer, amount, trade.currency);
+        analytics::on_trade_created(&env, amount);
         Ok(trade_id)
     }
 
@@ -406,10 +408,8 @@ impl StellarEscrowContract {
         trade.status = TradeStatus::Funded;
         save_trade(&env, trade_id, &trade);
         events::emit_trade_funded(&env, trade_id);
+        analytics::on_trade_funded(&env);
         Ok(())
-    }
-
-    /// Seller marks trade as completed
     pub fn complete_trade(env: Env, trade_id: u64) -> Result<(), ContractError> {
         require_initialized(&env)?;
         require_not_paused(&env)?;
@@ -452,10 +452,8 @@ impl StellarEscrowContract {
         tiers::record_volume(&env, &trade.seller, trade.amount)?;
         tiers::record_volume(&env, &trade.buyer, trade.amount)?;
         events::emit_trade_confirmed(&env, trade_id, payout, trade.fee);
+        analytics::on_trade_completed(&env, trade.fee);
         Ok(())
-    }
-
-    /// Raise a dispute
     pub fn raise_dispute(env: Env, trade_id: u64, caller: Address) -> Result<(), ContractError> {
         if !is_initialized(&env) {
             return Err(ContractError::NotInitialized);
@@ -489,10 +487,8 @@ impl StellarEscrowContract {
             save_arbitrator_reputation(&env, arb, &rep);
         }
         events::emit_dispute_raised(&env, trade_id, caller);
+        analytics::on_trade_disputed(&env);
         Ok(())
-    }
-
-    /// Resolve a dispute (arbitrator only).
     /// Use `DisputeResolution::Partial { buyer_bps }` for a split:
     /// `buyer_bps` is the buyer's share of the net payout in basis points (0–10000).
     pub fn resolve_dispute(
@@ -579,11 +575,14 @@ impl StellarEscrowContract {
         token_client.transfer(&env.current_contract_address(), &recipient, &(payout as i128));
         // Single read-modify-write for fees
         add_accumulated_fees(&env, trade.fee)?;
+        let resolution_code: u8 = match resolution {
+            DisputeResolution::ReleaseToBuyer => 0,
+            DisputeResolution::ReleaseToSeller => 1,
+            DisputeResolution::Partial { .. } => 2,
+        };
+        analytics::on_dispute_resolved(&env, &arbitrator, resolution_code);
         events::emit_dispute_resolved(&env, trade_id, resolution, recipient);
-        Ok(())
-    }
-
-    /// Submit a 1–5 star rating for the arbitrator of a resolved dispute.
+        Ok(()) for the arbitrator of a resolved dispute.
     /// Only the buyer or seller of the trade may rate, once each.
     pub fn rate_arbitrator(env: Env, trade_id: u64, rater: Address, stars: u32) -> Result<(), ContractError> {
         if !is_initialized(&env) {
@@ -633,10 +632,8 @@ impl StellarEscrowContract {
         trade.status = TradeStatus::Cancelled;
         save_trade(&env, trade_id, &trade);
         events::emit_trade_cancelled(&env, trade_id);
-        Ok(())
-    }
-
-    /// Claim a time-locked release: anyone can call this once the expiry has
+        analytics::on_trade_cancelled(&env);
+        Ok(()): anyone can call this once the expiry has
     /// passed and the trade is Funded or Completed (not Disputed/Cancelled).
     /// Funds are released to the seller minus the platform fee.
     pub fn claim_time_release(env: Env, trade_id: u64) -> Result<(), ContractError> {
@@ -1480,6 +1477,22 @@ impl StellarEscrowContract {
     }
 
     // -----------------------------------------------------------------------
+    // Analytics
+    // -----------------------------------------------------------------------
+
+    /// Return raw on-chain platform metrics (volume, trade counts, fees).
+    pub fn get_platform_metrics(env: Env) -> analytics::PlatformMetrics {
+        analytics::get_metrics(&env)
+    }
+
+    /// Return derived platform statistics: success rate, dispute rate, active trades.
+    pub fn get_platform_stats(env: Env) -> analytics::PlatformStats {
+        analytics::get_stats(&env)
+    }
+
+    /// Return performance metrics for a specific arbitrator.
+    pub fn get_arbitrator_analytics(env: Env, arbitrator: Address) -> analytics::ArbitratorMetrics {
+        analytics::get_arb_metrics(&env, &arbitrator)
     // AMM — Automated Market Making
     // -----------------------------------------------------------------------
 
