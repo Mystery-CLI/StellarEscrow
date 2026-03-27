@@ -13,6 +13,7 @@
     "components",
     "api",
     "state",
-    "security"
+    "security",
+    "tests"
   ]
 }
