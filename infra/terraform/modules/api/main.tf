@@ -228,13 +228,11 @@ resource "aws_ecs_service" "api" {
 
   network_configuration {
     subnets          = var.private_subnet_ids
-    security_groups  = [var.ecs_security_group_id]
     security_groups  = [aws_security_group.api.id]
     assign_public_ip = false
   }
 
   load_balancer {
-    target_group_arn = var.api_target_group_arn
     target_group_arn = aws_lb_target_group.api.arn
     container_name   = "api"
     container_port   = var.container_port

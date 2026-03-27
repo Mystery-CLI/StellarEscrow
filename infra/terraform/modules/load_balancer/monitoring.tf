@@ -119,7 +119,10 @@ resource "aws_cloudwatch_dashboard" "lb" {
     widgets = [
       {
         type   = "metric"
-        x = 0; y = 0; width = 12; height = 6
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
         properties = {
           title  = "Request Count"
           region = "us-east-1"
@@ -133,7 +136,10 @@ resource "aws_cloudwatch_dashboard" "lb" {
       },
       {
         type   = "metric"
-        x = 12; y = 0; width = 12; height = 6
+        x      = 12
+        y      = 0
+        width  = 12
+        height = 6
         properties = {
           title  = "HTTP Error Rates"
           region = "us-east-1"
@@ -150,7 +156,10 @@ resource "aws_cloudwatch_dashboard" "lb" {
       },
       {
         type   = "metric"
-        x = 0; y = 6; width = 12; height = 6
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
         properties = {
           title  = "Target Response Time (p50 / p99)"
           region = "us-east-1"
@@ -167,7 +176,10 @@ resource "aws_cloudwatch_dashboard" "lb" {
       },
       {
         type   = "metric"
-        x = 12; y = 6; width = 12; height = 6
+        x      = 12
+        y      = 6
+        width  = 12
+        height = 6
         properties = {
           title  = "Healthy / Unhealthy Hosts"
           region = "us-east-1"
@@ -186,7 +198,10 @@ resource "aws_cloudwatch_dashboard" "lb" {
       },
       {
         type   = "metric"
-        x = 0; y = 12; width = 12; height = 6
+        x      = 0
+        y      = 12
+        width  = 12
+        height = 6
         properties = {
           title  = "ECS CPU Utilisation"
           region = "us-east-1"
@@ -207,7 +222,10 @@ resource "aws_cloudwatch_dashboard" "lb" {
       },
       {
         type   = "metric"
-        x = 12; y = 12; width = 12; height = 6
+        x      = 12
+        y      = 12
+        width  = 12
+        height = 6
         properties = {
           title  = "ECS Task Count"
           region = "us-east-1"
