@@ -22,7 +22,61 @@ pub struct Config {
     pub cache: CacheConfig,
     pub gateway: GatewayConfig,
     pub integration: IntegrationConfig,
+    #[serde(default)]
+    pub compliance: ComplianceConfig,
+    #[serde(default)]
+    pub monitoring: MonitoringConfig,
 }
+
+// ---------------------------------------------------------------------------
+// Compliance config (inlined to avoid circular module deps)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ComplianceConfig {
+    #[serde(default)]
+    pub kyc_provider_url: String,
+    #[serde(default)]
+    pub kyc_api_key: String,
+    #[serde(default)]
+    pub aml_provider_url: String,
+    #[serde(default)]
+    pub aml_api_key: String,
+    #[serde(default = "default_kyc_level")]
+    pub required_kyc_level: u8,
+    #[serde(default = "default_aml_threshold")]
+    pub aml_risk_threshold: u8,
+    #[serde(default)]
+    pub blocked_jurisdictions: Vec<String>,
+    #[serde(default)]
+    pub reporting_webhook_url: String,
+}
+
+fn default_kyc_level() -> u8 { 1 }
+fn default_aml_threshold() -> u8 { 70 }
+
+// ---------------------------------------------------------------------------
+// Monitoring config (inlined to avoid circular module deps)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MonitoringConfig {
+    #[serde(default = "default_metrics_port")]
+    pub metrics_port: u16,
+    #[serde(default)]
+    pub alert_webhook_url: String,
+    #[serde(default)]
+    pub grafana_url: String,
+    #[serde(default)]
+    pub log_aggregation_url: String,
+    #[serde(default)]
+    pub incident_webhook_url: String,
+    #[serde(default = "default_eval_interval")]
+    pub alert_eval_interval_secs: u64,
+}
+
+fn default_metrics_port() -> u16 { 9090 }
+fn default_eval_interval() -> u64 { 30 }
 
 /// Metadata section — version tracking for the config itself.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

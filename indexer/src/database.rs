@@ -1101,3 +1101,157 @@ impl Database {
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 }
+
+// =============================================================================
+// Compliance Operations
+// =============================================================================
+
+impl Database {
+    pub async fn insert_compliance_check(
+        &self,
+        check: &crate::compliance_service::ComplianceCheck,
+    ) -> Result<(), AppError> {
+        let kyc_json = serde_json::to_value(&check.kyc_result).unwrap_or_default();
+        let aml_json = serde_json::to_value(&check.aml_result).unwrap_or_default();
+        let status = format!("{:?}", check.status).to_lowercase();
+
+        sqlx::query(
+            r#"
+            INSERT INTO compliance_checks
+                (id, address, trade_id, kyc_result, aml_result, status, risk_score, notes, checked_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(check.id)
+        .bind(&check.address)
+        .bind(check.trade_id.map(|id| id as i64))
+        .bind(&kyc_json)
+        .bind(&aml_json)
+        .bind(&status)
+        .bind(check.risk_score as i32)
+        .bind(&check.notes)
+        .bind(check.checked_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_latest_compliance_check(
+        &self,
+        address: &str,
+    ) -> Result<Option<crate::compliance_service::ComplianceCheck>, AppError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, address, trade_id, kyc_result, aml_result, status, risk_score,
+                   notes, checked_at, reviewed_by, reviewed_at
+            FROM compliance_checks
+            WHERE address = $1
+            ORDER BY checked_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(address)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|r| self.row_to_compliance_check(&r)))
+    }
+
+    pub async fn get_compliance_checks_in_range(
+        &self,
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<crate::compliance_service::ComplianceCheck>, AppError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, address, trade_id, kyc_result, aml_result, status, risk_score,
+                   notes, checked_at, reviewed_by, reviewed_at
+            FROM compliance_checks
+            WHERE checked_at >= $1 AND checked_at <= $2
+            ORDER BY checked_at DESC
+            "#,
+        )
+        .bind(from)
+        .bind(to)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.iter().map(|r| self.row_to_compliance_check(r)).collect())
+    }
+
+    pub async fn update_compliance_review(
+        &self,
+        check_id: uuid::Uuid,
+        status: &crate::compliance_service::ComplianceStatus,
+        reviewer: &str,
+        notes: &str,
+    ) -> Result<(), anyhow::Error> {
+        let status_str = format!("{:?}", status).to_lowercase();
+        sqlx::query(
+            r#"
+            UPDATE compliance_checks
+            SET status = $1, reviewed_by = $2, notes = $3, reviewed_at = NOW()
+            WHERE id = $4
+            "#,
+        )
+        .bind(&status_str)
+        .bind(reviewer)
+        .bind(notes)
+        .bind(check_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    fn row_to_compliance_check(
+        &self,
+        row: &sqlx::postgres::PgRow,
+    ) -> crate::compliance_service::ComplianceCheck {
+        use sqlx::Row;
+        let kyc_json: serde_json::Value = row.get("kyc_result");
+        let aml_json: serde_json::Value = row.get("aml_result");
+        let status_str: String = row.get("status");
+
+        let status = match status_str.as_str() {
+            "approved" => crate::compliance_service::ComplianceStatus::Approved,
+            "rejected" => crate::compliance_service::ComplianceStatus::Rejected,
+            "blocked" => crate::compliance_service::ComplianceStatus::Blocked,
+            "requires_review" => crate::compliance_service::ComplianceStatus::RequiresReview,
+            _ => crate::compliance_service::ComplianceStatus::Pending,
+        };
+
+        crate::compliance_service::ComplianceCheck {
+            id: row.get("id"),
+            address: row.get("address"),
+            trade_id: row.get::<Option<i64>, _>("trade_id").map(|v| v as u64),
+            kyc_result: serde_json::from_value(kyc_json).unwrap_or_else(|_| {
+                crate::compliance_service::kyc::KycResult {
+                    status: crate::compliance_service::kyc::KycStatus::Unverified,
+                    level: 0,
+                    provider: "unknown".to_string(),
+                    reference_id: None,
+                    jurisdiction: None,
+                    failure_reason: None,
+                }
+            }),
+            aml_result: serde_json::from_value(aml_json).unwrap_or_else(|_| {
+                crate::compliance_service::aml::AmlResult {
+                    risk_score: 0,
+                    is_blocked: false,
+                    sanctions_matches: vec![],
+                    exposure_categories: vec![],
+                    provider: "unknown".to_string(),
+                    reference_id: None,
+                }
+            }),
+            status,
+            risk_score: row.get::<i32, _>("risk_score") as u8,
+            notes: row.get("notes"),
+            checked_at: row.get("checked_at"),
+            reviewed_by: row.get("reviewed_by"),
+            reviewed_at: row.get("reviewed_at"),
+        }
+    }
+}

@@ -58,3 +58,21 @@ api_base_url = "/api"
 ws_reconnect_delay_ms = 3000
 max_events_in_feed = 100
 search_debounce_delay_ms = 300
+
+[compliance]
+kyc_provider_url = ""
+kyc_api_key = ""
+aml_provider_url = ""
+aml_api_key = ""
+required_kyc_level = 1
+aml_risk_threshold = 70
+blocked_jurisdictions = []
+reporting_webhook_url = ""
+
+[monitoring]
+metrics_port = 9090
+alert_webhook_url = ""
+grafana_url = ""
+log_aggregation_url = ""
+incident_webhook_url = ""
+alert_eval_interval_secs = 30
