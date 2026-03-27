@@ -6,8 +6,9 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "jest",
-    "test:coverage": "jest --coverage"
+    "test": "jest --runInBand",
+    "test:coverage": "jest --coverage --runInBand",
+    "test:security": "jest --runInBand security.assessment.test.ts"
   },
   "dependencies": {
     "dompurify": "^3.0.6",

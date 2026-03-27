@@ -9,6 +9,7 @@ export const setupCSP = (): void => {
     img-src 'self' data: https:;
     connect-src 'self' https://api.stellar.org https://horizon.stellar.org;
     frame-ancestors 'none';
+    object-src 'none';
     base-uri 'self';
     form-action 'self';
     upgrade-insecure-requests;
@@ -17,32 +18,30 @@ export const setupCSP = (): void => {
 };
 
 export const setupSecurityHeaders = (): void => {
-  // X-Content-Type-Options
   const xContentType = document.createElement('meta');
-  xContentType.httpEquiv = 'X-UA-Compatible';
-  xContentType.content = 'ie=edge';
+  xContentType.httpEquiv = 'X-Content-Type-Options';
+  xContentType.content = 'nosniff';
   document.head.appendChild(xContentType);
 
-  // X-Frame-Options via CSP frame-ancestors
-  // Already handled in setupCSP
+  const xFrameOptions = document.createElement('meta');
+  xFrameOptions.httpEquiv = 'X-Frame-Options';
+  xFrameOptions.content = 'DENY';
+  document.head.appendChild(xFrameOptions);
 
-  // Referrer-Policy
   const referrer = document.createElement('meta');
-  referrer.name = 'referrer';
+  referrer.httpEquiv = 'Referrer-Policy';
   referrer.content = 'strict-origin-when-cross-origin';
   document.head.appendChild(referrer);
 
-  // Permissions-Policy
   const permissions = document.createElement('meta');
   permissions.httpEquiv = 'Permissions-Policy';
   permissions.content = 'geolocation=(), microphone=(), camera=()';
   document.head.appendChild(permissions);
 
-  // upgrade-insecure-requests (HSTS equivalent at meta level)
-  const upgradeInsecure = document.createElement('meta');
-  upgradeInsecure.httpEquiv = 'Content-Security-Policy';
-  upgradeInsecure.content = 'upgrade-insecure-requests';
-  document.head.appendChild(upgradeInsecure);
+  const crossOriginOpener = document.createElement('meta');
+  crossOriginOpener.httpEquiv = 'Cross-Origin-Opener-Policy';
+  crossOriginOpener.content = 'same-origin';
+  document.head.appendChild(crossOriginOpener);
 };
 
 export const setupXSSProtection = (): void => {

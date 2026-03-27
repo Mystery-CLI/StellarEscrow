@@ -39,6 +39,13 @@ Comprehensive security utilities for XSS protection, CSP, secure storage, and in
 - Referrer-Policy
 - Permissions-Policy
 
+### ✅ Security Testing
+- Penetration testing scenarios
+- Vulnerability scanning
+- Compliance control checks
+- Security event monitoring
+- Assessment summaries with severity breakdowns
+
 ## Usage
 
 ### Initialize Security
@@ -100,6 +107,24 @@ if (limiter.isAllowed('user-id')) {
 }
 ```
 
+### Security Assessment
+```tsx
+import { runSecurityAssessment, SecurityMonitor } from '@stellar-escrow/security';
+
+const monitor = new SecurityMonitor({ endpoint: '/api/security/alerts' });
+
+const result = runSecurityAssessment(
+  {
+    endpoints: ['https://api.stellar.org'],
+    encryptionKey: process.env.REACT_APP_ENCRYPTION_KEY,
+    monitoring: { enabled: true, endpoint: '/api/security/alerts' },
+  },
+  monitor
+);
+
+console.log(result.overallPassed, result.totals, monitor.getAlerts());
+```
+
 ## Security Measures
 
 ### CSP Configuration
@@ -156,6 +181,16 @@ Tests cover:
 - CSRF token generation
 - Rate limiting
 - Input validation
+- Penetration scenarios for XSS, CSRF, brute force, and storage confidentiality
+- Vulnerability scans for CSP, transport security, header coverage, and key hygiene
+- Compliance checks for OWASP, PCI-style transport controls, and monitoring readiness
+- Security monitoring and beacon-based alert reporting
+
+### Run The Security Suite
+
+```bash
+npm run test:security --workspace=security
+```
 
 ## Best Practices
 

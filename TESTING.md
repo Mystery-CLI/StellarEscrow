@@ -10,6 +10,7 @@ This project uses a three-tier testing strategy:
 | Integration | Jest + React Testing Library / MSW | `components/src/**/*.test.tsx`, `api/src/**/*.integration.test.ts` | Component and API behaviour |
 | Contract | Jest + runtime validators | `api/src/**/*.contract.test.ts` | Endpoint method/path/shape guarantees |
 | Load | Jest + concurrent request harness | `api/src/**/*.load.test.ts` | API concurrency smoke coverage |
+| Security | Jest + scenario harness | `security/src/security.assessment.test.ts` | Penetration tests, vulnerability scans, compliance, monitoring |
 | E2E | Cypress | `components/cypress/e2e/` | Full user flows |
 
 ## Running Tests
@@ -26,6 +27,10 @@ npm run test:integration --workspace=api
 npm run test:contract --workspace=api
 npm run test:load --workspace=api
 npm run test:docs --workspace=api
+
+# Security assessment suite
+npm run test:security
+npm run test:security --workspace=security
 
 # E2E tests (requires app running on localhost:3000)
 npm run test:e2e
@@ -98,6 +103,7 @@ it('creates a new trade', () => {
 - Form validation and submission
 - Redux slice reducers and selectors
 - Security utilities (sanitization, validation)
+- Security attack scenarios, compliance controls, vulnerability baselines, and monitoring alerts
 
 **Don't test:**
 - Third-party library internals

@@ -1,7 +1,7 @@
-import { sanitizeHtml, sanitizeInput, escapeHtml, validateEmail, validateAddress } from '../sanitization';
-import { secureStorage } from '../storage';
-import { XSSProtection, CSRFProtection } from '../xss';
-import { RateLimiter, InputValidator } from '../validation';
+import { sanitizeHtml, sanitizeInput, escapeHtml, validateEmail, validateAddress } from './sanitization';
+import { secureStorage } from './storage';
+import { XSSProtection, CSRFProtection } from './xss';
+import { RateLimiter, InputValidator } from './validation';
 
 describe('Security', () => {
   it('should sanitize HTML', () => {

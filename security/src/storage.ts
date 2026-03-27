@@ -1,13 +1,18 @@
 import CryptoJS from 'crypto-js';
 
-const ENCRYPTION_KEY = process.env.REACT_APP_ENCRYPTION_KEY || 'default-key-change-in-production';
+const DEFAULT_ENCRYPTION_KEY = 'default-key-change-in-production';
+
+const resolveEncryptionKey = (): string => {
+  const maybeProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return maybeProcess?.env?.REACT_APP_ENCRYPTION_KEY || DEFAULT_ENCRYPTION_KEY;
+};
 
 export const encryptData = (data: string): string => {
-  return CryptoJS.AES.encrypt(data, ENCRYPTION_KEY).toString();
+  return CryptoJS.AES.encrypt(data, resolveEncryptionKey()).toString();
 };
 
 export const decryptData = (encrypted: string): string => {
-  const bytes = CryptoJS.AES.decrypt(encrypted, ENCRYPTION_KEY);
+  const bytes = CryptoJS.AES.decrypt(encrypted, resolveEncryptionKey());
   return bytes.toString(CryptoJS.enc.Utf8);
 };
 

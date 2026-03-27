@@ -4,3 +4,7 @@ export * from './headers';
 export * from './xss';
 export * from './validation';
 export * from './ssl';
+export * from './types';
+export * from './monitoring';
+export * from './scenarios';
+export * from './assessment';
