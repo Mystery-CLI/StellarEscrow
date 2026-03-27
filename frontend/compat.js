@@ -191,6 +191,80 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Browser-specific fixes
+  // ---------------------------------------------------------------------------
+
+  // Safari: passive touch-event listeners to avoid scroll-blocking warnings
+  // and fix 300ms tap delay on older iOS Safari (< 13).
+  var isSafari = browser.name === 'Safari';
+  var isMobileSafari = /iPhone|iPad|iPod/.test(ua);
+  if (isSafari || isMobileSafari) {
+    // Ensure touch-action is set so iOS Safari doesn't delay click events
+    var safariStyle = document.createElement('style');
+    safariStyle.textContent = 'a,button,[role="button"]{touch-action:manipulation}';
+    document.head.appendChild(safariStyle);
+  }
+
+  // iOS Safari: prevent elastic over-scroll on fixed elements (common layout bug)
+  if (isMobileSafari) {
+    document.addEventListener('touchmove', function (e) {
+      var target = e.target;
+      if (target && target.closest && target.closest('.modal, .wallet-menu, .wallet-dropdown')) {
+        e.stopPropagation();
+      }
+    }, { passive: true });
+  }
+
+  // Firefox: :focus-visible polyfill — add .focus-visible class via JS when
+  // keyboard navigation is detected (Firefox < 85 lacks :focus-visible support).
+  var firefoxMajor = browser.name === 'Firefox' ? parseInt((browser.version || '0').split('.')[0], 10) : 999;
+  if (firefoxMajor < 85) {
+    var usingKeyboard = false;
+    document.addEventListener('keydown', function () { usingKeyboard = true; }, true);
+    document.addEventListener('mousedown', function () { usingKeyboard = false; }, true);
+    document.addEventListener('focusin', function (e) {
+      if (usingKeyboard && e.target && e.target.classList) {
+        e.target.classList.add('focus-visible');
+      }
+    }, true);
+    document.addEventListener('focusout', function (e) {
+      if (e.target && e.target.classList) {
+        e.target.classList.remove('focus-visible');
+      }
+    }, true);
+  }
+
+  // Safari / WebKit: smooth-scroll polyfill for anchor navigation
+  // (Safari < 15.4 does not support CSS scroll-behavior: smooth natively)
+  var safariMajor = isSafari ? parseInt((browser.version || '0').split('.')[0], 10) : 999;
+  if (safariMajor < 15) {
+    document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
+      anchor.addEventListener('click', function (e) {
+        var href = anchor.getAttribute('href');
+        if (!href || href === '#') return;
+        var target = document.querySelector(href);
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Update focus for accessibility
+          if (!target.hasAttribute('tabindex')) {
+            target.setAttribute('tabindex', '-1');
+          }
+          target.focus({ preventScroll: true });
+        }
+      });
+    });
+  }
+
+  // Edge (Chromium) / Chrome: ensure dialog element is supported, add basic
+  // polyfill for <dialog> if missing (used by some modal patterns).
+  if (typeof HTMLDialogElement === 'undefined') {
+    var dialogStyle = document.createElement('style');
+    dialogStyle.textContent = 'dialog{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;background:#fff;padding:1em;border:1px solid #ccc}dialog[open]{display:block}';
+    document.head.appendChild(dialogStyle);
+  }
+
+  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
   window.StellarCompat = {
@@ -198,6 +272,13 @@
     features:    features,
     isSupported: isSupported,
     isIE:        isIE,
+    fixes: {
+      safariTouchAction:    isSafari || isMobileSafari,
+      iosTouchMove:         isMobileSafari,
+      firefoxFocusVisible:  firefoxMajor < 85,
+      safariSmoothScroll:   safariMajor < 15,
+      dialogPolyfill:       typeof HTMLDialogElement === 'undefined',
+    },
   };
 
 })();

@@ -115,6 +115,54 @@ describe('Polyfills', () => {
   });
 });
 
+describe('Browser-specific fixes', () => {
+  test('StellarCompat.fixes object is exposed', () => {
+    loadCompat();
+    expect(typeof window.StellarCompat.fixes).toBe('object');
+  });
+
+  test('fixes.safariTouchAction is a boolean', () => {
+    loadCompat();
+    expect(typeof window.StellarCompat.fixes.safariTouchAction).toBe('boolean');
+  });
+
+  test('fixes.firefoxFocusVisible is a boolean', () => {
+    loadCompat();
+    expect(typeof window.StellarCompat.fixes.firefoxFocusVisible).toBe('boolean');
+  });
+
+  test('fixes.safariSmoothScroll is a boolean', () => {
+    loadCompat();
+    expect(typeof window.StellarCompat.fixes.safariSmoothScroll).toBe('boolean');
+  });
+
+  test('fixes.dialogPolyfill is a boolean', () => {
+    loadCompat();
+    expect(typeof window.StellarCompat.fixes.dialogPolyfill).toBe('boolean');
+  });
+
+  test('dialog polyfill style injected when HTMLDialogElement is missing', () => {
+    const orig = global.HTMLDialogElement;
+    delete global.HTMLDialogElement;
+    loadCompat();
+    const styles = Array.from(document.head.querySelectorAll('style'));
+    const hasDialogStyle = styles.some(s => s.textContent && s.textContent.includes('dialog'));
+    expect(hasDialogStyle).toBe(true);
+    if (orig !== undefined) global.HTMLDialogElement = orig;
+  });
+
+  test('Safari touch-action style injected for Safari UA', () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
+      configurable: true,
+    });
+    loadCompat();
+    const styles = Array.from(document.head.querySelectorAll('style'));
+    const hasTouchStyle = styles.some(s => s.textContent && s.textContent.includes('touch-action'));
+    expect(hasTouchStyle).toBe(true);
+  });
+});
+
 describe('Compatibility warnings', () => {
   test('shows IE warning for IE user agent', () => {
     Object.defineProperty(navigator, 'userAgent', {

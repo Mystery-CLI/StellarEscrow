@@ -492,3 +492,128 @@ fn test_claim_capped_at_coverage() {
     let seller_after = token::Client::new(&env, &token_addr).balance(&seller);
     assert_eq!(seller_after - seller_before, 50_000i128);
 }
+
+// ---------------------------------------------------------------------------
+// Analytics tests (#20)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_analytics_initial_state() {
+    let (_, _, _, _, _, _, client) = setup();
+    let result = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
+    let stats = result.all_time;
+    assert_eq!(stats.metrics.total_volume, 0);
+    assert_eq!(stats.metrics.trades_created, 0);
+    assert_eq!(stats.success_rate_bps, 0);
+    assert_eq!(stats.dispute_rate_bps, 0);
+    assert_eq!(result.unique_addresses, 0);
+}
+
+#[test]
+fn test_analytics_volume_and_unique_addresses() {
+    let (env, token_addr, _, seller, buyer, _, client) = setup();
+    let amount = 1_000_000u64;
+
+    client.create_trade(&seller, &buyer, &amount, &None, &OptionalMetadata::None);
+
+    let result = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
+    assert_eq!(result.all_time.metrics.total_volume, amount);
+    assert_eq!(result.all_time.metrics.trades_created, 1);
+    // seller + buyer = 2 unique addresses
+    assert_eq!(result.unique_addresses, 2);
+
+    // second trade with same addresses — unique count must not grow
+    fund(&env, &token_addr, &buyer, &client.address, amount as i128);
+    client.create_trade(&seller, &buyer, &amount, &None, &OptionalMetadata::None);
+    let result2 = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
+    assert_eq!(result2.unique_addresses, 2);
+    assert_eq!(result2.all_time.metrics.total_volume, amount * 2);
+}
+
+#[test]
+fn test_analytics_success_rate() {
+    let (env, token_addr, _, seller, buyer, _, client) = setup();
+    let amount = 1_000_000u64;
+
+    // Complete one trade
+    let id = client.create_trade(&seller, &buyer, &amount, &None, &OptionalMetadata::None);
+    fund(&env, &token_addr, &buyer, &client.address, amount as i128);
+    client.fund_trade(&id);
+    client.complete_trade(&id);
+    client.confirm_receipt(&id);
+
+    let result = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
+    // 1 completed, 0 cancelled, 0 disputed → 100% = 10_000 bps
+    assert_eq!(result.all_time.success_rate_bps, 10_000);
+    assert_eq!(result.all_time.dispute_rate_bps, 0);
+}
+
+#[test]
+fn test_analytics_dispute_rate() {
+    let (env, token_addr, _, seller, buyer, arbitrator, client) = setup();
+    let amount = 1_000_000u64;
+    client.register_arbitrator(&arbitrator);
+
+    let id = client.create_trade(&seller, &buyer, &amount, &Some(arbitrator.clone()), &OptionalMetadata::None);
+    fund(&env, &token_addr, &buyer, &client.address, amount as i128);
+    client.fund_trade(&id);
+    client.raise_dispute(&id, &buyer);
+
+    let result = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
+    // 1 funded, 1 disputed → dispute rate = 10_000 bps (100%)
+    assert_eq!(result.all_time.dispute_rate_bps, 10_000);
+}
+
+#[test]
+fn test_analytics_mixed_success_rate() {
+    let (env, token_addr, _, seller, buyer, arbitrator, client) = setup();
+    let amount = 1_000_000u64;
+    client.register_arbitrator(&arbitrator);
+
+    // Trade 1: completed
+    let id1 = client.create_trade(&seller, &buyer, &amount, &None, &OptionalMetadata::None);
+    fund(&env, &token_addr, &buyer, &client.address, amount as i128);
+    client.fund_trade(&id1);
+    client.complete_trade(&id1);
+    client.confirm_receipt(&id1);
+
+    // Trade 2: disputed (counts as terminal)
+    let id2 = client.create_trade(&seller, &buyer, &amount, &Some(arbitrator.clone()), &OptionalMetadata::None);
+    fund(&env, &token_addr, &buyer, &client.address, amount as i128);
+    client.fund_trade(&id2);
+    client.raise_dispute(&id2, &buyer);
+
+    let result = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
+    // 1 completed / (1 completed + 1 disputed) = 5_000 bps (50%)
+    assert_eq!(result.all_time.success_rate_bps, 5_000);
+}
+
+#[test]
+fn test_analytics_window_metrics_track_trades() {
+    let (_, _, _, seller, buyer, _, client) = setup();
+    let amount = 500_000u64;
+
+    client.create_trade(&seller, &buyer, &amount, &None, &OptionalMetadata::None);
+
+    let result = client.analytics_query(&crate::analytics::TimeWindow::Last24h);
+    assert_eq!(result.window.trades_created, 1);
+    assert_eq!(result.window.volume, amount);
+}
+
+#[test]
+fn test_analytics_active_trades() {
+    let (env, token_addr, _, seller, buyer, _, client) = setup();
+    let amount = 1_000_000u64;
+
+    let id = client.create_trade(&seller, &buyer, &amount, &None, &OptionalMetadata::None);
+    let result = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
+    assert_eq!(result.all_time.active_trades, 1);
+
+    fund(&env, &token_addr, &buyer, &client.address, amount as i128);
+    client.fund_trade(&id);
+    client.complete_trade(&id);
+    client.confirm_receipt(&id);
+
+    let result2 = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
+    assert_eq!(result2.all_time.active_trades, 0);
+}

@@ -1,0 +1,158 @@
+name: UAT
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, production]
+      notify_webhook:
+        description: 'Slack/Teams webhook URL for results'
+        required: false
+        type: string
+
+concurrency:
+  group: uat-${{ github.ref }}
+  cancel-in-progress: false  # Never cancel UAT mid-run
+
+jobs:
+  uat:
+    name: UAT (${{ github.event.inputs.environment || 'staging' }})
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: stellar_escrow
+          POSTGRES_USER: indexer
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build indexer
+        run: cargo build --release -p stellar-escrow-indexer
+
+      - name: Run migrations
+        run: sqlx migrate run
+        working-directory: indexer
+        env:
+          DATABASE_URL: postgres://indexer:password@localhost:5432/stellar_escrow
+
+      - name: Start indexer
+        run: |
+          ./target/release/stellar-escrow-indexer --config indexer/config.toml &
+          echo $! > /tmp/indexer.pid
+          sleep 5
+        env:
+          DATABASE_URL: postgres://indexer:password@localhost:5432/stellar_escrow
+          RUST_LOG: warn
+
+      - name: Install UAT dependencies
+        run: npm ci
+        working-directory: testing/uat
+
+      - name: Run automated UAT
+        run: node scripts/run-automated-uat.js --env ${{ github.event.inputs.environment || 'staging' }}
+        working-directory: testing/uat
+        env:
+          UAT_BASE_URL: http://localhost:3000
+          UAT_ENV: ${{ github.event.inputs.environment || 'staging' }}
+          UAT_WEBHOOK: ${{ github.event.inputs.notify_webhook || secrets.UAT_WEBHOOK_URL }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
+      - name: Upload UAT reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uat-reports-${{ github.run_number }}
+          path: testing/uat/reports/
+          retention-days: 90
+
+      - name: Stop indexer
+        if: always()
+        run: kill $(cat /tmp/indexer.pid) || true
+
+  # ── Post UAT summary as PR comment ────────────────────────────────────────
+  comment-uat:
+    name: Comment UAT Results
+    runs-on: ubuntu-latest
+    needs: uat
+    if: github.event_name == 'pull_request' && always()
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: uat-reports-*
+          merge-multiple: true
+          path: reports/
+
+      - name: Post UAT summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summaryPath = 'reports/uat-summary.json';
+            if (!fs.existsSync(summaryPath)) return;
+
+            const s = JSON.parse(fs.readFileSync(summaryPath, 'utf-8'));
+            const icon = s.status === 'ACCEPTED' ? '✅' : '❌';
+
+            const acRows = Object.entries(s.acceptance_criteria || {})
+              .map(([ac, data]) => `| ${ac} | ${data.passed}/${data.total} | ${data.status === 'accepted' ? '✅' : '❌'} |`)
+              .join('\n');
+
+            const body = [
+              `### ${icon} UAT Results — ${s.status}`,
+              '',
+              `| Metric | Value |`,
+              `|--------|-------|`,
+              `| Total Scenarios | ${s.total} |`,
+              `| Passed | ${s.passed} |`,
+              `| Failed | ${s.failed} |`,
+              `| Pass Rate | ${s.pass_rate}% |`,
+              `| Environment | \`${s.environment}\` |`,
+              '',
+              acRows ? `**Acceptance Criteria:**\n| AC | Passed | Status |\n|---|---|---|\n${acRows}` : '',
+            ].filter(Boolean).join('\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

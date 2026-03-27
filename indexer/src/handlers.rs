@@ -8,10 +8,12 @@ use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::compliance_service::{ComplianceService, ComplianceStatus};
 use crate::database::Database;
 use crate::error::AppError;
 use crate::fraud_service::FraudDetectionService;
 use crate::health::HealthState;
+use crate::monitoring_service::{MonitoringService, dashboard};
 use crate::models::{
     AuditQuery, DiscoveryQuery, Event, EventQuery, EventStats, GlobalSearchQuery,
     GlobalSearchResponse, HistoryQuery, IndexerStatus, NewAuditLog, PagedResponse,
@@ -381,6 +383,8 @@ pub struct AppState {
     pub gateway: Arc<crate::gateway::GatewayState>,
     pub performance_service: Arc<crate::performance_service::PerformanceService>,
     pub integration_service: Arc<crate::integration_service::IntegrationService>,
+    pub compliance_service: Arc<ComplianceService>,
+    pub monitoring_service: Arc<MonitoringService>,
 }
 
 // =============================================================================
@@ -551,4 +555,121 @@ pub async fn get_performance_alerts(
         "active": dashboard.active_alerts,
         "total": dashboard.active_alerts.len(),
     }))
+}
+
+// =============================================================================
+// Compliance Handlers
+// =============================================================================
+
+#[derive(Deserialize)]
+pub struct ComplianceCheckQuery {
+    pub address: String,
+    pub trade_id: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct ComplianceReviewRequest {
+    pub check_id: Uuid,
+    pub status: String,
+    pub reviewer: String,
+    pub notes: String,
+}
+
+#[derive(Deserialize)]
+pub struct ComplianceReportQuery {
+    pub from: Option<chrono::DateTime<chrono::Utc>>,
+    pub to: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// POST /compliance/check — run KYC + AML check for an address.
+pub async fn run_compliance_check(
+    State(state): State<AppState>,
+    Json(payload): Json<ComplianceCheckQuery>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let check = state
+        .compliance_service
+        .check_address(&payload.address, payload.trade_id)
+        .await;
+    Ok(Json(serde_json::to_value(&check).unwrap_or_default()))
+}
+
+/// GET /compliance/status/:address — get latest compliance status for an address.
+pub async fn get_compliance_status(
+    Path(address): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    match state.compliance_service.get_address_status(&address).await {
+        Some(check) => Ok(Json(serde_json::to_value(&check).unwrap_or_default())),
+        None => Ok(Json(json!({ "status": "not_found", "address": address }))),
+    }
+}
+
+/// POST /compliance/review — manually review a compliance check.
+pub async fn review_compliance_check(
+    State(state): State<AppState>,
+    Json(payload): Json<ComplianceReviewRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let status = match payload.status.as_str() {
+        "approved" => ComplianceStatus::Approved,
+        "rejected" => ComplianceStatus::Rejected,
+        "blocked" => ComplianceStatus::Blocked,
+        _ => ComplianceStatus::RequiresReview,
+    };
+    state
+        .compliance_service
+        .review_check(payload.check_id, status, &payload.reviewer, &payload.notes)
+        .await
+        .map_err(|e| AppError::NotFound(e.to_string()))?;
+    Ok(Json(json!({ "status": "updated", "check_id": payload.check_id })))
+}
+
+/// GET /compliance/report — generate compliance report for a date range.
+pub async fn get_compliance_report(
+    Query(params): Query<ComplianceReportQuery>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let from = params.from.unwrap_or_else(|| {
+        chrono::Utc::now() - chrono::Duration::days(30)
+    });
+    let to = params.to.unwrap_or_else(chrono::Utc::now);
+    let report = state
+        .compliance_service
+        .generate_report(from, to)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+    Ok(Json(serde_json::to_value(&report).unwrap_or_default()))
+}
+
+// =============================================================================
+// Monitoring Handlers
+// =============================================================================
+
+/// GET /monitoring/dashboard — full monitoring dashboard snapshot.
+pub async fn get_monitoring_dashboard(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let snapshot = state.monitoring_service.get_snapshot().await;
+    let grafana_url = None; // populated from config in production
+    let dash = dashboard::build_dashboard(&snapshot, grafana_url);
+    Ok(Json(serde_json::to_value(&dash).unwrap_or_default()))
+}
+
+/// GET /monitoring/alerts — list active alerts.
+pub async fn get_monitoring_alerts(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let alerts = state.monitoring_service.get_active_alerts().await;
+    Ok(Json(serde_json::to_value(&alerts).unwrap_or_default()))
+}
+
+/// GET /monitoring/metrics — Prometheus-format metrics.
+pub async fn get_prometheus_metrics(
+    State(state): State<AppState>,
+) -> axum::response::Response<String> {
+    let body = state.monitoring_service.prometheus_metrics();
+    axum::response::Response::builder()
+        .status(200)
+        .header("Content-Type", "text/plain; version=0.0.4")
+        .body(body)
+        .unwrap()
 }

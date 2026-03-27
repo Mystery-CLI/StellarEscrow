@@ -154,10 +154,10 @@ impl MetricsCollector {
 // ─── Health Monitor ───────────────────────────────────────────────────────────
 
 pub struct HealthMonitor {
-    db_pool: PgPool,
+    pub db_pool: PgPool,
     horizon_url: String,
     http_client: Client,
-    started_at: Instant,
+    pub started_at: Instant,
     pub metrics: Arc<RwLock<MetricsCollector>>,
     pub alerts: Arc<RwLock<Vec<Alert>>>,
 }
@@ -647,4 +647,48 @@ pub async fn status_page(State(state): State<HealthState>) -> axum::response::Ht
     );
 
     axum::response::Html(html)
+}
+
+// ─── Environment Health Endpoint (/health) ───────────────────────────────────
+
+/// GET /health — returns NODE_ENV, uptime, and database connection status.
+///
+/// Response shape:
+/// ```json
+/// {
+///   "status": "ok" | "degraded",
+///   "node_env": "production",
+///   "uptime_seconds": 3600,
+///   "database": "connected" | "error: <msg>",
+///   "timestamp": "2026-03-26T15:00:00Z"
+/// }
+/// ```
+pub async fn env_health(
+    State(state): State<crate::handlers::AppState>,
+) -> (axum::http::StatusCode, Json<serde_json::Value>) {
+    let node_env = std::env::var("NODE_ENV").unwrap_or_else(|_| "development".to_string());
+    let uptime_seconds = state.health.monitor.started_at.elapsed().as_secs();
+
+    let (db_status, ok) = match sqlx::query("SELECT 1")
+        .execute(state.health.monitor.db_pool.as_ref())
+        .await
+    {
+        Ok(_) => ("connected".to_string(), true),
+        Err(e) => (format!("error: {e}"), false),
+    };
+
+    let status = if ok { "ok" } else { "degraded" };
+    let code = if ok {
+        axum::http::StatusCode::OK
+    } else {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    (code, Json(json!({
+        "status": status,
+        "node_env": node_env,
+        "uptime_seconds": uptime_seconds,
+        "database": db_status,
+        "timestamp": Utc::now(),
+    })))
 }

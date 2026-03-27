@@ -24,6 +24,9 @@ const initialEvents: Event[] = [
     data: {},
   },
 ];
+import { tradeHandlers } from './mocks/handlers/trades';
+import { eventHandlers } from './mocks/handlers/events';
+import { blockchainHandlers } from './mocks/handlers/blockchain';
 
 let mockTrades: Trade[] = [];
 let mockEvents: Event[] = [];
@@ -117,6 +120,7 @@ export const handlers = [
   rest.get(`${API_BASE_URL}/blockchain/tx/:txHash`, (req, res, ctx) => {
     return res(ctx.json({ status: 'confirmed', confirmed: true }));
   }),
+  ...tradeHandlers,
+  ...eventHandlers,
+  ...blockchainHandlers,
 ];
-
-export const server = setupServer(...handlers);

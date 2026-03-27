@@ -451,7 +451,7 @@ impl StellarEscrowContract {
         events::emit_trade_created(&env, trade_id, seller.clone(), buyer.clone(), amount);
         events::emit_compliance_passed(&env, trade_id, seller, buyer, amount);
         events::emit_trade_created(&env, trade_id, seller, buyer, amount, trade.currency);
-        analytics::on_trade_created(&env, amount);
+        analytics::on_trade_created(&env, amount, &trade.seller, &trade.buyer);
         Ok(trade_id)
     }
 
@@ -1632,6 +1632,16 @@ impl StellarEscrowContract {
     /// Return performance metrics for a specific arbitrator.
     pub fn get_arbitrator_analytics(env: Env, arbitrator: Address) -> analytics::ArbitratorMetrics {
         analytics::get_arb_metrics(&env, &arbitrator)
+    }
+
+    /// Unified analytics query: returns all-time stats, a time-windowed snapshot,
+    /// and the count of unique addresses that have interacted with the contract.
+    ///
+    /// `window` selects the time period: `Last24h`, `Last7d`, `Last30d`, or `AllTime`.
+    pub fn analytics_query(env: Env, window: analytics::TimeWindow) -> analytics::AnalyticsResult {
+        analytics::analytics_query(&env, window)
+    }
+
     // AMM — Automated Market Making
     // -----------------------------------------------------------------------
 

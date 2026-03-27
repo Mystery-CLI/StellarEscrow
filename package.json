@@ -9,12 +9,29 @@
     "test:e2e": "npm run test:e2e --workspace=components",
     "test:security": "npm run test --workspace=security",
     "test:performance": "npm run test:performance --workspace=api"
+    "test:security": "npm run test --workspace=security"
+    "test:browser": "playwright test",
+    "test:browser:ui": "playwright test --ui",
+    "test:browser:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.43.0",
+    "serve": "^14.2.3"
+    "test:regression": "npm run test:ci --workspace=testing/regression",
+    "test:regression:report": "npm run report --workspace=testing/regression",
+    "test:regression:analyze": "npm run analyze --workspace=testing/regression",
+    "test:uat": "npm run test:ci --workspace=testing/uat",
+    "test:uat:report": "npm run report --workspace=testing/uat",
+    "test:uat:automate": "npm run automate --workspace=testing/uat"
   },
   "workspaces": [
     "app",
     "components",
     "api",
     "state",
-    "security"
+    "security",
+    "testing/regression",
+    "testing/uat"
+    "tests"
   ]
 }

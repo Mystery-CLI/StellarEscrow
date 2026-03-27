@@ -39,6 +39,10 @@ Key funding flow:
 - `get_funding_preview(trade_id, buyer)` → FundingPreview (balance, allowance)
 - `execute_fund(trade_id, buyer, preview)` → transfers USDC, emits `funded`
 
+## Analytics
+
+Query on-chain trade metrics (volume, success rate, unique addresses, time windows) via `analytics_query`. See [docs/analytics.md](docs/analytics.md) for full details.
+
 ## Architecture
 ```
 - `contract/` → Soroban WASM contract

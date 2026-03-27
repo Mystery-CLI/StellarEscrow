@@ -3,5 +3,5 @@ module.exports = {
   roots: ['<rootDir>/tests'],
   testMatch: ['**/?(*.)+(spec|test).js'],
   setupFiles: ['jest-fetch-mock/setupJest'],
-  setupFilesAfterFramework: [],
+  setupFilesAfterEnv: [],
 };
