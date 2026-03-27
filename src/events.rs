@@ -112,6 +112,8 @@ pub fn emit_preset_saved(env: &Env, owner: Address, preset_id: u64) {
 
 pub fn emit_preset_deleted(env: &Env, owner: Address, preset_id: u64) {
     env.events().publish((symbol_short!("pst_del"),), (owner, preset_id));
+}
+
 pub fn emit_analytics_exported(env: &Env, export_type: u32) {
     env.events().publish((symbol_short!("anlt_exp"),), export_type);
 }
@@ -139,6 +141,8 @@ pub fn emit_onboarding_completed(env: &Env, user: Address) {
 pub fn emit_onboarding_exited(env: &Env, user: Address) {
     env.events()
         .publish((symbol_short!("ob_exit"),), user);
+}
+
 pub fn emit_avatar_updated(env: &Env, address: Address) {
     env.events()
         .publish((symbol_short!("avtr_up"),), address);

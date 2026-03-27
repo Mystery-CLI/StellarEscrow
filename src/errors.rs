@@ -30,4 +30,5 @@ pub enum ContractError {
     PresetNotFound = 24,
     PresetNameTooLong = 25,
     TooManyPresets = 26,
+    InsufficientAllowance = 27,
 }
