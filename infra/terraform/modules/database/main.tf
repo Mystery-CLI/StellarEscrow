@@ -70,7 +70,7 @@ resource "aws_db_parameter_group" "main" {
   # Query planner
   parameter {
     name  = "random_page_cost"
-    value = "1.1"   # SSD-optimised (RDS uses SSD)
+    value = "1.1" # SSD-optimised (RDS uses SSD)
   }
   parameter {
     name  = "effective_cache_size"
@@ -78,7 +78,7 @@ resource "aws_db_parameter_group" "main" {
   }
   parameter {
     name  = "shared_buffers"
-    value = "{DBInstanceClassMemory/32768}"  # ~25% of RAM in 8 kB pages
+    value = "{DBInstanceClassMemory/32768}" # ~25% of RAM in 8 kB pages
   }
 
   # Autovacuum — keep bloat low for a high-write escrow workload
@@ -94,7 +94,7 @@ resource "aws_db_parameter_group" "main" {
   # Logging — capture slow queries for analysis
   parameter {
     name  = "log_min_duration_statement"
-    value = "1000"   # ms — log queries taking > 1 s
+    value = "1000" # ms — log queries taking > 1 s
   }
   parameter {
     name  = "log_connections"
@@ -118,7 +118,7 @@ resource "aws_db_instance" "primary" {
   allocated_storage = var.allocated_storage_gb
   storage_type      = "gp3"
   storage_encrypted = true
-  iops              = 0   # gp3 baseline; set > 0 to provision IOPS
+  iops              = 0 # gp3 baseline; set > 0 to provision IOPS
 
   # Storage autoscaling — grows automatically up to max_allocated_storage_gb
   max_allocated_storage = var.max_allocated_storage_gb > 0 ? var.max_allocated_storage_gb : null
@@ -135,11 +135,11 @@ resource "aws_db_instance" "primary" {
   multi_az = var.multi_az
 
   # Automated backups
-  backup_retention_period   = var.backup_retention_days
-  backup_window             = var.backup_window
-  maintenance_window        = var.maintenance_window
-  copy_tags_to_snapshot     = true
-  delete_automated_backups  = false
+  backup_retention_period  = var.backup_retention_days
+  backup_window            = var.backup_window
+  maintenance_window       = var.maintenance_window
+  copy_tags_to_snapshot    = true
+  delete_automated_backups = false
 
   # Final snapshot on destroy (skipped only when deletion_protection is off)
   deletion_protection       = var.deletion_protection

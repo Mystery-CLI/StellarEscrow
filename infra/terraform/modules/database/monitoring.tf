@@ -25,7 +25,7 @@ resource "aws_cloudwatch_metric_alarm" "free_storage_low" {
   alarm_description   = "RDS free storage below ${var.free_storage_alarm_gb} GB"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 3
-  threshold           = var.free_storage_alarm_gb * 1073741824  # GB → bytes
+  threshold           = var.free_storage_alarm_gb * 1073741824 # GB → bytes
   treat_missing_data  = "notBreaching"
   namespace           = "AWS/RDS"
   metric_name         = "FreeStorageSpace"
@@ -57,7 +57,7 @@ resource "aws_cloudwatch_metric_alarm" "read_latency_high" {
   alarm_description   = "RDS read latency above 20ms for 5 minutes"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 5
-  threshold           = 0.02  # seconds
+  threshold           = 0.02 # seconds
   treat_missing_data  = "notBreaching"
   namespace           = "AWS/RDS"
   metric_name         = "ReadLatency"
@@ -117,15 +117,15 @@ resource "aws_cloudwatch_dashboard" "db" {
         width  = 12
         height = 6
         properties = {
-          title   = "CPU Utilisation"
-          region  = "us-east-1"
+          title  = "CPU Utilisation"
+          region = "us-east-1"
           metrics = [
             ["AWS/RDS", "CPUUtilization",
               "DBInstanceIdentifier", aws_db_instance.primary.identifier,
-              { stat = "Average", period = 60, label = "Primary CPU %" }]
+            { stat = "Average", period = 60, label = "Primary CPU %" }]
           ]
           annotations = { horizontal = [{ value = var.cpu_alarm_threshold, label = "Alarm threshold", color = "#d62728" }] }
-          view = "timeSeries"
+          view        = "timeSeries"
         }
       },
       {
@@ -135,15 +135,15 @@ resource "aws_cloudwatch_dashboard" "db" {
         width  = 12
         height = 6
         properties = {
-          title   = "Database Connections"
-          region  = "us-east-1"
+          title  = "Database Connections"
+          region = "us-east-1"
           metrics = [
             ["AWS/RDS", "DatabaseConnections",
               "DBInstanceIdentifier", aws_db_instance.primary.identifier,
-              { stat = "Average", period = 60, label = "Connections" }]
+            { stat = "Average", period = 60, label = "Connections" }]
           ]
           annotations = { horizontal = [{ value = var.connections_alarm, label = "Alarm threshold", color = "#d62728" }] }
-          view = "timeSeries"
+          view        = "timeSeries"
         }
       },
       {
@@ -153,10 +153,10 @@ resource "aws_cloudwatch_dashboard" "db" {
         width  = 12
         height = 6
         properties = {
-          title   = "Read / Write Latency"
-          region  = "us-east-1"
+          title  = "Read / Write Latency"
+          region = "us-east-1"
           metrics = [
-            ["AWS/RDS", "ReadLatency",  "DBInstanceIdentifier", aws_db_instance.primary.identifier, { stat = "Average", period = 60, label = "Read (s)" }],
+            ["AWS/RDS", "ReadLatency", "DBInstanceIdentifier", aws_db_instance.primary.identifier, { stat = "Average", period = 60, label = "Read (s)" }],
             ["AWS/RDS", "WriteLatency", "DBInstanceIdentifier", aws_db_instance.primary.identifier, { stat = "Average", period = 60, label = "Write (s)" }]
           ]
           view = "timeSeries"
@@ -169,12 +169,12 @@ resource "aws_cloudwatch_dashboard" "db" {
         width  = 12
         height = 6
         properties = {
-          title   = "Free Storage Space"
-          region  = "us-east-1"
+          title  = "Free Storage Space"
+          region = "us-east-1"
           metrics = [
             ["AWS/RDS", "FreeStorageSpace",
               "DBInstanceIdentifier", aws_db_instance.primary.identifier,
-              { stat = "Average", period = 300, label = "Free Storage (bytes)" }]
+            { stat = "Average", period = 300, label = "Free Storage (bytes)" }]
           ]
           view = "timeSeries"
         }
@@ -186,10 +186,10 @@ resource "aws_cloudwatch_dashboard" "db" {
         width  = 12
         height = 6
         properties = {
-          title   = "IOPS"
-          region  = "us-east-1"
+          title  = "IOPS"
+          region = "us-east-1"
           metrics = [
-            ["AWS/RDS", "ReadIOPS",  "DBInstanceIdentifier", aws_db_instance.primary.identifier, { stat = "Average", period = 60, label = "Read IOPS" }],
+            ["AWS/RDS", "ReadIOPS", "DBInstanceIdentifier", aws_db_instance.primary.identifier, { stat = "Average", period = 60, label = "Read IOPS" }],
             ["AWS/RDS", "WriteIOPS", "DBInstanceIdentifier", aws_db_instance.primary.identifier, { stat = "Average", period = 60, label = "Write IOPS" }]
           ]
           view = "timeSeries"
@@ -202,12 +202,12 @@ resource "aws_cloudwatch_dashboard" "db" {
         width  = 12
         height = 6
         properties = {
-          title   = "Freeable Memory"
-          region  = "us-east-1"
+          title  = "Freeable Memory"
+          region = "us-east-1"
           metrics = [
             ["AWS/RDS", "FreeableMemory",
               "DBInstanceIdentifier", aws_db_instance.primary.identifier,
-              { stat = "Average", period = 60, label = "Freeable Memory (bytes)" }]
+            { stat = "Average", period = 60, label = "Freeable Memory (bytes)" }]
           ]
           view = "timeSeries"
         }

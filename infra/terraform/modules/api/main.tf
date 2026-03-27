@@ -125,7 +125,6 @@ resource "aws_ecs_cluster" "main" {
 }
 
 # IAM role for ECS task execution (pull images, write logs, read secrets)
-# IAM role for ECS task execution
 resource "aws_iam_role" "ecs_task_execution" {
   name = "${var.name_prefix}-ecs-exec-role"
 
@@ -184,12 +183,9 @@ resource "aws_ecs_task_definition" "api" {
     }]
 
     environment = [
-      { name = "NODE_ENV",                             value = var.environment },
-      { name = "PORT",                                 value = tostring(var.container_port) },
-      { name = "STELLAR_ESCROW__STELLAR__NETWORK",     value = var.stellar_network },
-      { name = "NODE_ENV",                          value = var.environment },
-      { name = "PORT",                              value = tostring(var.container_port) },
-      { name = "STELLAR_ESCROW__STELLAR__NETWORK",  value = var.stellar_network },
+      { name = "NODE_ENV", value = var.environment },
+      { name = "PORT", value = tostring(var.container_port) },
+      { name = "STELLAR_ESCROW__STELLAR__NETWORK", value = var.stellar_network },
       { name = "STELLAR_ESCROW__STELLAR__CONTRACT_ID", value = var.stellar_contract_id },
       { name = "STELLAR_ESCROW__STELLAR__HORIZON_URL", value = var.stellar_horizon_url },
     ]
@@ -217,7 +213,6 @@ resource "aws_ecs_task_definition" "api" {
   }])
 }
 
-# ECS Service — security group and target group come from the load_balancer module
 # ECS Service
 resource "aws_ecs_service" "api" {
   name            = "${var.name_prefix}-api"
