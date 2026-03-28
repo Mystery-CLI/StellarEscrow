@@ -350,3 +350,26 @@ pub fn emit_upgrade_cancelled(env: &Env, cancelled_by: Address) {
 pub fn emit_upgrade_rolled_back(env: &Env, rolled_back_by: Address, restored_version: u32) {
     env.events().publish((cat_sys(), symbol_short!("up_rb")), EvUpgradeRolledBack { v: EVENT_VERSION, rolled_back_by, restored_version });
 }
+
+// ---------------------------------------------------------------------------
+// Multi-sig arbitration events
+// ---------------------------------------------------------------------------
+
+fn cat_multisig() -> Symbol { symbol_short!("multisig") }
+
+#[contracttype] #[derive(Clone, Debug)]
+pub struct EvArbVoteCast { pub v: u32, pub trade_id: u64, pub arbitrator: Address, pub resolution: crate::types::DisputeResolution }
+#[contracttype] #[derive(Clone, Debug)]
+pub struct EvMultiSigConsensus { pub v: u32, pub trade_id: u64 }
+#[contracttype] #[derive(Clone, Debug)]
+pub struct EvMultiSigExpired { pub v: u32, pub trade_id: u64 }
+
+pub fn emit_arbitrator_vote_cast(env: &Env, trade_id: u64, arbitrator: Address, resolution: crate::types::DisputeResolution) {
+    env.events().publish((cat_multisig(), symbol_short!("ms_vote")), EvArbVoteCast { v: EVENT_VERSION, trade_id, arbitrator, resolution });
+}
+pub fn emit_multisig_consensus(env: &Env, trade_id: u64) {
+    env.events().publish((cat_multisig(), symbol_short!("ms_cons")), EvMultiSigConsensus { v: EVENT_VERSION, trade_id });
+}
+pub fn emit_multisig_expired(env: &Env, trade_id: u64) {
+    env.events().publish((cat_multisig(), symbol_short!("ms_exp")), EvMultiSigExpired { v: EVENT_VERSION, trade_id });
+}

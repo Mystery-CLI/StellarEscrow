@@ -93,4 +93,18 @@ pub enum ContractError {
     NoUpgradeInProgress = 63,
     /// Rollback window has passed; state cannot be reverted automatically.
     RollbackWindowExpired = 64,
+    // Multi-sig arbitration errors (70–74)
+    /// threshold == 0 or threshold > arbitrators count.
+    InvalidMultiSigConfig = 70,
+    /// Arbitrator has already cast a vote for this trade.
+    AlreadyVoted = 71,
+    /// Voting window has expired; no more votes accepted.
+    VotingExpired = 72,
+    /// Voting window has not yet expired; cannot force-resolve.
+    VotingNotExpired = 73,
+    /// No consensus reached among arbitrators.
+    NoConsensus = 74,
+    // Social feature errors (70-74)
+    CannotFollowSelf = 70,
+    NotFollowing = 71,
 }

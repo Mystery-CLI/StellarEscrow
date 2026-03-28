@@ -43,6 +43,14 @@ pub struct Pool {
     pub fees_a: u64,
     /// Accumulated fees in token_b units.
     pub fees_b: u64,
+    /// Total volume traded in token_a
+    pub volume_a: u64,
+    /// Total volume traded in token_b
+    pub volume_b: u64,
+    /// Pool creation timestamp
+    pub created_at: u64,
+    /// Last swap timestamp
+    pub last_swap_at: u64,
 }
 
 /// LP position for a single provider in a pool.
@@ -55,6 +63,11 @@ pub struct LpPosition {
     pub fee_debt_a: u64,
     /// Snapshot of fees_b at last claim.
     pub fee_debt_b: u64,
+    /// Timestamp when position was created
+    pub created_at: u64,
+    /// Total rewards earned (for yield farming tracking)
+    pub total_rewards_a: u64,
+    pub total_rewards_b: u64,
 }
 
 /// Result returned from a swap.
@@ -101,7 +114,15 @@ fn load_lp(env: &Env, pool_id: u64, provider: &Address) -> LpPosition {
     env.storage()
         .persistent()
         .get(&lp_key(env, pool_id, provider))
-        .unwrap_or(LpPosition { pool_id, shares: 0, fee_debt_a: 0, fee_debt_b: 0 })
+        .unwrap_or(LpPosition { 
+            pool_id, 
+            shares: 0, 
+            fee_debt_a: 0, 
+            fee_debt_b: 0,
+            created_at: env.ledger().timestamp(),
+            total_rewards_a: 0,
+            total_rewards_b: 0,
+        })
 }
 
 fn save_lp(env: &Env, provider: &Address, pos: &LpPosition) {
@@ -151,6 +172,10 @@ pub fn create_pool(
         fee_bps,
         fees_a: 0,
         fees_b: 0,
+        volume_a: 0,
+        volume_b: 0,
+        created_at: env.ledger().timestamp(),
+        last_swap_at: 0,
     };
     save_pool(env, &pool);
     Ok(id)
@@ -369,11 +394,14 @@ pub fn swap(
         pool.reserve_a = pool.reserve_a.checked_add(amount_in).ok_or(ContractError::Overflow)?;
         pool.reserve_b = pool.reserve_b.checked_sub(amount_out).ok_or(ContractError::Overflow)?;
         pool.fees_a = pool.fees_a.checked_add(fee).ok_or(ContractError::Overflow)?;
+        pool.volume_a = pool.volume_a.checked_add(amount_in).ok_or(ContractError::Overflow)?;
     } else {
         pool.reserve_b = pool.reserve_b.checked_add(amount_in).ok_or(ContractError::Overflow)?;
         pool.reserve_a = pool.reserve_a.checked_sub(amount_out).ok_or(ContractError::Overflow)?;
         pool.fees_b = pool.fees_b.checked_add(fee).ok_or(ContractError::Overflow)?;
+        pool.volume_b = pool.volume_b.checked_add(amount_in).ok_or(ContractError::Overflow)?;
     }
+    pool.last_swap_at = env.ledger().timestamp();
     save_pool(env, &pool);
 
     Ok(SwapResult { amount_out, fee_charged: fee, price_impact_bps })
@@ -489,9 +517,11 @@ fn claim_yield_inner(
     let contract = env.current_contract_address();
     if owed_a > 0 {
         token::Client::new(env, &pool.token_a).transfer(&contract, provider, &(owed_a as i128));
+        pos.total_rewards_a = pos.total_rewards_a.checked_add(owed_a).ok_or(ContractError::Overflow)?;
     }
     if owed_b > 0 {
         token::Client::new(env, &pool.token_b).transfer(&contract, provider, &(owed_b as i128));
+        pos.total_rewards_b = pos.total_rewards_b.checked_add(owed_b).ok_or(ContractError::Overflow)?;
     }
 
     pos.fee_debt_a = pool.fees_a;

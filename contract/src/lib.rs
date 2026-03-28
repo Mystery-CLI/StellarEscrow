@@ -5,9 +5,12 @@ mod amm;
 mod errors;
 mod events;
 mod governance;
+mod multisig;
 mod oracle;
 mod privacy;
 mod queries;
+mod reputation;
+mod social;
 mod storage;
 mod subscription;
 mod templates;
@@ -21,6 +24,11 @@ use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, E
 pub use errors::ContractError;
 pub use types::{
     ArbitrationConfig, DisclosureGrant, DisputeResolution, Proposal, ProposalAction,
+    ArbitrationConfig, ArbitratorVote, DisclosureGrant, DisputeResolution, MultiSigConfig,
+    Proposal, ProposalAction, ProposalStatus, Subscription, SubscriptionTier, TierConfig,
+    TemplateTerms, TemplateVersion, Trade, TradePrivacy, TradeStatus, TradeTemplate,
+    UserTier, UserTierInfo, VotingSummary,
+    ArbitratorReputation, DisclosureGrant, DisputeResolution, Proposal, ProposalAction,
     ProposalStatus, Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion,
     Trade, TradePrivacy, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
 };
@@ -201,6 +209,158 @@ impl StellarEscrowContract {
         remove_arbitrator(&env, &arbitrator);
         events::emit_arbitrator_removed(&env, arbitrator);
         Ok(())
+    }
+
+    // -------------------------------------------------------------------------
+    // Multi-Signature Arbitration
+    // -------------------------------------------------------------------------
+
+    /// Create a trade with multi-signature arbitration.
+    /// All arbitrators in `config` must be registered; threshold must be > 0
+    /// and ≤ arbitrators count.
+    pub fn create_multisig_trade(
+        env: Env,
+        seller: Address,
+        buyer: Address,
+        amount: u64,
+        config: MultiSigConfig,
+        expiry_time: Option<u64>,
+        currency: Option<Address>,
+    ) -> Result<u64, ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        if amount == 0 {
+            return Err(ContractError::InvalidAmount);
+        }
+        if config.threshold == 0 || config.threshold > config.arbitrators.len() {
+            return Err(ContractError::InvalidMultiSigConfig);
+        }
+        for i in 0..config.arbitrators.len() {
+            if !has_arbitrator(&env, &config.arbitrators.get(i).unwrap()) {
+                return Err(ContractError::ArbitratorNotRegistered);
+            }
+        }
+        if let Some(expiry) = expiry_time {
+            if expiry <= env.ledger().timestamp() {
+                return Err(ContractError::InvalidExpiry);
+            }
+        }
+        seller.require_auth();
+        let token = currency.unwrap_or(get_usdc_token(&env)?);
+        let trade_id = increment_trade_counter(&env)?;
+        let fee = calc_fee(&env, &seller, amount)?;
+        let trade = Trade {
+            id: trade_id,
+            seller: seller.clone(),
+            buyer: buyer.clone(),
+            amount,
+            fee,
+            arbitrator: Some(ArbitrationConfig::MultiSig(config)),
+            status: TradeStatus::Created,
+            expiry_time,
+            currency: token,
+            metadata: None,
+        };
+        save_trade(&env, trade_id, &trade);
+        events::emit_trade_created(&env, trade_id, seller, buyer, amount, trade.currency);
+        Ok(trade_id)
+    }
+
+    /// Cast a vote on a disputed multi-sig trade.
+    pub fn cast_vote(
+        env: Env,
+        trade_id: u64,
+        arbitrator: Address,
+        resolution: DisputeResolution,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        multisig::cast_vote(&env, trade_id, &arbitrator, resolution)
+    }
+
+    /// Return the current voting state for a multi-sig trade.
+    pub fn get_voting_summary(env: Env, trade_id: u64) -> Result<VotingSummary, ContractError> {
+        require_initialized(&env)?;
+        multisig::voting_summary(&env, trade_id)
+    }
+
+    /// Force-resolve a multi-sig dispute after the voting window expires without
+    /// consensus. Defaults to refunding the buyer. Admin only.
+    pub fn resolve_expired_dispute(
+        env: Env,
+        admin: Address,
+        trade_id: u64,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        require_admin(&env, &admin)?;
+        let resolution = multisig::resolve_expired_dispute(&env, trade_id, &admin)?;
+        let trade = get_trade(&env, trade_id)?;
+        StellarEscrowContract::execute_dispute_resolution(env, trade_id, resolution, trade)
+    // Arbitrator Reputation
+    // -------------------------------------------------------------------------
+
+    /// Rate the arbitrator of a disputed trade (buyer or seller, once each).
+    pub fn rate_arbitrator(
+        env: Env,
+        trade_id: u64,
+        rater: Address,
+        stars: u32,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let trade = get_trade(&env, trade_id)?;
+        let arbitrator = match &trade.arbitrator {
+            Some(arb) => arb.clone(),
+            None => return Err(ContractError::NoArbitrator),
+        };
+        rater.require_auth();
+        reputation::rate_arbitrator(
+            &env,
+            trade_id,
+            &rater,
+            &arbitrator,
+            &trade.buyer,
+            &trade.seller,
+            &trade.status,
+            stars,
+        )
+    }
+
+    /// Raw reputation record for an arbitrator.
+    pub fn get_arbitrator_reputation(env: Env, arbitrator: Address) -> ArbitratorReputation {
+        storage::get_arbitrator_reputation(&env, &arbitrator)
+    }
+
+    /// Average star rating ×100 (e.g. 450 = 4.50 stars). Returns 0 if unrated.
+    pub fn get_arbitrator_avg_rating(env: Env, arbitrator: Address) -> u32 {
+        reputation::average_rating_x100(&storage::get_arbitrator_reputation(&env, &arbitrator))
+    }
+
+    /// Resolution rate in basis points (0–10000).
+    pub fn get_arbitrator_resolution_rate(env: Env, arbitrator: Address) -> u32 {
+        reputation::resolution_rate_bps(&storage::get_arbitrator_reputation(&env, &arbitrator))
+    }
+
+    /// Composite reputation score (0–10000).
+    pub fn get_arbitrator_score(env: Env, arbitrator: Address) -> u32 {
+        reputation::composite_score(&storage::get_arbitrator_reputation(&env, &arbitrator))
+    }
+
+    /// From a candidate list, return the registered arbitrator with the highest score.
+    pub fn select_best_arbitrator(
+        env: Env,
+        candidates: soroban_sdk::Vec<Address>,
+    ) -> Result<Address, ContractError> {
+        require_initialized(&env)?;
+        reputation::select_best_arbitrator(&env, &candidates)
+    }
+
+    /// Reputation records for all arbitrators in the supplied list (same order).
+    pub fn get_arbitrator_reputations(
+        env: Env,
+        arbitrators: soroban_sdk::Vec<Address>,
+    ) -> soroban_sdk::Vec<ArbitratorReputation> {
+        reputation::get_reputations(&env, &arbitrators)
     }
 
     /// Update platform fee (admin only)
