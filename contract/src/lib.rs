@@ -1260,6 +1260,70 @@ impl StellarEscrowContract {
     /// Get total number of proposals created.
     pub fn get_proposal_count(env: Env) -> u64 {
         governance::proposal_count(&env)
+    }
+
+    // -------------------------------------------------------------------------
+    // Governance Token System
+    // -------------------------------------------------------------------------
+
+    /// Initialize governance token (admin only, called once during setup).
+    /// Mints `GOV_TOTAL_SUPPLY` tokens to the specified initial holder.
+    pub fn initialize_gov_token(
+        env: Env,
+        admin: Address,
+        gov_token: Address,
+        initial_holder: Address,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_admin(&env, &admin)?;
+        governance::initialize_gov_token(&env, &gov_token, &initial_holder)
+    }
+
+    /// Get the governance token address.
+    pub fn get_gov_token(env: Env) -> Result<Address, ContractError> {
+        governance::get_gov_token_address(&env)
+    }
+
+    /// Get voting power of an address (accounting for delegation).
+    pub fn get_voting_power(env: Env, voter: Address) -> i128 {
+        governance::get_voting_power(&env, &voter)
+    }
+
+    /// Get total voting power (total supply of governance tokens).
+    pub fn get_total_voting_power(env: Env) -> i128 {
+        governance::get_total_voting_power(&env)
+    }
+
+    /// Get quorum requirement in tokens.
+    pub fn get_quorum_requirement(env: Env) -> i128 {
+        governance::get_quorum_requirement(&env)
+    }
+
+    /// Get proposal threshold in tokens.
+    pub fn get_proposal_threshold(env: Env) -> i128 {
+        governance::get_proposal_threshold(&env)
+    }
+
+    /// Get voting period in ledgers.
+    pub fn get_voting_period(env: Env) -> u32 {
+        governance::get_voting_period(&env)
+    }
+
+    /// Check if a proposal has passed (voting ended and quorum + majority met).
+    pub fn has_proposal_passed(env: Env, proposal_id: u64) -> Result<bool, ContractError> {
+        governance::has_proposal_passed(&env, proposal_id)
+    }
+
+    /// Get voting summary for a proposal (votes_for, votes_against, voting_ended).
+    pub fn get_voting_summary(env: Env, proposal_id: u64) -> Result<(i128, i128, bool), ContractError> {
+        governance::get_voting_summary(&env, proposal_id)
+    }
+
+    /// Get proposal details by ID.
+    pub fn get_proposal_details(env: Env, proposal_id: u64) -> Result<Proposal, ContractError> {
+        governance::get_proposal_details(&env, proposal_id)
+    }
+
     // Upgrade Mechanism
     // -------------------------------------------------------------------------
 

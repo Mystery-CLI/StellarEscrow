@@ -90,6 +90,8 @@ pub struct EvSubscriptionRenewed  { pub v: u32, pub subscriber: Address, pub tie
 pub struct EvSubscriptionCancelled { pub v: u32, pub subscriber: Address }
 
 #[contracttype] #[derive(Clone, Debug)]
+pub struct EvGovTokenInitialized { pub v: u32, pub token: Address, pub initial_holder: Address, pub supply: i128 }
+#[contracttype] #[derive(Clone, Debug)]
 pub struct EvProposalCreated  { pub v: u32, pub proposal_id: u64, pub proposer: Address }
 #[contracttype] #[derive(Clone, Debug)]
 pub struct EvVoteCast         { pub v: u32, pub proposal_id: u64, pub voter: Address, pub support: bool, pub weight: i128 }
@@ -249,6 +251,10 @@ pub fn emit_proposal_executed(env: &Env, proposal_id: u64) {
 }
 pub fn emit_delegated(env: &Env, delegator: Address, delegatee: Address) {
     env.events().publish((cat_gov(), symbol_short!("delegat")), EvDelegated { v: EVENT_VERSION, delegator, delegatee });
+}
+
+pub fn emit_gov_token_initialized(env: &Env, token: Address, initial_holder: Address, supply: i128) {
+    env.events().publish((cat_gov(), symbol_short!("gov_init")), EvGovTokenInitialized { v: EVENT_VERSION, token, initial_holder, supply });
 }
 
 pub fn emit_paused(env: &Env, admin: Address) {

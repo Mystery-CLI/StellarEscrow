@@ -1,11 +1,11 @@
-use soroban_sdk::{token, Address, Env};
+use soroban_sdk::{token, Address, Env, Vec};
 
 use crate::errors::ContractError;
 use crate::events;
 use crate::storage::{
     get_accumulated_fees, get_fee_bps, get_gov_token, get_proposal, get_proposal_counter,
     get_usdc_token, has_voted, increment_proposal_counter, mark_voted, remove_delegate,
-    save_proposal, set_accumulated_fees, set_delegate, set_fee_bps, get_delegate,
+    save_proposal, set_accumulated_fees, set_delegate, set_fee_bps, get_delegate, set_gov_token,
 };
 use crate::types::{
     Proposal, ProposalAction, ProposalStatus, TierConfig, GOV_PROPOSAL_THRESHOLD,
@@ -160,4 +160,114 @@ pub fn get(env: &Env, proposal_id: u64) -> Result<Proposal, ContractError> {
 /// Get current proposal count.
 pub fn proposal_count(env: &Env) -> u64 {
     get_proposal_counter(env)
+}
+
+/// Initialize governance token (admin only, called once during setup).
+/// Mints `GOV_TOTAL_SUPPLY` tokens to the specified initial holder.
+pub fn initialize_gov_token(
+    env: &Env,
+    gov_token: &Address,
+    initial_holder: &Address,
+) -> Result<(), ContractError> {
+    if get_gov_token(env).is_some() {
+        return Err(ContractError::AlreadyInitialized);
+    }
+    set_gov_token(env, gov_token);
+    
+    // Mint initial supply to the holder
+    let client = token::Client::new(env, gov_token);
+    client.mint(initial_holder, &GOV_TOTAL_SUPPLY);
+    
+    events::emit_gov_token_initialized(env, gov_token.clone(), initial_holder.clone(), GOV_TOTAL_SUPPLY);
+    Ok(())
+}
+
+/// Get the governance token address.
+pub fn get_gov_token_address(env: &Env) -> Result<Address, ContractError> {
+    get_gov_token(env).ok_or(ContractError::NotInitialized)
+}
+
+/// Get voting power of an address (accounting for delegation).
+pub fn get_voting_power(env: &Env, voter: &Address) -> i128 {
+    voting_power(env, voter)
+}
+
+/// Get total voting power (total supply of governance tokens).
+pub fn get_total_voting_power(_env: &Env) -> i128 {
+    GOV_TOTAL_SUPPLY
+}
+
+/// Get quorum requirement in tokens.
+pub fn get_quorum_requirement(_env: &Env) -> i128 {
+    GOV_TOTAL_SUPPLY
+        .checked_mul(GOV_QUORUM_BPS as i128)
+        .unwrap_or(0)
+        / 10000
+}
+
+/// Get proposal threshold in tokens.
+pub fn get_proposal_threshold(_env: &Env) -> i128 {
+    GOV_PROPOSAL_THRESHOLD
+}
+
+/// Get voting period in ledgers.
+pub fn get_voting_period(_env: &Env) -> u32 {
+    GOV_VOTING_PERIOD
+}
+
+/// Distribute fees to governance token holders via a proposal.
+/// This is called after a proposal to distribute fees is executed.
+pub fn distribute_fees_to_holders(
+    env: &Env,
+    recipient: &Address,
+) -> Result<(), ContractError> {
+    let fees = get_accumulated_fees(env)?;
+    if fees == 0 {
+        return Err(ContractError::NoFeesToWithdraw);
+    }
+    let token = get_usdc_token(env)?;
+    token::Client::new(env, &token).transfer(
+        &env.current_contract_address(),
+        recipient,
+        &(fees as i128),
+    );
+    set_accumulated_fees(env, 0);
+    events::emit_fees_distributed(env, recipient.clone(), fees);
+    Ok(())
+}
+
+/// Get proposal details by ID.
+pub fn get_proposal_details(env: &Env, proposal_id: u64) -> Result<Proposal, ContractError> {
+    get_proposal(env, proposal_id)
+}
+
+/// Check if a proposal has passed (voting ended and quorum + majority met).
+pub fn has_proposal_passed(env: &Env, proposal_id: u64) -> Result<bool, ContractError> {
+    let proposal = get_proposal(env, proposal_id)?;
+    
+    // Voting must have ended
+    if env.ledger().sequence() <= proposal.ends_at {
+        return Ok(false);
+    }
+    
+    // Check quorum
+    let quorum = GOV_TOTAL_SUPPLY
+        .checked_mul(GOV_QUORUM_BPS as i128)
+        .ok_or(ContractError::Overflow)?
+        / 10000;
+    let total_votes = proposal.votes_for.checked_add(proposal.votes_against).ok_or(ContractError::Overflow)?;
+    
+    if total_votes < quorum {
+        return Ok(false);
+    }
+    
+    // Check majority (votes_for > votes_against)
+    Ok(proposal.votes_for > proposal.votes_against)
+}
+
+/// Get voting summary for a proposal.
+pub fn get_voting_summary(env: &Env, proposal_id: u64) -> Result<(i128, i128, bool), ContractError> {
+    let proposal = get_proposal(env, proposal_id)?;
+    let voting_ended = env.ledger().sequence() > proposal.ends_at;
+    Ok((proposal.votes_for, proposal.votes_against, voting_ended))
 }
