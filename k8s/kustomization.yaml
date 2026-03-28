@@ -8,6 +8,9 @@ resources:
   - base/secrets.yaml
   - base/configmap.yaml
   - base/ingress.yaml
+  - base/network-policy.yaml
+  - base/pod-security.yaml
+  - base/secrets-store.yaml
   - postgres/postgres.yaml
   - indexer/indexer.yaml
   - api/api.yaml

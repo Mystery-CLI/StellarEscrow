@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   postgres:
@@ -6,9 +6,10 @@ services:
     environment:
       POSTGRES_DB: stellar_escrow
       POSTGRES_USER: indexer
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    # Do NOT expose postgres port externally in production
+    # ports:
+    #   - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,11 +21,18 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    # Do NOT expose redis port externally in production
+    # ports:
+    #   - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      --protected-mode yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -37,13 +45,18 @@ services:
       context: .
       dockerfile: indexer/Dockerfile
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      DATABASE_URL: postgres://indexer:password@postgres:5432/stellar_escrow
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       RUST_LOG: info
       CDN_PURGE_URL: ${CDN_PURGE_URL:-}
       CDN_PURGE_TOKEN: ${CDN_PURGE_TOKEN:-}
-      STELLAR_ESCROW__CACHE__REDIS_URL: redis://redis:6379
+      STELLAR_ESCROW__CACHE__REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,11 +75,18 @@ services:
       context: api
       dockerfile: Dockerfile
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     environment:
-      DATABASE_URL: postgres://indexer:password@postgres:5432/stellar_escrow
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       INDEXER_URL: http://indexer:3000
       NODE_ENV: production
+      API_KEYS: ${API_KEYS:?API_KEYS must be set}
+      ADMIN_KEYS: ${ADMIN_KEYS:?ADMIN_KEYS must be set}
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,15 +182,15 @@ services:
   prometheus:
     image: prom/prometheus:latest
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
     depends_on:
       - indexer
     restart: unless-stopped
@@ -178,9 +198,9 @@ services:
   grafana:
     image: grafana/grafana:latest
     ports:
-      - "3002:3000"
+      - "127.0.0.1:3002:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_URL:-http://localhost:3002}
     volumes:
@@ -193,7 +213,7 @@ services:
   loki:
     image: grafana/loki:latest
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     volumes:
       - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
@@ -213,11 +233,11 @@ services:
   alertmanager:
     image: prom/alertmanager:latest
     ports:
-      - "9093:9093"
+      - "127.0.0.1:9093:9093"
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
     restart: unless-stopped
 
 volumes:
