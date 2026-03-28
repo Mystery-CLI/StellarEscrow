@@ -104,4 +104,7 @@ pub enum ContractError {
     VotingNotExpired = 73,
     /// No consensus reached among arbitrators.
     NoConsensus = 74,
+    // Social feature errors (70-74)
+    CannotFollowSelf = 70,
+    NotFollowing = 71,
 }
