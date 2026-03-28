@@ -19,7 +19,7 @@ pub enum ContractError {
     NoFeesToWithdraw = 9,
     Unauthorized = 10,
     ContractPaused = 11,
-    MetadataTooManyEntries = 11,
+    InvalidMetadata = 11,
     MetadataValueTooLong = 12,
     InvalidTierConfig = 13,
     TierNotFound = 14,
@@ -39,8 +39,7 @@ pub enum ContractError {
     InvalidExpiry = 20,
     TradeExpired = 21,
     TradeNotExpired = 22,
-    MetadataTooManyEntries = 12,
-    MetadataValueTooLong = 13,
+    // Metadata errors (duplicates removed)
     InvalidTierConfig = 14,
     TierNotFound = 15,
     TemplateNotFound = 16,

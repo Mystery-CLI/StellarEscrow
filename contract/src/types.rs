@@ -108,28 +108,6 @@ pub enum ArbitrationConfig {
     MultiSig(MultiSigConfig),
 }
 
-/// A single metadata key-value entry
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MetadataEntry {
-    pub key: String,
-    pub value: String,
-}
-
-/// Structured metadata attached to a trade (e.g. product description, shipping info)
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TradeMetadata {
-    pub entries: Vec<MetadataEntry>,
-}
-
-/// Option wrapper for TradeMetadata (Soroban contracttype requires enum for optional custom structs)
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum OptionalMetadata {
-    None,
-    Some(TradeMetadata),
-}
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -146,8 +124,8 @@ pub struct Trade {
     pub expiry_time: Option<u64>,
     /// Token address used for this trade (e.g. USDC, EURC, or any SAC token)
     pub currency: Address,
-    /// Optional structured metadata (product info, shipping details, etc.)
-    pub metadata: OptionalMetadata,
+    /// Optional JSON-like string metadata (product info, shipping details, etc.)
+    pub metadata: Option<String>,
 }
 
 #[contracttype]
@@ -314,7 +292,7 @@ pub struct TemplateTerms {
     pub description: String,
     pub default_arbitrator: Option<Address>,
     pub fixed_amount: Option<u64>,
-    pub default_metadata: OptionalMetadata,
+    pub default_metadata: Option<String>,
 }
 
 #[contracttype]

@@ -17,13 +17,11 @@ mod upgrade;
 
 use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, Env};
 
-use types::{METADATA_MAX_ENTRIES, METADATA_MAX_VALUE_LEN};
-
 pub use errors::ContractError;
 pub use types::{
-    DisclosureGrant, DisputeResolution, MetadataEntry, Proposal, ProposalAction, ProposalStatus,
+    DisclosureGrant, DisputeResolution, Proposal, ProposalAction, ProposalStatus,
     Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion,
-    Trade, TradeMetadata, TradePrivacy, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
+    Trade, TradePrivacy, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
 };
 pub use queries::{PageParams, SortDirection, TradeFilter, TradeSortField, TradeStats};
 pub use oracle::{OracleEntry, PriceData, PriceValidation};
@@ -33,8 +31,8 @@ use storage::{
     get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_usdc_token,
     has_arbitrator, has_initialized, increment_trade_counter, is_initialized, is_paused,
     remove_arbitrator, save_arbitrator, save_trade, set_accumulated_fees, set_admin, set_fee_bps,
-    ArbitratorReputation, DisputeResolution, MetadataEntry, TierConfig, TemplateTerms,
-    TemplateVersion, Trade, TradeMetadata, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
+    ArbitratorReputation, DisputeResolution, TierConfig, TemplateTerms,
+    TemplateVersion, Trade, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
 };
 
 use storage::{
@@ -43,8 +41,8 @@ use storage::{
     mark_rated, remove_arbitrator, save_arbitrator, save_arbitrator_reputation, save_trade,
     set_accumulated_fees, set_admin, set_fee_bps, set_initialized, set_paused, set_trade_counter,
     set_usdc_token,
-    CrossChainInfo, DisputeResolution, InsurancePolicy, MetadataEntry, OptionalMetadata,
-    TierConfig, TemplateTerms, TemplateVersion, Trade, TradeMetadata, TradeStatus,
+    CrossChainInfo, DisputeResolution, InsurancePolicy,
+    TierConfig, TemplateTerms, TemplateVersion, Trade, TradeStatus,
     TradeTemplate, UserTier, UserTierInfo,
 };
 
@@ -61,15 +59,32 @@ fn token_client<'a>(env: &'a Env, token: &Address) -> token::Client<'a> {
     token::Client::new(env, token)
 }
 
-fn validate_metadata(meta: &TradeMetadata) -> Result<(), ContractError> {
-    if meta.entries.len() > METADATA_MAX_ENTRIES {
-        return Err(ContractError::MetadataTooManyEntries);
-    }
-    for i in 0..meta.entries.len() {
-        let entry = meta.entries.get(i).unwrap();
-        if entry.value.len() > METADATA_MAX_VALUE_LEN {
+/// Maximum length of JSON metadata string
+pub const MAX_METADATA_SIZE: usize = 1024;
+
+fn validate_metadata(env: &Env, meta: &Option<soroban_sdk::String>) -> Result<(), ContractError> {
+    if let Some(m) = meta {
+        if m.len() > MAX_METADATA_SIZE as u32 {
             return Err(ContractError::MetadataValueTooLong);
         }
+        if m.len() == 0 {
+            return Err(ContractError::InvalidMetadata);
+        }
+
+        // Try to parse using serde_json. 
+        // Need to convert soroban_sdk::String to alloc::string::String first
+        extern crate alloc;
+        use alloc::string::String as AllocString;
+        use alloc::vec::Vec as AllocVec;
+
+        let mut out = AllocVec::new();
+        let mut slice = [0u8; 1024];
+        let len = m.len() as usize;
+        m.copy_into_slice(&mut slice[..len]);
+        out.extend_from_slice(&slice[..len]);
+
+        let json_str = AllocString::from_utf8(out).map_err(|_| ContractError::InvalidMetadata)?;
+        serde_json::from_str::<serde_json::Value>(&json_str).map_err(|_| ContractError::InvalidMetadata)?;
     }
     Ok(())
 }
@@ -102,19 +117,7 @@ fn calc_fee(env: &Env, seller: &Address, amount: u64) -> Result<u64, ContractErr
         .ok_or(ContractError::Overflow)
 }
 
-fn validate_metadata(meta: &OptionalMetadata) -> Result<(), ContractError> {
-    if let OptionalMetadata::Some(ref m) = meta {
-        if m.entries.len() > METADATA_MAX_ENTRIES {
-            return Err(ContractError::MetadataTooManyEntries);
-        }
-        for entry in m.entries.iter() {
-            if entry.value.len() > METADATA_MAX_VALUE_LEN {
-                return Err(ContractError::MetadataValueTooLong);
-            }
-        }
-    }
-    Ok(())
-}
+
 
 fn require_admin(env: &Env, admin: &Address) -> Result<(), ContractError> {
     let current_admin = get_admin(env)?;
