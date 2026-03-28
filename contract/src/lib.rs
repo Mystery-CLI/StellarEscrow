@@ -14,6 +14,7 @@ mod templates;
 mod tiers;
 mod types;
 mod upgrade;
+mod proxy;
 
 use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, Env};
 
@@ -26,6 +27,7 @@ pub use types::{
 pub use queries::{PageParams, SortDirection, TradeFilter, TradeSortField, TradeStats};
 pub use oracle::{OracleEntry, PriceData, PriceValidation};
 pub use upgrade::{RollbackSnapshot, UpgradeProposal};
+pub use proxy::*;
 
 use storage::{
     get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_usdc_token,
