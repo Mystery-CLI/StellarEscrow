@@ -23,6 +23,7 @@ use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, E
 
 pub use errors::ContractError;
 pub use types::{
+    ArbitrationConfig, DisclosureGrant, DisputeResolution, Proposal, ProposalAction,
     ArbitrationConfig, ArbitratorVote, DisclosureGrant, DisputeResolution, MultiSigConfig,
     Proposal, ProposalAction, ProposalStatus, Subscription, SubscriptionTier, TierConfig,
     TemplateTerms, TemplateVersion, Trade, TradePrivacy, TradeStatus, TradeTemplate,
@@ -1900,6 +1901,125 @@ impl StellarEscrowContract {
     /// Get LP position for a provider in a pool.
     pub fn amm_get_lp_position(env: Env, pool_id: u64, provider: Address) -> amm::LpPosition {
         amm::get_lp_position(&env, pool_id, &provider)
+    }
+
+    // -------------------------------------------------------------------------
+    // Trade Templates
+    // -------------------------------------------------------------------------
+
+    /// Create a reusable trade template. Owner must authenticate.
+    pub fn create_template(
+        env: Env,
+        owner: Address,
+        name: soroban_sdk::String,
+        terms: TemplateTerms,
+    ) -> Result<u64, ContractError> {
+        require_initialized(&env)?;
+        owner.require_auth();
+        templates::create_template(&env, &owner, name, terms)
+    }
+
+    /// Update a template with new terms, bumping its version number.
+    /// Only the template owner may call this.
+    pub fn update_template(
+        env: Env,
+        caller: Address,
+        template_id: u64,
+        name: soroban_sdk::String,
+        terms: TemplateTerms,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        caller.require_auth();
+        templates::update_template(&env, &caller, template_id, name, terms)
+    }
+
+    /// Deactivate a template so it can no longer be used to create trades.
+    /// Only the template owner may call this.
+    pub fn deactivate_template(
+        env: Env,
+        caller: Address,
+        template_id: u64,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        caller.require_auth();
+        templates::deactivate_template(&env, &caller, template_id)
+    }
+
+    /// Create a trade from a template, inheriting its default arbitrator and
+    /// metadata. If the template has a `fixed_amount`, `amount` must match.
+    pub fn create_trade_from_template(
+        env: Env,
+        seller: Address,
+        buyer: Address,
+        template_id: u64,
+        amount: u64,
+    ) -> Result<u64, ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        if amount == 0 {
+            return Err(ContractError::InvalidAmount);
+        }
+        seller.require_auth();
+
+        let (terms, version) = templates::resolve_terms(&env, template_id)?;
+
+        if let Some(fixed) = terms.fixed_amount {
+            if amount != fixed {
+                return Err(ContractError::TemplateAmountMismatch);
+            }
+        }
+        if let Some(ref arb) = terms.default_arbitrator {
+            if !has_arbitrator(&env, arb) {
+                return Err(ContractError::ArbitratorNotRegistered);
+            }
+        }
+
+        let trade_id = increment_trade_counter(&env)?;
+        let fee = calc_fee(&env, &seller, amount)?;
+        let trade = Trade {
+            id: trade_id,
+            seller: seller.clone(),
+            buyer: buyer.clone(),
+            amount,
+            fee,
+            arbitrator: terms.default_arbitrator.map(ArbitrationConfig::Single),
+            status: TradeStatus::Created,
+            expiry_time: None,
+            currency: get_usdc_token(&env)?,
+            metadata: terms.default_metadata,
+        };
+        save_trade(&env, trade_id, &trade);
+        events::emit_trade_created(&env, trade_id, seller, buyer, amount, trade.currency);
+        events::emit_template_trade(&env, trade_id, template_id, version);
+        Ok(trade_id)
+    }
+
+    /// Fetch a template by ID.
+    pub fn get_template(env: Env, template_id: u64) -> Result<TradeTemplate, ContractError> {
+        storage::get_template(&env, template_id)
+    }
+
+    /// Fetch a specific version of a template's terms by version number.
+    pub fn get_template_version(
+        env: Env,
+        template_id: u64,
+        version: u32,
+    ) -> Result<TemplateVersion, ContractError> {
+        let template = storage::get_template(&env, template_id)?;
+        for i in 0..template.versions.len() {
+            let v = template.versions.get(i).unwrap();
+            if v.version == version {
+                return Ok(v);
+            }
+        }
+        Err(ContractError::TemplateNotFound)
+    }
+
+    /// Returns true if the template exists and is active.
+    pub fn is_template_valid(env: Env, template_id: u64) -> bool {
+        storage::get_template(&env, template_id)
+            .map(|t| t.active)
+            .unwrap_or(false)
     }
 }
 
