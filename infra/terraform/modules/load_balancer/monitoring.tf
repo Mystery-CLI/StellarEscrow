@@ -55,11 +55,10 @@ resource "aws_cloudwatch_metric_alarm" "alb_latency_p99" {
   threshold           = 2
   treat_missing_data  = "notBreaching"
 
-  namespace   = "AWS/ApplicationELB"
-  metric_name = "TargetResponseTime"
-  dimensions  = { LoadBalancer = aws_lb.main.arn_suffix }
-  period      = 60
-  statistic   = "p99"
+  namespace          = "AWS/ApplicationELB"
+  metric_name        = "TargetResponseTime"
+  dimensions         = { LoadBalancer = aws_lb.main.arn_suffix }
+  period             = 60
   extended_statistic = "p99"
 
   alarm_actions = local.alarm_actions
@@ -119,55 +118,67 @@ resource "aws_cloudwatch_dashboard" "lb" {
     widgets = [
       {
         type   = "metric"
-        x = 0; y = 0; width = 12; height = 6
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
         properties = {
           title  = "Request Count"
           region = "us-east-1"
           metrics = [
             ["AWS/ApplicationELB", "RequestCount",
               "LoadBalancer", aws_lb.main.arn_suffix,
-              { stat = "Sum", period = 60, label = "Total Requests" }]
+            { stat = "Sum", period = 60, label = "Total Requests" }]
           ]
           view = "timeSeries"
         }
       },
       {
         type   = "metric"
-        x = 12; y = 0; width = 12; height = 6
+        x      = 12
+        y      = 0
+        width  = 12
+        height = 6
         properties = {
           title  = "HTTP Error Rates"
           region = "us-east-1"
           metrics = [
             ["AWS/ApplicationELB", "HTTPCode_ELB_4XX_Count",
               "LoadBalancer", aws_lb.main.arn_suffix,
-              { stat = "Sum", period = 60, label = "4xx" }],
+            { stat = "Sum", period = 60, label = "4xx" }],
             ["AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count",
               "LoadBalancer", aws_lb.main.arn_suffix,
-              { stat = "Sum", period = 60, label = "5xx" }]
+            { stat = "Sum", period = 60, label = "5xx" }]
           ]
           view = "timeSeries"
         }
       },
       {
         type   = "metric"
-        x = 0; y = 6; width = 12; height = 6
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
         properties = {
           title  = "Target Response Time (p50 / p99)"
           region = "us-east-1"
           metrics = [
             ["AWS/ApplicationELB", "TargetResponseTime",
               "LoadBalancer", aws_lb.main.arn_suffix,
-              { stat = "p50", period = 60, label = "p50" }],
+            { stat = "p50", period = 60, label = "p50" }],
             ["AWS/ApplicationELB", "TargetResponseTime",
               "LoadBalancer", aws_lb.main.arn_suffix,
-              { stat = "p99", period = 60, label = "p99" }]
+            { stat = "p99", period = 60, label = "p99" }]
           ]
           view = "timeSeries"
         }
       },
       {
         type   = "metric"
-        x = 12; y = 6; width = 12; height = 6
+        x      = 12
+        y      = 6
+        width  = 12
+        height = 6
         properties = {
           title  = "Healthy / Unhealthy Hosts"
           region = "us-east-1"
@@ -175,18 +186,21 @@ resource "aws_cloudwatch_dashboard" "lb" {
             ["AWS/ApplicationELB", "HealthyHostCount",
               "LoadBalancer", aws_lb.main.arn_suffix,
               "TargetGroup", aws_lb_target_group.api.arn_suffix,
-              { stat = "Average", period = 60, label = "Healthy" }],
+            { stat = "Average", period = 60, label = "Healthy" }],
             ["AWS/ApplicationELB", "UnHealthyHostCount",
               "LoadBalancer", aws_lb.main.arn_suffix,
               "TargetGroup", aws_lb_target_group.api.arn_suffix,
-              { stat = "Average", period = 60, label = "Unhealthy", color = "#d62728" }]
+            { stat = "Average", period = 60, label = "Unhealthy", color = "#d62728" }]
           ]
           view = "timeSeries"
         }
       },
       {
         type   = "metric"
-        x = 0; y = 12; width = 12; height = 6
+        x      = 0
+        y      = 12
+        width  = 12
+        height = 6
         properties = {
           title  = "ECS CPU Utilisation"
           region = "us-east-1"
@@ -194,12 +208,12 @@ resource "aws_cloudwatch_dashboard" "lb" {
             ["AWS/ECS", "CPUUtilization",
               "ClusterName", var.ecs_cluster_name,
               "ServiceName", var.ecs_service_name,
-              { stat = "Average", period = 60, label = "CPU %" }]
+            { stat = "Average", period = 60, label = "CPU %" }]
           ]
           annotations = {
             horizontal = [
               { value = var.scale_out_cpu_threshold, label = "Scale-out threshold", color = "#ff7f0e" },
-              { value = var.scale_in_cpu_threshold,  label = "Scale-in threshold",  color = "#2ca02c" }
+              { value = var.scale_in_cpu_threshold, label = "Scale-in threshold", color = "#2ca02c" }
             ]
           }
           view = "timeSeries"
@@ -207,7 +221,10 @@ resource "aws_cloudwatch_dashboard" "lb" {
       },
       {
         type   = "metric"
-        x = 12; y = 12; width = 12; height = 6
+        x      = 12
+        y      = 12
+        width  = 12
+        height = 6
         properties = {
           title  = "ECS Task Count"
           region = "us-east-1"
@@ -215,7 +232,7 @@ resource "aws_cloudwatch_dashboard" "lb" {
             ["ECS/ContainerInsights", "RunningTaskCount",
               "ClusterName", var.ecs_cluster_name,
               "ServiceName", var.ecs_service_name,
-              { stat = "Average", period = 60, label = "Running Tasks" }]
+            { stat = "Average", period = 60, label = "Running Tasks" }]
           ]
           annotations = {
             horizontal = [

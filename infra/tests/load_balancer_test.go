@@ -29,7 +29,7 @@ func TestLoadBalancerModulePlan(t *testing.T) {
 	planOutput := terraform.InitAndPlanAndShowWithStruct(t, opts)
 
 	// ALB must be planned
-	resources := planOutput.RawPlan.PlannedValues.RootModule.Resources
+	resources := planOutput.ResourcePlannedValuesMap
 	assert.Contains(t, resources, "module.load_balancer.aws_lb.main",
 		"ALB resource must be in plan")
 

@@ -1,8 +1,5 @@
 // Infrastructure tests using Terratest.
 // Run: go test -v -timeout 30m ./...
-//
-// These tests apply real Terraform against a dev AWS account and verify
-// outputs. Set AWS credentials via environment variables before running.
 package test
 
 import (
@@ -13,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNetworkingModule verifies the networking module creates a VPC with the
-// expected CIDR and exposes the correct outputs.
 func TestNetworkingModule(t *testing.T) {
 	t.Parallel()
 
@@ -41,8 +36,6 @@ func TestNetworkingModule(t *testing.T) {
 	assert.Len(t, privateSubnets, 2, "expected 2 private subnets")
 }
 
-// TestDevelopmentEnvironment validates the full development stack plan
-// (no apply — plan-only to keep tests fast and cost-free).
 func TestDevelopmentEnvironmentPlan(t *testing.T) {
 	t.Parallel()
 
@@ -50,7 +43,6 @@ func TestDevelopmentEnvironmentPlan(t *testing.T) {
 		TerraformDir: "../terraform",
 		VarFiles:     []string{"environments/development.tfvars"},
 		Vars: map[string]interface{}{
-			// Inject required secrets as stubs for plan validation
 			"db_password": "test-password-stub",
 		},
 		PlanFilePath: "/tmp/dev-plan.tfplan",
@@ -59,14 +51,11 @@ func TestDevelopmentEnvironmentPlan(t *testing.T) {
 
 	planOutput := terraform.InitAndPlanAndShowWithStruct(t, opts)
 
-	// Verify key resources are planned
-	assert.Contains(t, planOutput.RawPlan.PlannedValues.RootModule.Resources,
-		"module.networking.aws_vpc.main",
-		"VPC must be in plan",
-	)
+	resources := planOutput.ResourcePlannedValuesMap
+	assert.Contains(t, resources, "module.networking.aws_vpc.main",
+		"VPC must be in plan")
 }
 
-// TestStagingEnvironmentPlan validates the staging stack plan.
 func TestStagingEnvironmentPlan(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +73,6 @@ func TestStagingEnvironmentPlan(t *testing.T) {
 	terraform.InitAndPlan(t, opts)
 }
 
-// TestProductionEnvironmentPlan validates the production stack plan.
 func TestProductionEnvironmentPlan(t *testing.T) {
 	t.Parallel()
 

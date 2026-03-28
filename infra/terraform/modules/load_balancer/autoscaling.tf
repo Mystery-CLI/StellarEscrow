@@ -63,7 +63,7 @@ resource "aws_appautoscaling_policy" "scale_out_requests" {
 
     predefined_metric_specification {
       predefined_metric_type = "ALBRequestCountPerTarget"
-      resource_label = "${aws_lb.main.arn_suffix}/${aws_lb_target_group.api.arn_suffix}"
+      resource_label         = "${aws_lb.main.arn_suffix}/${aws_lb_target_group.api.arn_suffix}"
     }
   }
 }
