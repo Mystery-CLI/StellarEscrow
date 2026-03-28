@@ -8,6 +8,7 @@ mod governance;
 mod oracle;
 mod privacy;
 mod queries;
+mod reputation;
 mod storage;
 mod subscription;
 mod templates;
@@ -20,8 +21,8 @@ use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, E
 
 pub use errors::ContractError;
 pub use types::{
-    DisclosureGrant, DisputeResolution, Proposal, ProposalAction, ProposalStatus,
-    Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion,
+    ArbitratorReputation, DisclosureGrant, DisputeResolution, Proposal, ProposalAction,
+    ProposalStatus, Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion,
     Trade, TradePrivacy, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
 };
 pub use queries::{PageParams, SortDirection, TradeFilter, TradeSortField, TradeStats};
@@ -201,6 +202,73 @@ impl StellarEscrowContract {
         remove_arbitrator(&env, &arbitrator);
         events::emit_arbitrator_removed(&env, arbitrator);
         Ok(())
+    }
+
+    // -------------------------------------------------------------------------
+    // Arbitrator Reputation
+    // -------------------------------------------------------------------------
+
+    /// Rate the arbitrator of a disputed trade (buyer or seller, once each).
+    pub fn rate_arbitrator(
+        env: Env,
+        trade_id: u64,
+        rater: Address,
+        stars: u32,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        let trade = get_trade(&env, trade_id)?;
+        let arbitrator = match &trade.arbitrator {
+            Some(arb) => arb.clone(),
+            None => return Err(ContractError::NoArbitrator),
+        };
+        rater.require_auth();
+        reputation::rate_arbitrator(
+            &env,
+            trade_id,
+            &rater,
+            &arbitrator,
+            &trade.buyer,
+            &trade.seller,
+            &trade.status,
+            stars,
+        )
+    }
+
+    /// Raw reputation record for an arbitrator.
+    pub fn get_arbitrator_reputation(env: Env, arbitrator: Address) -> ArbitratorReputation {
+        storage::get_arbitrator_reputation(&env, &arbitrator)
+    }
+
+    /// Average star rating ×100 (e.g. 450 = 4.50 stars). Returns 0 if unrated.
+    pub fn get_arbitrator_avg_rating(env: Env, arbitrator: Address) -> u32 {
+        reputation::average_rating_x100(&storage::get_arbitrator_reputation(&env, &arbitrator))
+    }
+
+    /// Resolution rate in basis points (0–10000).
+    pub fn get_arbitrator_resolution_rate(env: Env, arbitrator: Address) -> u32 {
+        reputation::resolution_rate_bps(&storage::get_arbitrator_reputation(&env, &arbitrator))
+    }
+
+    /// Composite reputation score (0–10000).
+    pub fn get_arbitrator_score(env: Env, arbitrator: Address) -> u32 {
+        reputation::composite_score(&storage::get_arbitrator_reputation(&env, &arbitrator))
+    }
+
+    /// From a candidate list, return the registered arbitrator with the highest score.
+    pub fn select_best_arbitrator(
+        env: Env,
+        candidates: soroban_sdk::Vec<Address>,
+    ) -> Result<Address, ContractError> {
+        require_initialized(&env)?;
+        reputation::select_best_arbitrator(&env, &candidates)
+    }
+
+    /// Reputation records for all arbitrators in the supplied list (same order).
+    pub fn get_arbitrator_reputations(
+        env: Env,
+        arbitrators: soroban_sdk::Vec<Address>,
+    ) -> soroban_sdk::Vec<ArbitratorReputation> {
+        reputation::get_reputations(&env, &arbitrators)
     }
 
     /// Update platform fee (admin only)
