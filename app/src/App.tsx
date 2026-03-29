@@ -6,6 +6,7 @@ import { NavLink } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import TradeDetail from './pages/TradeDetail';
 import CreateTrade from './pages/CreateTrade';
+import Help from './pages/Help';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export default function App() {
@@ -16,6 +17,9 @@ export default function App() {
       <div className="app">
         <nav className="nav">
           <span className="nav-brand">StellarEscrow</span>
+          <NavLink to="/" end>Dashboard</NavLink>
+          <NavLink to="/trades/new">New Trade</NavLink>
+          <NavLink to="/help">Help</NavLink>
           <button 
             className="nav-mobile-toggle" 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -50,6 +54,7 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/trades/new" element={<CreateTrade />} />
               <Route path="/trades/:id" element={<TradeDetail />} />
+              <Route path="/help" element={<Help />} />
             </Routes>
           </ErrorBoundary>
         </Container>

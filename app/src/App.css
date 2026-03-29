@@ -109,6 +109,149 @@ body {
   margin: 0 auto;
 }
 
+/* -------------------------------------------
+   Help Center Styles
+   ------------------------------------------- */
+.help-center-container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.help-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.help-header h1 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: #1a1a2e;
+}
+
+.help-header p {
+  color: #666;
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.help-search {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.help-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.help-tab {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #666;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.help-tab:hover {
+  color: #1a1a2e;
+}
+
+.help-tab-active {
+  color: #0066cc;
+  border-bottom-color: #0066cc;
+}
+
+.help-section-title {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+.help-empty-state {
+  color: #999;
+  font-style: italic;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.faq-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.faq-card {
+  padding: 1.5rem;
+}
+
+.faq-q {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+  color: #1a1a2e;
+}
+
+.faq-a {
+  color: #555;
+  line-height: 1.5;
+}
+
+.tutorials-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.tutorial-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.tutorial-title {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+  color: #1a1a2e;
+}
+
+.tutorial-desc {
+  color: #666;
+  margin-bottom: 1rem;
+  flex: 1;
+}
+
+.tutorial-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+.tutorial-time {
+  font-size: 0.875rem;
+  color: #999;
+}
+
+.contact-card {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.contact-textarea {
+  resize: vertical;
+  min-height: 120px;
 /* Page Layouts */
 .dashboard-header {
   display: flex;
