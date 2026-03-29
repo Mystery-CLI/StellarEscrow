@@ -11,7 +11,7 @@ export default function TradeDetail() {
   if (error || !trade) return <p>Trade not found. <Link to="/">Back</Link></p>;
 
   return (
-    <div style={{ display: 'grid', gap: '1.5rem', gridTemplateColumns: '1fr 1fr' }}>
+    <div className="trade-detail-grid">
       <div>
         <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Trade #{trade.id}</h1>
         <TradeCard

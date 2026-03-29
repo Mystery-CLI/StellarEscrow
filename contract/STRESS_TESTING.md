@@ -5,9 +5,14 @@ Validates StellarEscrow contract performance under load using Soroban's built-in
 ## Running
 
 ```bash
-cd contract
+# Automated runner (from repo root) — runs all tests and prints a summary
+./scripts/stress-test.sh
 
-# All stress tests with output
+# Release build (faster execution, closer to production)
+./scripts/stress-test.sh --release
+
+# Directly via cargo
+cd contract
 cargo test --test stress -- --nocapture
 
 # Single scenario
