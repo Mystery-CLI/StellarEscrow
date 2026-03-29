@@ -94,14 +94,46 @@ Metrics are collected at three layers:
 | Layer | Mechanism | Endpoint |
 |-------|-----------|---------|
 | Infrastructure | `HealthMonitor` (Rust) | `GET /health/metrics` |
+| APM (request-level) | `PerformanceService` (Rust) | `GET /performance/dashboard` |
+| APM alerts | `PerformanceService` alert rules | `GET /performance/alerts` |
+| APM history | Hourly rollup (materialized view) | `GET /performance/history` |
+| Prometheus scrape | `MonitoringService` + APM metrics | `GET /metrics` |
 | Web Vitals | `observeWebVitals()` (JS) | beacons → `POST /api/metrics` |
 | CDN | `observeCdnPerformance()` (JS) | beacons → `POST /api/metrics` |
 | SSL | `monitorTlsConnection()` (JS) | beacons → `POST /api/metrics` |
+
+### APM Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /performance/dashboard` | Full APM snapshot: per-route stats, overall P95/P99, active alerts |
+| `GET /performance/alerts` | Active performance alerts only |
+| `GET /performance/history` | Hourly rollup from `perf_metrics_hourly` (last 24h) |
+| `POST /performance/record` | Ingest a sample `{ route, method, status, duration_ms }` |
+| `GET /metrics` | Prometheus text format (monitoring + APM metrics) |
+
+### Grafana Dashboards
+
+| Dashboard | UID | Description |
+|-----------|-----|-------------|
+| StellarEscrow Platform | `stellar-escrow-main` | Business metrics (trades, compliance, fraud) |
+| APM — Performance | `stellar-escrow-apm` | Latency (avg/P95/P99), error rate, throughput, DB query time |
+| Code Quality | `code-quality` | CI lint/security metrics |
+
+### Alert Rules
+
+| File | Group | Alerts |
+|------|-------|--------|
+| `alert_rules.yml` | `stellar_escrow_platform` | Error rate, disputes, fraud |
+| `alert_rules_security.yml` | `stellar_escrow_compliance` | AML, compliance blocks |
+| `alert_rules_performance.yml` | `stellar_escrow_performance` | Latency (avg/P95), error rate, DB queries, throughput |
 
 ### Key Metrics to Watch
 
 - **TTFB** < 200ms (good), < 800ms (acceptable)
 - **LCP** < 2.5s
+- **Avg response time** < 500ms (warning at 500ms, critical at 2000ms)
+- **P95 response time** < 1000ms (warning at 1000ms, critical at 5000ms)
 - **DB query mean** < 10ms for hot paths (`get_events`, `search_trades`)
 - **Redis hit rate** > 80% under normal load
 - **Indexer memory** < 256MB under normal load

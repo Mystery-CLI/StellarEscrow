@@ -1155,7 +1155,43 @@ impl Database {
         .execute(&self.pool)
         .await?;
         Ok(())
-    pub async fn get_integration_deliveries(
+    }
+
+    /// Query the hourly APM rollup materialized view for the last `hours` hours.
+    pub async fn get_perf_hourly_rollup(
+        &self,
+        hours: i64,
+    ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT hour, route, method, requests, errors, avg_ms, p95_ms, p99_ms
+            FROM perf_metrics_hourly
+            WHERE hour >= NOW() - ($1 || ' hours')::INTERVAL
+            ORDER BY hour DESC
+            LIMIT 500
+            "#,
+        )
+        .bind(hours)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                use sqlx::Row;
+                serde_json::json!({
+                    "hour": r.get::<chrono::DateTime<chrono::Utc>, _>("hour"),
+                    "route": r.get::<String, _>("route"),
+                    "method": r.get::<String, _>("method"),
+                    "requests": r.get::<i64, _>("requests"),
+                    "errors": r.get::<i64, _>("errors"),
+                    "avg_ms": r.get::<f64, _>("avg_ms"),
+                    "p95_ms": r.get::<f64, _>("p95_ms"),
+                    "p99_ms": r.get::<f64, _>("p99_ms"),
+                })
+            })
+            .collect())
+    }
         &self,
         connector_id: Option<&str>,
         limit: i64,

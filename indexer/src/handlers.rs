@@ -569,6 +569,34 @@ pub async fn get_performance_alerts(
     }))
 }
 
+#[derive(serde::Deserialize)]
+pub struct PerfRecordBody {
+    pub route: String,
+    pub method: String,
+    pub status: u16,
+    pub duration_ms: u64,
+}
+
+/// POST /performance/record — ingest a single APM sample (used by middleware / external agents).
+pub async fn record_performance_sample(
+    State(state): State<AppState>,
+    Json(body): Json<PerfRecordBody>,
+) -> StatusCode {
+    state
+        .performance_service
+        .record(&body.route, &body.method, body.status, body.duration_ms)
+        .await;
+    StatusCode::NO_CONTENT
+}
+
+/// GET /performance/history — hourly rollup from the materialized view.
+pub async fn get_performance_history(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let rows = state.database.get_perf_hourly_rollup(24).await?;
+    Ok(Json(serde_json::json!({ "hours": rows })))
+}
+
 // =============================================================================
 // Analytics Handlers
 // =============================================================================
@@ -854,11 +882,42 @@ pub async fn get_monitoring_alerts(
     Ok(Json(serde_json::to_value(&alerts).unwrap_or_default()))
 }
 
-/// GET /monitoring/metrics — Prometheus-format metrics.
+/// GET /monitoring/metrics — Prometheus-format metrics (monitoring + APM).
 pub async fn get_prometheus_metrics(
     State(state): State<AppState>,
 ) -> axum::response::Response<String> {
-    let body = state.monitoring_service.prometheus_metrics();
+    let mut body = state.monitoring_service.prometheus_metrics();
+
+    // Append APM metrics from the performance service
+    let dash = state.performance_service.dashboard().await;
+    let apm = format!(
+        "\n# HELP stellar_escrow_api_avg_response_ms Average API response time in ms\n\
+         # TYPE stellar_escrow_api_avg_response_ms gauge\n\
+         stellar_escrow_api_avg_response_ms {avg}\n\
+         # HELP stellar_escrow_api_p95_response_ms P95 API response time in ms\n\
+         # TYPE stellar_escrow_api_p95_response_ms gauge\n\
+         stellar_escrow_api_p95_response_ms {p95}\n\
+         # HELP stellar_escrow_api_p99_response_ms P99 API response time in ms\n\
+         # TYPE stellar_escrow_api_p99_response_ms gauge\n\
+         stellar_escrow_api_p99_response_ms {p99}\n\
+         # HELP stellar_escrow_api_requests_total Total API requests recorded\n\
+         # TYPE stellar_escrow_api_requests_total counter\n\
+         stellar_escrow_api_requests_total {total}\n\
+         # HELP stellar_escrow_api_requests_per_minute API requests per minute\n\
+         # TYPE stellar_escrow_api_requests_per_minute gauge\n\
+         stellar_escrow_api_requests_per_minute {rpm}\n\
+         # HELP stellar_escrow_active_perf_alerts Number of active performance alerts\n\
+         # TYPE stellar_escrow_active_perf_alerts gauge\n\
+         stellar_escrow_active_perf_alerts {alerts}\n",
+        avg = dash.overall.avg_ms,
+        p95 = dash.overall.p95_ms,
+        p99 = dash.overall.p99_ms,
+        total = dash.overall.total_requests,
+        rpm = dash.overall.requests_per_minute,
+        alerts = dash.active_alerts.len(),
+    );
+    body.push_str(&apm);
+
     axum::response::Response::builder()
         .status(200)
         .header("Content-Type", "text/plain; version=0.0.4")

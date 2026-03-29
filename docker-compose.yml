@@ -185,6 +185,9 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - ./monitoring/alert_rules_security.yml:/etc/prometheus/alert_rules_security.yml:ro
+      - ./monitoring/alert_rules_performance.yml:/etc/prometheus/alert_rules_performance.yml:ro
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
