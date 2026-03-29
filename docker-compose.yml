@@ -205,6 +205,7 @@ services:
       - ./monitoring/alert_rules_security.yml:/etc/prometheus/alert_rules_security.yml:ro
       - ./monitoring/alert_rules_performance.yml:/etc/prometheus/alert_rules_performance.yml:ro
       - ./monitoring/alert_rules_infrastructure.yml:/etc/prometheus/alert_rules_infrastructure.yml:ro
+      - ./monitoring/alert_rules_cost.yml:/etc/prometheus/alert_rules_cost.yml:ro
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"

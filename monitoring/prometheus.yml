@@ -12,6 +12,7 @@ rule_files:
   - "alert_rules_security.yml"
   - "alert_rules_performance.yml"
   - "alert_rules_infrastructure.yml"
+  - "alert_rules_cost.yml"
 
 scrape_configs:
   - job_name: "stellar-escrow-indexer"

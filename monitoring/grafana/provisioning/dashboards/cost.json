@@ -1,0 +1,120 @@
+{
+  "title": "StellarEscrow Cost Overview",
+  "uid": "stellar-escrow-cost",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1h",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Estimated Monthly Spend (USD)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "stellar_escrow_estimated_monthly_cost_usd", "legendFormat": "USD" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 120 },
+              { "color": "red", "value": 150 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Budget Utilisation (%)",
+      "type": "gauge",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "stellar_escrow_estimated_monthly_cost_usd / stellar_escrow_monthly_budget_usd * 100",
+        "legendFormat": "% of budget"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Compute Cost (USD)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "stellar_escrow_compute_cost_usd", "legendFormat": "Compute" }],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "id": 4,
+      "title": "Database Cost (USD)",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "stellar_escrow_database_cost_usd", "legendFormat": "Database" }],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "id": 5,
+      "title": "Networking Cost (USD)",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "stellar_escrow_networking_cost_usd", "legendFormat": "Networking" }],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "id": 6,
+      "title": "Cost Breakdown by Service",
+      "type": "piechart",
+      "gridPos": { "x": 0, "y": 4, "w": 10, "h": 8 },
+      "targets": [
+        { "expr": "stellar_escrow_compute_cost_usd",    "legendFormat": "Compute" },
+        { "expr": "stellar_escrow_database_cost_usd",   "legendFormat": "Database" },
+        { "expr": "stellar_escrow_networking_cost_usd", "legendFormat": "Networking" },
+        { "expr": "stellar_escrow_storage_cost_usd",    "legendFormat": "Storage" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Estimated Spend Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 10, "y": 4, "w": 14, "h": 8 },
+      "targets": [
+        { "expr": "stellar_escrow_estimated_monthly_cost_usd", "legendFormat": "Total" },
+        { "expr": "stellar_escrow_monthly_budget_usd",         "legendFormat": "Budget" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "id": 8,
+      "title": "Resource Utilisation — CPU (%)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
+      "targets": [{
+        "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)",
+        "legendFormat": "CPU {{ instance }}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 9,
+      "title": "Resource Utilisation — Memory (%)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 6 },
+      "targets": [{
+        "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
+        "legendFormat": "Memory {{ instance }}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    }
+  ]
+}
