@@ -1,0 +1,33 @@
+# Development overrides — use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+version: "3.8"
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  indexer:
+    environment:
+      RUST_LOG: debug
+    ports:
+      - "3000:3000"
+
+  api:
+    environment:
+      NODE_ENV: development
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./api/src:/app/src:ro   # mount source for faster iteration
+
+  client:
+    ports:
+      - "3001:3001"
+
+  frontend:
+    ports:
+      - "8080:8080"

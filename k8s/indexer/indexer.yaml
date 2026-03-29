@@ -27,6 +27,11 @@ spec:
                 secretKeyRef:
                   name: stellar-escrow-secrets
                   key: DATABASE_URL
+            - name: STELLAR_ESCROW__CACHE__REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: stellar-escrow-secrets
+                  key: REDIS_PASSWORD
             - name: RUST_LOG
               valueFrom:
                 configMapKeyRef:
