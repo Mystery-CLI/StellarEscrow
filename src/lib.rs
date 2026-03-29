@@ -539,7 +539,9 @@ impl StellarEscrowContract {
         let fee_bps = tiers::effective_fee_bps(&env, &seller, base_fee_bps);
         let mut trade_ids = soroban_sdk::Vec::new(&env);
         let mut total_amount: u64 = 0;
+        let mut total_fees: u64 = 0;
         let now = env.ledger().sequence();
+        let currency = types::Currency::Usdc;
         for (buyer, amount, arbitrator) in trades.iter() {
             if amount == 0 { return Err(ContractError::InvalidAmount); }
             if let Some(ref arb) = arbitrator {
@@ -552,14 +554,21 @@ impl StellarEscrowContract {
                 id: trade_id, seller: seller.clone(), buyer: buyer.clone(),
                 amount, fee, arbitrator, status: TradeStatus::Created,
                 created_at: now, updated_at: now, metadata: None,
-                currency: types::Currency::Usdc, expiry_time: None,
+                currency: currency.clone(), expiry_time: None,
             };
             save_trade(&env, trade_id, &trade);
             index_trade_for_address(&env, &seller, trade_id);
             index_trade_for_address(&env, &buyer, trade_id);
+            append_timeline_entry(&env, trade_id, TimelineEntry { status: TradeStatus::Created, ledger: now });
+            users::record_trade_created(&env, &seller, &buyer, amount);
+            admin::on_trade_created(&env, amount);
             trade_ids.push_back(trade_id);
             total_amount = total_amount.checked_add(amount).ok_or(ContractError::Overflow)?;
+            total_fees = total_fees.checked_add(fee).ok_or(ContractError::Overflow)?;
         }
+        let current_fees = get_accumulated_fees(&env)?;
+        set_accumulated_fees(&env, current_fees.checked_add(total_fees).ok_or(ContractError::Overflow)?);
+        add_currency_fees(&env, &currency, total_fees)?;
         events::emit_batch_trades_created(&env, trade_ids.len() as u32, total_amount);
         Ok(trade_ids)
     }
@@ -577,10 +586,21 @@ impl StellarEscrowContract {
         let token = get_usdc_token(&env)?;
         let token_client = TokenClient::new(&env, &token);
         let mut total_amount: u64 = 0;
+        let mut seen: soroban_sdk::Map<u64, bool> = soroban_sdk::Map::new(&env);
+        let now_ts = env.ledger().timestamp();
         for trade_id in trade_ids.iter() {
+            if seen.get(trade_id).is_some() {
+                return Err(ContractError::DuplicateTradeInBatch);
+            }
+            seen.set(trade_id, true);
             let trade = get_trade(&env, trade_id)?;
             if trade.status != TradeStatus::Created { return Err(ContractError::InvalidStatus); }
             if trade.buyer != buyer { return Err(ContractError::Unauthorized); }
+            if let Some(expiry) = trade.expiry_time {
+                if now_ts >= expiry {
+                    return Err(ContractError::TradeExpired);
+                }
+            }
             total_amount = total_amount.checked_add(trade.amount).ok_or(ContractError::Overflow)?;
         }
         token_client.transfer(&buyer, &env.current_contract_address(), &(total_amount as i128));
@@ -590,6 +610,7 @@ impl StellarEscrowContract {
             trade.status = TradeStatus::Funded;
             trade.updated_at = now;
             save_trade(&env, trade_id, &trade);
+            append_timeline_entry(&env, trade_id, TimelineEntry { status: TradeStatus::Funded, ledger: now });
         }
         events::emit_batch_trades_funded(&env, trade_ids.len() as u32, total_amount);
         Ok(())
@@ -610,7 +631,12 @@ impl StellarEscrowContract {
         let mut total_payout: u64 = 0;
         let mut total_fees: u64 = 0;
         let mut seller_payouts: soroban_sdk::Map<Address, u64> = soroban_sdk::Map::new(&env);
+        let mut seen: soroban_sdk::Map<u64, bool> = soroban_sdk::Map::new(&env);
         for trade_id in trade_ids.iter() {
+            if seen.get(trade_id).is_some() {
+                return Err(ContractError::DuplicateTradeInBatch);
+            }
+            seen.set(trade_id, true);
             let trade = get_trade(&env, trade_id)?;
             if trade.status != TradeStatus::Completed { return Err(ContractError::InvalidStatus); }
             if trade.buyer != buyer { return Err(ContractError::Unauthorized); }
@@ -629,6 +655,8 @@ impl StellarEscrowContract {
             let trade = get_trade(&env, trade_id)?;
             tiers::record_volume(&env, &trade.seller, trade.amount)?;
             tiers::record_volume(&env, &trade.buyer, trade.amount)?;
+            users::record_trade_completed(&env, &trade.seller, &trade.buyer);
+            admin::on_trade_completed(&env, trade.fee);
         }
         events::emit_batch_trades_confirmed(&env, trade_ids.len() as u32, total_payout, total_fees);
         Ok(())

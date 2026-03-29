@@ -978,6 +978,32 @@ fn test_batch_create_rejects_empty_and_oversized_batches() {
 }
 
 #[test]
+fn test_batch_fund_and_confirm_reject_duplicate_trade_ids() {
+    let (env, client, _, seller, buyer) = setup();
+    let mut batch = soroban_sdk::Vec::new(&env);
+    batch.push_back((buyer.clone(), 1_000u64, None));
+    let trade_ids = client.batch_create_trades(&seller, &batch);
+    let id = trade_ids.get(0).unwrap();
+
+    let mut dup_fund = soroban_sdk::Vec::new(&env);
+    dup_fund.push_back(id);
+    dup_fund.push_back(id);
+    let fund_err = client.try_batch_fund_trades(&buyer, &dup_fund);
+    assert_eq!(fund_err, Err(Ok(ContractError::DuplicateTradeInBatch)));
+
+    let mut single = soroban_sdk::Vec::new(&env);
+    single.push_back(id);
+    client.batch_fund_trades(&buyer, &single);
+    client.complete_trade(&id);
+
+    let mut dup_confirm = soroban_sdk::Vec::new(&env);
+    dup_confirm.push_back(id);
+    dup_confirm.push_back(id);
+    let confirm_err = client.try_batch_confirm_trades(&buyer, &dup_confirm);
+    assert_eq!(confirm_err, Err(Ok(ContractError::DuplicateTradeInBatch)));
+}
+
+#[test]
 fn test_custom_fee_configuration_changes_trade_fee_and_tier_state() {
     let (_env, client, _, seller, buyer) = setup();
     let config = TierConfig {

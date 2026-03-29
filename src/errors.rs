@@ -33,4 +33,5 @@ pub enum ContractError {
     InsufficientAllowance = 27,
     TradeExpired = 28,
     NotExpiredYet = 29,
+    DuplicateTradeInBatch = 30,
 }
