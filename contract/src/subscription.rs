@@ -104,3 +104,88 @@ pub fn cancel(env: &Env, subscriber: &Address) -> Result<(), ContractError> {
 pub fn get(env: &Env, subscriber: &Address) -> Option<Subscription> {
     get_subscription(env, subscriber)
 }
+
+/// Check if a user has an active subscription.
+///
+/// Returns true if the user has a subscription that hasn't expired.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `subscriber` - The user's address
+///
+/// # Returns
+/// * `bool` - True if subscription is active, false otherwise
+pub fn is_subscription_active(env: &Env, subscriber: &Address) -> bool {
+    match get_subscription(env, subscriber) {
+        Some(sub) => env.ledger().sequence() <= sub.expires_at,
+        None => false,
+    }
+}
+
+/// Get the subscription tier for a user.
+///
+/// Returns the tier if the user has an active subscription, None otherwise.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `subscriber` - The user's address
+///
+/// # Returns
+/// * `Option<SubscriptionTier>` - The tier if active, None otherwise
+pub fn get_subscription_tier(env: &Env, subscriber: &Address) -> Option<SubscriptionTier> {
+    match get_subscription(env, subscriber) {
+        Some(sub) if env.ledger().sequence() <= sub.expires_at => Some(sub.tier),
+        _ => None,
+    }
+}
+
+/// Get the fee discount for a user's subscription.
+///
+/// Returns the discount in basis points (0-10000) if the user has an active subscription.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `subscriber` - The user's address
+///
+/// # Returns
+/// * `u32` - Discount in basis points (0 if no active subscription)
+pub fn get_subscription_discount(env: &Env, subscriber: &Address) -> u32 {
+    match get_subscription(env, subscriber) {
+        Some(sub) if env.ledger().sequence() <= sub.expires_at => match sub.tier {
+            SubscriptionTier::Basic => SUB_DISCOUNT_BASIC_BPS,
+            SubscriptionTier::Pro => SUB_DISCOUNT_PRO_BPS,
+            SubscriptionTier::Enterprise => SUB_DISCOUNT_ENTERPRISE_BPS,
+        },
+        _ => 0,
+    }
+}
+
+/// Get the subscription price for a tier.
+///
+/// Returns the price in USDC for the given tier.
+///
+/// # Arguments
+/// * `tier` - The subscription tier
+///
+/// # Returns
+/// * `u64` - Price in USDC
+pub fn get_subscription_price(tier: &SubscriptionTier) -> u64 {
+    tier_price(tier)
+}
+
+/// Check if a subscription is expired.
+///
+/// Returns true if the subscription exists but has expired.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `subscriber` - The user's address
+///
+/// # Returns
+/// * `bool` - True if subscription is expired, false otherwise
+pub fn is_subscription_expired(env: &Env, subscriber: &Address) -> bool {
+    match get_subscription(env, subscriber) {
+        Some(sub) => env.ledger().sequence() > sub.expires_at,
+        None => false,
+    }
+}

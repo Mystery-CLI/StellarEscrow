@@ -195,3 +195,82 @@ pub fn aggregate_trades(env: &Env, filter: TradeFilter) -> Result<TradeStats, Co
         max_amount,
     })
 }
+
+/// Filter trades by date range (using trade ID as proxy for time).
+///
+/// Since trade IDs are sequential, we can use them as a proxy for time range.
+/// This is more efficient than storing timestamps for each trade.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `from_id` - Start trade ID (inclusive)
+/// * `to_id` - End trade ID (inclusive)
+///
+/// # Returns
+/// * `Vec<Trade>` - Trades within the ID range
+pub fn query_trades_by_date_range(
+    env: &Env,
+    from_id: u64,
+    to_id: u64,
+) -> Result<Vec<Trade>, ContractError> {
+    let total = get_trade_counter(env).unwrap_or(0);
+    let mut result: Vec<Trade> = Vec::new(env);
+    
+    for id in from_id..=to_id.min(total) {
+        if let Ok(trade) = get_trade(env, id) {
+            result.push_back(trade);
+        }
+    }
+    
+    Ok(result)
+}
+
+/// Get trade statistics for a specific status.
+///
+/// Convenience function to get stats filtered by status only.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `status` - The trade status to filter by
+///
+/// # Returns
+/// * `TradeStats` - Aggregated statistics for trades with the given status
+pub fn get_trade_stats_by_status(
+    env: &Env,
+    status: TradeStatus,
+) -> Result<TradeStats, ContractError> {
+    let filter = TradeFilter {
+        status: Some(status),
+        participant: None,
+        min_amount: None,
+        max_amount: None,
+        from_trade_id: None,
+        to_trade_id: None,
+    };
+    aggregate_trades(env, filter)
+}
+
+/// Count trades matching a filter without retrieving them.
+///
+/// More efficient than query_trades when only the count is needed.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `filter` - The filter criteria
+///
+/// # Returns
+/// * `u64` - Number of matching trades
+pub fn count_trades(env: &Env, filter: TradeFilter) -> Result<u64, ContractError> {
+    let total = get_trade_counter(env).unwrap_or(0);
+    let mut count: u64 = 0;
+    
+    for id in 1..=total {
+        if let Ok(trade) = get_trade(env, id) {
+            if matches_filter(&trade, &filter) {
+                count += 1;
+            }
+        }
+    }
+    
+    Ok(count)
+}
