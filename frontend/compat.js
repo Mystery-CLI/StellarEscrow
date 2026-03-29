@@ -11,6 +11,8 @@
   var ua = navigator.userAgent;
 
   var browser = (function () {
+    var isBrave = !!(navigator.brave && typeof navigator.brave.isBrave === 'function');
+    if (isBrave)              return { name: 'Brave',   version: (ua.match(/Chrome\/([\d.]+)/) || [])[1] };
     if (/Edg\//.test(ua))     return { name: 'Edge',    version: (ua.match(/Edg\/([\d.]+)/)    || [])[1] };
     if (/OPR\//.test(ua))     return { name: 'Opera',   version: (ua.match(/OPR\/([\d.]+)/)    || [])[1] };
     if (/Chrome\//.test(ua))  return { name: 'Chrome',  version: (ua.match(/Chrome\/([\d.]+)/) || [])[1] };
@@ -21,12 +23,14 @@
   })();
 
   // Minimum supported versions
-  var MIN_VERSIONS = { Chrome: 90, Firefox: 88, Safari: 14, Edge: 90, Opera: 76 };
+  var MIN_VERSIONS = { Chrome: 90, Firefox: 88, Safari: 14, Edge: 90, Opera: 76, Brave: 90 };
 
   var majorVersion = parseInt((browser.version || '0').split('.')[0], 10);
   var isSupported   = browser.name !== 'IE' &&
                       (!(browser.name in MIN_VERSIONS) || majorVersion >= MIN_VERSIONS[browser.name]);
   var isIE          = browser.name === 'IE';
+  var isSafari      = browser.name === 'Safari';
+  var isMobileSafari = /iPhone|iPad|iPod/.test(ua);
 
   // ---------------------------------------------------------------------------
   // Feature detection
@@ -50,6 +54,9 @@
     clipboard:        !!(navigator.clipboard && navigator.clipboard.writeText),
     notifications:    typeof Notification !== 'undefined',
     serviceWorker:    'serviceWorker' in navigator,
+    abortController:  typeof AbortController !== 'undefined',
+    promiseAllSettled:typeof Promise.allSettled !== 'undefined',
+    stringReplaceAll: typeof String.prototype.replaceAll !== 'undefined',
   };
 
   // ---------------------------------------------------------------------------
@@ -118,6 +125,40 @@
       return setTimeout(function () { cb(now + delay); }, delay);
     };
     window.cancelAnimationFrame = clearTimeout;
+  }
+
+  // Promise.allSettled
+  if (!features.promiseAllSettled) {
+    Promise.allSettled = function (promises) {
+      return Promise.all(promises.map(function (p) {
+        return Promise.resolve(p).then(
+          function (val) { return { status: 'fulfilled', value: val }; },
+          function (err) { return { status: 'rejected', reason: err }; }
+        );
+      }));
+    };
+  }
+
+  // AbortController (basic polyfill)
+  if (!features.abortController) {
+    function AbortSignal() { this.aborted = false; this.onabort = null; }
+    function AbortController() { this.signal = new AbortSignal(); }
+    AbortController.prototype.abort = function () {
+      this.signal.aborted = true;
+      if (typeof this.signal.onabort === 'function') this.signal.onabort();
+    };
+    window.AbortController = AbortController;
+    window.AbortSignal = AbortSignal;
+  }
+
+  // String.prototype.replaceAll
+  if (!features.stringReplaceAll) {
+    String.prototype.replaceAll = function (search, replacement) {
+      if (search instanceof RegExp && !search.global) {
+        throw new TypeError('replaceAll must be called with a global RegExp');
+      }
+      return this.split(search).join(replacement);
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -190,14 +231,43 @@
     );
   }
 
+  if (!features.localStorage) {
+    showWarning(
+      'LocalStorage is disabled or not supported. This might be due to Private Browsing mode. ' +
+      'Settings and session data will not be saved.',
+      'compat-storage-warning'
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Browser-specific fixes
   // ---------------------------------------------------------------------------
 
+  // Safari: 100vh height fix for mobile
+  if (isMobileSafari) {
+    var setVH = function () {
+      var vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', vh + 'px');
+    };
+    window.addEventListener('resize', setVH);
+    setVH();
+  }
+
+  // Chrome / Edge / Brave: custom scrollbar styling if supported
+  var isChromium = /Chrome/.test(browser.name) || /Edge/.test(browser.name) || /Brave/.test(browser.name);
+  if (isChromium) {
+    var scrollStyle = document.createElement('style');
+    scrollStyle.textContent = [
+      '::-webkit-scrollbar{width:8px;height:8px}',
+      '::-webkit-scrollbar-track{background:#1a1a2e}',
+      '::-webkit-scrollbar-thumb{background:#4b4b7c;border-radius:4px}',
+      '::-webkit-scrollbar-thumb:hover{background:#6366f1}',
+    ].join('');
+    document.head.appendChild(scrollStyle);
+  }
+
   // Safari: passive touch-event listeners to avoid scroll-blocking warnings
   // and fix 300ms tap delay on older iOS Safari (< 13).
-  var isSafari = browser.name === 'Safari';
-  var isMobileSafari = /iPhone|iPad|iPod/.test(ua);
   if (isSafari || isMobileSafari) {
     // Ensure touch-action is set so iOS Safari doesn't delay click events
     var safariStyle = document.createElement('style');
@@ -275,9 +345,14 @@
     fixes: {
       safariTouchAction:    isSafari || isMobileSafari,
       iosTouchMove:         isMobileSafari,
+      safariVHFix:          isMobileSafari,
+      chromiumScrollbars:   isChromium,
       firefoxFocusVisible:  firefoxMajor < 85,
       safariSmoothScroll:   safariMajor < 15,
       dialogPolyfill:       typeof HTMLDialogElement === 'undefined',
+      abortController:      !features.abortController,
+      promiseAllSettled:    !features.promiseAllSettled,
+      stringReplaceAll:     !features.stringReplaceAll,
     },
   };
 

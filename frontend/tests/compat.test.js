@@ -22,6 +22,10 @@ describe('Browser detection', () => {
 
   afterEach(() => {
     Object.defineProperty(navigator, 'userAgent', { value: originalUA, configurable: true });
+    // Reset navigator.brave
+    if (navigator.brave) {
+      delete navigator.brave;
+    }
   });
 
   test('detects Chrome', () => {
@@ -32,6 +36,20 @@ describe('Browser detection', () => {
     loadCompat();
     expect(window.StellarCompat.browser.name).toBe('Chrome');
     expect(parseInt(window.StellarCompat.browser.version)).toBeGreaterThanOrEqual(90);
+  });
+
+  test('detects Brave', () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+      configurable: true,
+    });
+    // Stub navigator.brave
+    Object.defineProperty(navigator, 'brave', {
+      value: { isBrave: () => Promise.resolve(true) },
+      configurable: true,
+    });
+    loadCompat();
+    expect(window.StellarCompat.browser.name).toBe('Brave');
   });
 
   test('detects Firefox', () => {
@@ -113,6 +131,22 @@ describe('Polyfills', () => {
     loadCompat();
     expect(typeof window.requestAnimationFrame).toBe('function');
   });
+
+  test('Promise.allSettled is defined after load', () => {
+    loadCompat();
+    expect(typeof Promise.allSettled).toBe('function');
+  });
+
+  test('AbortController is defined after load', () => {
+    loadCompat();
+    expect(typeof window.AbortController).toBe('function');
+    expect(typeof window.AbortSignal).toBe('function');
+  });
+
+  test('String.prototype.replaceAll is defined after load', () => {
+    loadCompat();
+    expect(typeof String.prototype.replaceAll).toBe('function');
+  });
 });
 
 describe('Browser-specific fixes', () => {
@@ -134,6 +168,16 @@ describe('Browser-specific fixes', () => {
   test('fixes.safariSmoothScroll is a boolean', () => {
     loadCompat();
     expect(typeof window.StellarCompat.fixes.safariSmoothScroll).toBe('boolean');
+  });
+
+  test('fixes.safariVHFix is a boolean', () => {
+    loadCompat();
+    expect(typeof window.StellarCompat.fixes.safariVHFix).toBe('boolean');
+  });
+
+  test('fixes.chromiumScrollbars is a boolean', () => {
+    loadCompat();
+    expect(typeof window.StellarCompat.fixes.chromiumScrollbars).toBe('boolean');
   });
 
   test('fixes.dialogPolyfill is a boolean', () => {
@@ -214,5 +258,27 @@ describe('Compatibility warnings', () => {
     const btn = banner.querySelector('button');
     btn.click();
     expect(document.getElementById('compat-ie-warning')).toBeNull();
+  });
+
+  test('shows warning when localStorage is disabled', () => {
+    // Mock localStorage to fail completely
+    const originalLS = window.localStorage;
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        setItem: () => { throw new Error('SecurityError'); },
+        removeItem: () => {},
+        getItem: () => null
+      },
+      configurable: true
+    });
+    
+    loadCompat();
+    expect(document.getElementById('compat-storage-warning')).not.toBeNull();
+    
+    // Restore
+    Object.defineProperty(window, 'localStorage', {
+      value: originalLS,
+      configurable: true
+    });
   });
 });
