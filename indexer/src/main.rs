@@ -294,6 +294,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/performance/alerts", get(get_performance_alerts))
         .route("/performance/record", post(record_performance_sample))
         .route("/performance/history", get(get_performance_history))
+        .route("/performance/bottlenecks", get(get_performance_bottlenecks))
         // Compliance
         .route("/compliance/check", post(run_compliance_check))
         .route("/compliance/status/:address", get(get_compliance_status))

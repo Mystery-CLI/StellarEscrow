@@ -60,6 +60,14 @@ API_METRICS=$(curl -sf "${API_BASE}/health/metrics" 2>/dev/null || echo "unavail
 log "$API_METRICS"
 REPORT[api_metrics]="$API_METRICS"
 
+# ── 3b. APM bottleneck report ─────────────────────────────────────────────────
+log ""
+log "## APM Bottleneck Report (slow queries + index usage + cache)"
+sep
+APM_BOTTLENECKS=$(curl -sf "${API_BASE}/performance/bottlenecks" 2>/dev/null || echo "unavailable")
+log "$APM_BOTTLENECKS"
+REPORT[apm_bottlenecks]="$APM_BOTTLENECKS"
+
 # ── 4. Docker container resource usage ───────────────────────────────────────
 log ""
 log "## Container Resource Usage"

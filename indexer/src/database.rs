@@ -55,6 +55,95 @@ impl Database {
         Self { pool }
     }
 
+    /// Record a slow query to the slow_query_log table (fire-and-forget).
+    /// Only logs queries exceeding `threshold_ms`.
+    pub fn log_slow_query(
+        pool: PgPool,
+        query_hash: String,
+        query_text: String,
+        duration_ms: f64,
+        rows_returned: Option<i32>,
+    ) {
+        const THRESHOLD_MS: f64 = 100.0;
+        if duration_ms < THRESHOLD_MS {
+            return;
+        }
+        tokio::spawn(async move {
+            let _ = sqlx::query(
+                "INSERT INTO slow_query_log (query_hash, query_text, duration_ms, rows_returned) \
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(&query_hash)
+            .bind(&query_text)
+            .bind(duration_ms)
+            .bind(rows_returned)
+            .execute(&pool)
+            .await;
+        });
+    }
+
+    /// Fetch the top slow queries from pg_stat_statements.
+    pub async fn get_slow_queries(&self, limit: i64) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT query,
+                   calls,
+                   round(mean_exec_time::numeric, 2)  AS mean_ms,
+                   round(total_exec_time::numeric, 2) AS total_ms,
+                   round(stddev_exec_time::numeric, 2) AS stddev_ms
+            FROM pg_stat_statements
+            ORDER BY mean_exec_time DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit.clamp(1, 50))
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "query":    r.get::<String, _>("query"),
+                    "calls":    r.get::<i64, _>("calls"),
+                    "mean_ms":  r.get::<f64, _>("mean_ms"),
+                    "total_ms": r.get::<f64, _>("total_ms"),
+                    "stddev_ms":r.get::<f64, _>("stddev_ms"),
+                })
+            })
+            .collect())
+    }
+
+    /// Fetch tables with low index-scan ratio (candidates for new indexes).
+    pub async fn get_index_usage(&self) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT relname AS table,
+                   seq_scan, idx_scan,
+                   CASE WHEN seq_scan + idx_scan = 0 THEN 0
+                        ELSE round(100.0 * idx_scan / (seq_scan + idx_scan), 1)
+                   END AS idx_pct
+            FROM pg_stat_user_tables
+            ORDER BY idx_pct ASC
+            LIMIT 20
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "table":    r.get::<String, _>("table"),
+                    "seq_scan": r.get::<i64, _>("seq_scan"),
+                    "idx_scan": r.get::<i64, _>("idx_scan"),
+                    "idx_pct":  r.get::<f64, _>("idx_pct"),
+                })
+            })
+            .collect())
+    }
+
     pub async fn insert_event(&self, event: &Event) -> Result<(), AppError> {
         sqlx::query(
             r#"

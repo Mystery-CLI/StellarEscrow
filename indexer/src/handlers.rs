@@ -597,6 +597,21 @@ pub async fn get_performance_history(
     Ok(Json(serde_json::json!({ "hours": rows })))
 }
 
+/// GET /performance/bottlenecks — slow queries + index usage analysis.
+pub async fn get_performance_bottlenecks(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let (slow_queries, index_usage) = tokio::join!(
+        state.database.get_slow_queries(10),
+        state.database.get_index_usage(),
+    );
+    Ok(Json(serde_json::json!({
+        "slow_queries": slow_queries.unwrap_or_default(),
+        "index_usage":  index_usage.unwrap_or_default(),
+        "cache":        state.cache_service.get_stats_snapshot().await,
+    })))
+}
+
 // =============================================================================
 // Analytics Handlers
 // =============================================================================

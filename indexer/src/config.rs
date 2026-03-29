@@ -143,14 +143,22 @@ pub struct CacheConfig {
     /// TTL for event list responses (seconds, default: 10)
     #[serde(default = "default_events_ttl")]
     pub events_ttl_secs: u64,
+    /// TTL for search results (seconds, default: 30)
+    #[serde(default = "default_search_ttl")]
+    pub search_ttl_secs: u64,
+    /// TTL for analytics dashboard (seconds, default: 60)
+    #[serde(default = "default_analytics_ttl")]
+    pub analytics_ttl_secs: u64,
+    /// TTL for platform stats (seconds, default: 60)
+    #[serde(default = "default_stats_ttl")]
+    pub stats_ttl_secs: u64,
 }
 
-fn default_cache_ttl() -> u64 {
-    30
-}
-fn default_events_ttl() -> u64 {
-    10
-}
+fn default_cache_ttl() -> u64 { 30 }
+fn default_events_ttl() -> u64 { 10 }
+fn default_search_ttl() -> u64 { 30 }
+fn default_analytics_ttl() -> u64 { 60 }
+fn default_stats_ttl() -> u64 { 60 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StellarConfig {
