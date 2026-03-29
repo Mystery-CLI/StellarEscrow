@@ -36,29 +36,10 @@ const USER_COMPLIANCE_PREFIX: &str = "UCOMP";
 const USER_LIMIT_PREFIX: &str = "ULIM";
 const JURISDICTION_RULES_PREFIX: &str = "JUR";
 const GLOBAL_TRADE_LIMIT: &str = "GLOB_LIM";
-use crate::types::{CrossChainInfo, InsurancePolicy, TierConfig, Trade, TradeTemplate, UserTierInfo};
-
-// Instance storage keys (short symbols, cheapest encoding)
-fn key_init() -> Symbol { symbol_short!("INIT") }
-fn key_admin() -> Symbol { symbol_short!("ADMIN") }
-fn key_usdc() -> Symbol { symbol_short!("USDC") }
-fn key_fee_bps() -> Symbol { symbol_short!("FEE_BPS") }
-fn key_counter() -> Symbol { symbol_short!("COUNTER") }
-fn key_acc_fees() -> Symbol { symbol_short!("ACC_FEES") }
-fn key_paused() -> Symbol { symbol_short!("PAUSED") }
-fn key_tier_cfg() -> Symbol { symbol_short!("TIER_CFG") }
-fn key_tmpl_ctr() -> Symbol { symbol_short!("TMPL_CTR") }
-fn key_version() -> Symbol { symbol_short!("VERSION") }
-fn key_bridge() -> Symbol { symbol_short!("BRIDGE") }
-
-// Persistent storage key prefixes
-const TRADE_PREFIX: &str = "T";
-const ARB_PREFIX: &str = "A";
-const USER_TIER_PREFIX: &str = "U";
-const TEMPLATE_PREFIX: &str = "P";
 const XCHAIN_PREFIX: &str = "X";
 const INS_PROVIDER_PREFIX: &str = "IP";
 const INS_POLICY_PREFIX: &str = "IPL";
+const ARB_PREFIX: &str = "A";
 
 // Initialization
 pub fn is_initialized(env: &Env) -> bool {
@@ -146,6 +127,7 @@ pub fn get_currency_fees(env: &Env, currency: &Address) -> u64 {
 pub fn set_currency_fees(env: &Env, currency: &Address, fees: u64) {
     let key = (CURRENCY_FEES_PREFIX, currency);
     env.storage().persistent().set(&key, &fees);
+}
 /// Add `delta` to accumulated fees in a single read-modify-write.
 pub fn add_accumulated_fees(env: &Env, delta: u64) -> Result<(), ContractError> {
     let current: u64 = env.storage().instance().get(&key_acc_fees()).unwrap_or(0);

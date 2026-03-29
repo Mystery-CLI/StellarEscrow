@@ -19,19 +19,16 @@ mod tiers;
 mod types;
 mod upgrade;
 mod proxy;
+mod insurance;
 
 use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, Env};
 
 pub use errors::ContractError;
 pub use types::{
-    ArbitrationConfig, DisclosureGrant, DisputeResolution, Proposal, ProposalAction,
-    ArbitrationConfig, ArbitratorVote, DisclosureGrant, DisputeResolution, MultiSigConfig,
-    Proposal, ProposalAction, ProposalStatus, Subscription, SubscriptionTier, TierConfig,
-    TemplateTerms, TemplateVersion, Trade, TradePrivacy, TradeStatus, TradeTemplate,
-    UserTier, UserTierInfo, VotingSummary,
-    ArbitratorReputation, DisclosureGrant, DisputeResolution, Proposal, ProposalAction,
-    ProposalStatus, Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion,
-    Trade, TradePrivacy, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
+    ArbitrationConfig, ArbitratorReputation, ArbitratorVote, CrossChainInfo, DisclosureGrant,
+    DisputeResolution, InsurancePolicy, MultiSigConfig, Proposal, ProposalAction, ProposalStatus,
+    Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion, Trade,
+    TradePrivacy, TradeStatus, TradeTemplate, UserTier, UserTierInfo, VotingSummary,
 };
 pub use queries::{PageParams, SortDirection, TradeFilter, TradeSortField, TradeStats};
 pub use oracle::{OracleEntry, PriceData, PriceValidation};
@@ -40,36 +37,19 @@ pub use upgrade::{RollbackSnapshot, UpgradeProposal};
 pub use proxy::*;
 
 use storage::{
-    get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_usdc_token,
-    has_arbitrator, has_initialized, increment_trade_counter, is_initialized, is_paused,
-    remove_arbitrator, save_arbitrator, save_trade, set_accumulated_fees, set_admin, set_fee_bps,
-    ArbitratorReputation, DisputeResolution, TierConfig, TemplateTerms,
-    TemplateVersion, Trade, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
-};
-
-use storage::{
-    get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_trade_counter, get_usdc_token,
-    has_arbitrator, has_initialized, has_rated, increment_trade_counter, is_initialized, is_paused,
-    mark_rated, remove_arbitrator, save_arbitrator, save_arbitrator_reputation, save_trade,
-    set_accumulated_fees, set_admin, set_fee_bps, set_initialized, set_paused, set_trade_counter,
-    set_usdc_token,
-    CrossChainInfo, DisputeResolution, InsurancePolicy,
-    TierConfig, TemplateTerms, TemplateVersion, Trade, TradeStatus,
-    TradeTemplate, UserTier, UserTierInfo,
-};
-
-use storage::{
     add_accumulated_fees, get_accumulated_fees, get_admin, get_currency_fees, get_fee_bps,
-    get_trade, get_trade_counter, get_usdc_token, has_arbitrator, has_initialized, has_rated,
-    increment_trade_counter, is_initialized, is_paused, mark_rated, remove_arbitrator,
-    save_arbitrator, save_arbitrator_reputation, save_trade, set_accumulated_fees, set_admin,
-    set_currency_fees, set_fee_bps, set_initialized, set_paused, set_trade_counter,
-    set_usdc_token, CrossChainInfo, InsurancePolicy,
+    get_insurance_policy, get_trade, get_trade_counter, get_usdc_token, has_arbitrator,
+    has_initialized, has_insurance_provider, has_rated, increment_trade_counter, is_initialized,
+    is_paused, mark_rated, remove_arbitrator, remove_insurance_provider, save_arbitrator,
+    save_arbitrator_reputation, save_insurance_policy, save_insurance_provider, save_trade,
+    set_accumulated_fees, set_admin, set_currency_fees, set_fee_bps, set_initialized,
+    set_paused, set_trade_counter, set_usdc_token,
 };
 
 fn token_client<'a>(env: &'a Env, token: &Address) -> token::Client<'a> {
     token::Client::new(env, token)
 }
+
 
 /// Maximum length of JSON metadata string
 pub const MAX_METADATA_SIZE: usize = 1024;
@@ -321,6 +301,9 @@ impl StellarEscrowContract {
         let resolution = multisig::resolve_expired_dispute(&env, trade_id, &admin)?;
         let trade = get_trade(&env, trade_id)?;
         StellarEscrowContract::execute_dispute_resolution(env, trade_id, resolution, trade)
+    }
+
+    // -------------------------------------------------------------------------
     // Arbitrator Reputation
     // -------------------------------------------------------------------------
 
@@ -668,6 +651,8 @@ impl StellarEscrowContract {
         events::emit_trade_funded(&env, trade_id);
         analytics::on_trade_funded(&env);
         Ok(())
+    }
+
     pub fn complete_trade(env: Env, trade_id: u64) -> Result<(), ContractError> {
         require_initialized(&env)?;
         require_not_paused(&env)?;
@@ -712,6 +697,8 @@ impl StellarEscrowContract {
         events::emit_trade_confirmed(&env, trade_id, payout, trade.fee);
         analytics::on_trade_completed(&env, trade.fee);
         Ok(())
+    }
+
     pub fn raise_dispute(env: Env, trade_id: u64, caller: Address) -> Result<(), ContractError> {
         if !is_initialized(&env) {
             return Err(ContractError::NotInitialized);
@@ -758,6 +745,8 @@ impl StellarEscrowContract {
         events::emit_dispute_raised(&env, trade_id, caller);
         analytics::on_trade_disputed(&env);
         Ok(())
+    }
+
     /// Use `DisputeResolution::Partial { buyer_bps }` for a split:
     /// `buyer_bps` is the buyer's share of the net payout in basis points (0–10000).
     pub fn resolve_dispute(
@@ -938,7 +927,10 @@ impl StellarEscrowContract {
         save_trade(&env, trade_id, &trade);
         events::emit_trade_cancelled(&env, trade_id);
         analytics::on_trade_cancelled(&env);
-        Ok(()): anyone can call this once the expiry has
+        Ok(())
+    }
+
+    /// Claim time release — anyone can call this once the expiry has
     /// passed and the trade is Funded or Completed (not Disputed/Cancelled).
     /// Funds are released to the seller minus the platform fee.
     pub fn claim_time_release(env: Env, trade_id: u64) -> Result<(), ContractError> {
@@ -1119,14 +1111,6 @@ impl StellarEscrowContract {
     }
 
     /// Emergency withdrawal of all contract token balance (admin only).
-    pub fn emergency_withdraw(env: Env, to: Address) -> Result<(), ContractError> {
-        if !is_initialized(&env) {
-            return Err(ContractError::NotInitialized);
-        }
-        let admin = get_admin(&env)?;
-        admin.require_auth();
-        let token = get_usdc_token(&env)?;
-        let token_client = token::Client::new(&env, &token);
     /// Allowed even while paused so funds can always be recovered.
     pub fn emergency_withdraw(env: Env, to: Address) -> Result<(), ContractError> {
         require_initialized(&env)?;

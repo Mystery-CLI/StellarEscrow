@@ -197,6 +197,7 @@ pub fn emit_compliance_updated(env: &Env, user: Address) {
         (cat_compliance(), symbol_short!("updated")),
         EvComplianceUpdated { v: EVENT_VERSION, user },
     );
+}
 pub fn emit_compliance_failed(env: &Env, user: Address, reason: &soroban_sdk::String) {
     env.events().publish((cat_sys(), symbol_short!("compl_fail")), EvComplianceFailed { v: EVENT_VERSION, user, reason: reason.clone() });
 }
