@@ -55,7 +55,10 @@ impl Database {
         Self { pool }
     }
 
-    pub async fn insert_event(&self, event: &Event) -> Result<(), AppError> {
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+(&self, event: &Event) -> Result<(), AppError> {
         sqlx::query(
             r#"
             INSERT INTO events (id, event_type, category, schema_version, contract_id, ledger, transaction_hash, timestamp, data, created_at)

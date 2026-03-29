@@ -37,10 +37,9 @@ mod notification_service;
 mod rate_limit;
 mod rate_limit_handlers;
 mod storage;
+mod user_handlers;
 mod websocket;
 mod performance_service;
-mod compliance_service;
-mod monitoring_service;
 
 #[cfg(test)]
 mod test;
@@ -321,6 +320,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/webhooks/:id", delete(deactivate_webhook))
         .route("/webhooks/deliveries", get(get_webhook_deliveries))
         .route("/webhooks/stats", get(get_webhook_stats))
+        // Users
+        .route("/users", post(user_handlers::register_user))
+        .route(
+            "/users/:address",
+            get(user_handlers::get_user).patch(user_handlers::update_user),
+        )
+        .route(
+            "/users/:address/preferences",
+            get(user_handlers::get_preferences).put(user_handlers::set_preference),
+        )
+        .route("/users/:address/analytics", get(user_handlers::get_user_analytics))
+        .route("/users/:address/verification", axum::routing::patch(user_handlers::set_verification))
         .route("/ws", get(ws_handler))
         .route("/help", get(help_index))
         .route("/help/faqs", get(get_faqs))

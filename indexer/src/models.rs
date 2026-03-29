@@ -513,3 +513,65 @@ pub struct NotificationLogEntry {
     pub error: Option<String>,
     pub created_at: DateTime<Utc>,
 }
+
+// =============================================================================
+// User Management Models
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UserProfile {
+    pub address: String,
+    pub username_hash: String,
+    pub contact_hash: String,
+    pub avatar_hash: Option<String>,
+    pub verification: String,
+    pub two_fa_enabled: bool,
+    pub registered_at: i64,
+    pub updated_at: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UserPreference {
+    pub address: String,
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UserAnalyticsRow {
+    pub address: String,
+    pub total_trades: i32,
+    pub trades_as_seller: i32,
+    pub trades_as_buyer: i32,
+    pub total_volume: i64,
+    pub completed_trades: i32,
+    pub disputed_trades: i32,
+    pub cancelled_trades: i32,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterUserRequest {
+    pub address: String,
+    pub username_hash: String,
+    pub contact_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileRequest {
+    pub username_hash: Option<String>,
+    pub contact_hash: Option<String>,
+    pub avatar_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetPreferenceRequest {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetVerificationRequest {
+    pub status: String,
+}
