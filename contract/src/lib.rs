@@ -24,14 +24,10 @@ use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, BytesN, E
 
 pub use errors::ContractError;
 pub use types::{
-    ArbitrationConfig, DisclosureGrant, DisputeResolution, Proposal, ProposalAction,
-    ArbitrationConfig, ArbitratorVote, DisclosureGrant, DisputeResolution, MultiSigConfig,
-    Proposal, ProposalAction, ProposalStatus, Subscription, SubscriptionTier, TierConfig,
-    TemplateTerms, TemplateVersion, Trade, TradePrivacy, TradeStatus, TradeTemplate,
-    UserTier, UserTierInfo, VotingSummary,
-    ArbitratorReputation, DisclosureGrant, DisputeResolution, Proposal, ProposalAction,
-    ProposalStatus, Subscription, SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion,
-    Trade, TradePrivacy, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
+    ArbitrationConfig, ArbitratorReputation, ArbitratorVote, DisclosureGrant, DisputeResolution,
+    InsurancePolicy, MultiSigConfig, Proposal, ProposalAction, ProposalStatus, Subscription,
+    SubscriptionTier, TierConfig, TemplateTerms, TemplateVersion, Trade, TradePrivacy,
+    TradeStatus, TradeTemplate, UserTier, UserTierInfo, VotingSummary,
 };
 pub use queries::{PageParams, SortDirection, TradeFilter, TradeSortField, TradeStats};
 pub use oracle::{OracleEntry, PriceData, PriceValidation};
@@ -40,31 +36,11 @@ pub use upgrade::{RollbackSnapshot, UpgradeProposal};
 pub use proxy::*;
 
 use storage::{
-    get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_usdc_token,
-    has_arbitrator, has_initialized, increment_trade_counter, is_initialized, is_paused,
-    remove_arbitrator, save_arbitrator, save_trade, set_accumulated_fees, set_admin, set_fee_bps,
-    ArbitratorReputation, DisputeResolution, TierConfig, TemplateTerms,
-    TemplateVersion, Trade, TradeStatus, TradeTemplate, UserTier, UserTierInfo,
-};
-
-use storage::{
-    get_accumulated_fees, get_admin, get_fee_bps, get_trade, get_trade_counter, get_usdc_token,
-    has_arbitrator, has_initialized, has_rated, increment_trade_counter, is_initialized, is_paused,
-    mark_rated, remove_arbitrator, save_arbitrator, save_arbitrator_reputation, save_trade,
-    set_accumulated_fees, set_admin, set_fee_bps, set_initialized, set_paused, set_trade_counter,
-    set_usdc_token,
-    CrossChainInfo, DisputeResolution, InsurancePolicy,
-    TierConfig, TemplateTerms, TemplateVersion, Trade, TradeStatus,
-    TradeTemplate, UserTier, UserTierInfo,
-};
-
-use storage::{
-    add_accumulated_fees, get_accumulated_fees, get_admin, get_currency_fees, get_fee_bps,
-    get_trade, get_trade_counter, get_usdc_token, has_arbitrator, has_initialized, has_rated,
+    add_accumulated_fees, add_currency_fees, get_accumulated_fees, get_admin, get_currency_fees,
+    get_fee_bps, get_trade, get_trade_counter, get_usdc_token, has_arbitrator, has_rated,
     increment_trade_counter, is_initialized, is_paused, mark_rated, remove_arbitrator,
     save_arbitrator, save_arbitrator_reputation, save_trade, set_accumulated_fees, set_admin,
-    set_currency_fees, set_fee_bps, set_initialized, set_paused, set_trade_counter,
-    set_usdc_token, CrossChainInfo, InsurancePolicy,
+    set_currency_fees, set_fee_bps, set_initialized, set_paused, set_trade_counter, set_usdc_token,
 };
 
 fn token_client<'a>(env: &'a Env, token: &Address) -> token::Client<'a> {
@@ -691,22 +667,12 @@ impl StellarEscrowContract {
             return Err(ContractError::InvalidStatus);
         }
         trade.buyer.require_auth();
-        let token_client = token::Client::new(&env, &trade.currency);
         let payout = trade.amount.checked_sub(trade.fee).ok_or(ContractError::Overflow)?;
-        token_client.transfer(
-            &env.current_contract_address(),
-            &trade.seller,
-            &(payout as i128),
-        );
-        let current_fees = get_currency_fees(&env, &trade.currency);
-        let new_fees = current_fees.checked_add(trade.fee).ok_or(ContractError::Overflow)?;
-        set_currency_fees(&env, &trade.currency, new_fees);
-        let payout = trade.amount.checked_sub(trade.fee).ok_or(ContractError::Overflow)?;
-        let token = get_usdc_token(&env)?;
-        let token_client = TokenClient::new(&env, &token);
+        // Single token transfer using the trade's currency directly (no extra USDC lookup).
+        let token_client = TokenClient::new(&env, &trade.currency);
         token_client.transfer(&env.current_contract_address(), &trade.seller, &(payout as i128));
-        // Single read-modify-write for fees
-        add_accumulated_fees(&env, trade.fee)?;
+        // Atomic read-modify-write avoids a separate get + set call for per-currency fees.
+        add_currency_fees(&env, &trade.currency, trade.fee)?;
         tiers::record_volume(&env, &trade.seller, trade.amount)?;
         tiers::record_volume(&env, &trade.buyer, trade.amount)?;
         events::emit_trade_confirmed(&env, trade_id, payout, trade.fee);

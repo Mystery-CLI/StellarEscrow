@@ -42,14 +42,18 @@ pub fn record_volume(env: &Env, user: &Address, amount: u64) -> Result<(), Contr
         total_volume: 0,
         custom_fee_bps: None,
     });
+
+    info.total_volume = info.total_volume.checked_add(amount).ok_or(ContractError::Overflow)?;
+
+    // Custom-fee users skip tier promotion; persist only the updated volume.
     if let UserTier::Custom = info.tier {
-        info.total_volume = info.total_volume.checked_add(amount).ok_or(ContractError::Overflow)?;
         save_user_tier(env, user, &info);
         return Ok(());
     }
-    info.total_volume = info.total_volume.checked_add(amount).ok_or(ContractError::Overflow)?;
+
     let new_tier = volume_tier(info.total_volume);
     if new_tier != info.tier {
+        // Determine direction before mutating `info.tier`.
         let upgraded = matches!(
             (&info.tier, &new_tier),
             (UserTier::Bronze, UserTier::Silver)
@@ -64,6 +68,7 @@ pub fn record_volume(env: &Env, user: &Address, amount: u64) -> Result<(), Contr
             events::emit_tier_downgraded(env, user.clone(), new_tier);
         }
     } else {
+        // Tier unchanged — only persist the new volume total.
         save_user_tier(env, user, &info);
     }
     Ok(())
