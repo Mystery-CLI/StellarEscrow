@@ -25,6 +25,16 @@ fn setup() -> (Env, Address, Address, Address, Address, Address, StellarEscrowCo
     let client = StellarEscrowContractClient::new(&env, &contract_id);
     client.initialize(&admin, &token_addr, &100u32); // 1% fee
 
+    // Default compliance: all participants verified, US jurisdiction
+    let compliant = crate::types::UserCompliance {
+        kyc_status: crate::types::KycStatus::Verified,
+        aml_cleared: true,
+        jurisdiction: soroban_sdk::String::from_str(&env, "US"),
+    };
+    client.set_user_compliance(&admin, &seller, &compliant);
+    client.set_user_compliance(&admin, &buyer, &compliant);
+    client.set_user_compliance(&admin, &arbitrator, &compliant);
+
     (env, token_addr, admin, seller, buyer, arbitrator, client)
 }
 

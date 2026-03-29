@@ -165,6 +165,38 @@ pub fn emit_trade_created(env: &Env, trade_id: u64, seller: Address, buyer: Addr
     env.events().publish((cat_trade(), symbol_short!("created")), EvTradeCreated { v: EVENT_VERSION, trade_id, seller, buyer, amount, currency });
 }
 
+// ---------------------------------------------------------------------------
+// Compliance events
+// ---------------------------------------------------------------------------
+
+fn cat_compliance() -> Symbol { symbol_short!("compl") }
+
+#[contracttype] #[derive(Clone, Debug)]
+pub struct EvComplianceFailed { pub v: u32, pub user: Address, pub reason: String }
+#[contracttype] #[derive(Clone, Debug)]
+pub struct EvCompliancePassed { pub v: u32, pub trade_id: u64, pub seller: Address, pub buyer: Address, pub amount: u64 }
+#[contracttype] #[derive(Clone, Debug)]
+pub struct EvComplianceUpdated { pub v: u32, pub user: Address }
+
+pub fn emit_compliance_failed(env: &Env, user: Address, reason: &String) {
+    env.events().publish(
+        (cat_compliance(), symbol_short!("failed")),
+        EvComplianceFailed { v: EVENT_VERSION, user, reason: reason.clone() },
+    );
+}
+
+pub fn emit_compliance_passed(env: &Env, trade_id: u64, seller: Address, buyer: Address, amount: u64) {
+    env.events().publish(
+        (cat_compliance(), symbol_short!("passed")),
+        EvCompliancePassed { v: EVENT_VERSION, trade_id, seller, buyer, amount },
+    );
+}
+
+pub fn emit_compliance_updated(env: &Env, user: Address) {
+    env.events().publish(
+        (cat_compliance(), symbol_short!("updated")),
+        EvComplianceUpdated { v: EVENT_VERSION, user },
+    );
 pub fn emit_compliance_failed(env: &Env, user: Address, reason: &soroban_sdk::String) {
     env.events().publish((cat_sys(), symbol_short!("compl_fail")), EvComplianceFailed { v: EVENT_VERSION, user, reason: reason.clone() });
 }

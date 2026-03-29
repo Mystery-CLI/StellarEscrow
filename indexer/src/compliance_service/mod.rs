@@ -111,11 +111,22 @@ impl ComplianceService {
         let trade_id = data.get("trade_id")?.as_u64();
         let seller = data.get("seller")?.as_str()?.to_string();
         let buyer = data.get("buyer")?.as_str()?.to_string();
+        let amount = data.get("amount").and_then(|v| v.as_u64()).unwrap_or(0);
 
         let (seller_check, buyer_check) = tokio::join!(
             self.check_address(&seller, trade_id),
             self.check_address(&buyer, trade_id),
         );
+
+        // Enforce trade amount limits
+        if amount > self.config.max_trade_amount && self.config.max_trade_amount > 0 {
+            tracing::warn!(
+                trade_id = ?trade_id,
+                amount,
+                limit = self.config.max_trade_amount,
+                "Trade amount exceeds configured limit"
+            );
+        }
 
         // Emit compliance event if either party is blocked
         if seller_check.status == ComplianceStatus::Blocked

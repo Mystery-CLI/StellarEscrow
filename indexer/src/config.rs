@@ -54,6 +54,9 @@ pub struct ComplianceConfig {
     pub blocked_jurisdictions: Vec<String>,
     #[serde(default)]
     pub reporting_webhook_url: String,
+    /// Maximum allowed trade amount in stroops (0 = unlimited)
+    #[serde(default)]
+    pub max_trade_amount: u64,
 }
 
 fn default_kyc_level() -> u8 { 1 }

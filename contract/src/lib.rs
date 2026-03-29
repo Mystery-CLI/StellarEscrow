@@ -141,27 +141,49 @@ fn require_admin(env: &Env, admin: &Address) -> Result<(), ContractError> {
 }
 
 fn validate_user_compliance(env: &Env, user: &Address, amount: u64) -> Result<(), ContractError> {
-    let comp = storage::get_user_compliance(env, user).ok_or(ContractError::KycNotVerified)?;
+    let comp = storage::get_user_compliance(env, user)
+        .ok_or(ContractError::ComplianceDataMissing)?;
+
     if comp.kyc_status != crate::types::KycStatus::Verified {
-        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "KYC_NOT_VERIFIED"));
+        events::emit_compliance_failed(
+            env,
+            user.clone(),
+            &soroban_sdk::String::from_str(env, "KYC_NOT_VERIFIED"),
+        );
         return Err(ContractError::KycNotVerified);
     }
     if !comp.aml_cleared {
-        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "AML_NOT_CLEARED"));
+        events::emit_compliance_failed(
+            env,
+            user.clone(),
+            &soroban_sdk::String::from_str(env, "AML_NOT_CLEARED"),
+        );
         return Err(ContractError::AmlNotCleared);
     }
     if !storage::is_jurisdiction_allowed(env, &comp.jurisdiction) {
-        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "JURISDICTION_BLOCKED"));
+        events::emit_compliance_failed(
+            env,
+            user.clone(),
+            &soroban_sdk::String::from_str(env, "JURISDICTION_BLOCKED"),
+        );
         return Err(ContractError::JurisdictionRestricted);
     }
     let user_limit = storage::get_user_trade_limit(env, user);
     if user_limit > 0 && amount > user_limit {
-        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "USER_LIMIT_EXCEEDED"));
+        events::emit_compliance_failed(
+            env,
+            user.clone(),
+            &soroban_sdk::String::from_str(env, "USER_LIMIT_EXCEEDED"),
+        );
         return Err(ContractError::TradeAmountLimitExceeded);
     }
     let global_limit = storage::get_global_trade_limit(env);
     if amount > global_limit {
-        events::emit_compliance_failed(env, user.clone(), &soroban_sdk::String::from_str(env, "GLOBAL_LIMIT_EXCEEDED"));
+        events::emit_compliance_failed(
+            env,
+            user.clone(),
+            &soroban_sdk::String::from_str(env, "GLOBAL_LIMIT_EXCEEDED"),
+        );
         return Err(ContractError::TradeAmountLimitExceeded);
     }
     Ok(())
@@ -389,6 +411,7 @@ impl StellarEscrowContract {
         require_not_paused(&env)?;
         require_admin(&env, &admin)?;
         storage::save_user_compliance(&env, &user, &compliance);
+        events::emit_compliance_updated(&env, user);
         Ok(())
     }
 
