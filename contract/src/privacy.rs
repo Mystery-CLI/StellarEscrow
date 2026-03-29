@@ -86,3 +86,46 @@ pub fn get_grant(
     get_disclosure_grant(env, trade_id, grantee)
         .ok_or(ContractError::DisclosureGrantNotFound)
 }
+
+/// Check whether a trade has privacy settings configured.
+pub fn has_privacy(env: &Env, trade_id: u64) -> bool {
+    get_trade_privacy(env, trade_id).is_some()
+}
+
+/// Check whether a specific grantee has an active disclosure grant for a trade.
+pub fn has_disclosure_grant(env: &Env, trade_id: u64, grantee: &Address) -> bool {
+    get_disclosure_grant(env, trade_id, grantee).is_some()
+}
+
+/// Verify that a data hash matches the stored privacy commitment.
+/// Returns `Ok(true)` if the hash matches, `Ok(false)` if it doesn't,
+/// or `Err(DisclosureGrantNotFound)` if no privacy record exists.
+pub fn verify_data_hash(
+    env: &Env,
+    trade_id: u64,
+    claimed_hash: &String,
+) -> Result<bool, ContractError> {
+    let privacy = get_trade_privacy(env, trade_id)
+        .ok_or(ContractError::DisclosureGrantNotFound)?;
+    Ok(privacy.data_hash == *claimed_hash)
+}
+
+/// Privacy compliance check: ensure a trade has a privacy record before
+/// allowing sensitive operations (e.g. private arbitration).
+/// Returns `Err(DisclosureUnauthorized)` if private_arbitration is requested
+/// but no privacy record has been set.
+pub fn require_privacy_compliance(
+    env: &Env,
+    trade_id: u64,
+    requires_private_arbitration: bool,
+) -> Result<(), ContractError> {
+    if !requires_private_arbitration {
+        return Ok(());
+    }
+    let privacy = get_trade_privacy(env, trade_id)
+        .ok_or(ContractError::DisclosureUnauthorized)?;
+    if !privacy.private_arbitration {
+        return Err(ContractError::DisclosureUnauthorized);
+    }
+    Ok(())
+}
