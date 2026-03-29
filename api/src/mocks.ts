@@ -124,3 +124,5 @@ export const handlers = [
   ...eventHandlers,
   ...blockchainHandlers,
 ];
+
+export const server = setupServer(...handlers);

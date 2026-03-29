@@ -6,7 +6,9 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "gateway": "node -r ts-node/register src/gateway/server.ts",
     "test": "jest --runInBand",
+    "test:gateway": "jest --config jest.gateway.config.js --runInBand",
     "test:unit": "jest --runInBand unit",
     "test:endpoints": "jest --runInBand endpoint",
     "test:integration": "jest --runInBand integration",
