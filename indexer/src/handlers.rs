@@ -16,6 +16,9 @@ use crate::database::Database;
 use crate::error::AppError;
 use crate::fraud_service::FraudDetectionService;
 use crate::health::HealthState;
+use crate::job_queue::types::{Job, JobPriority, JobType};
+use crate::job_queue::worker::JobWorker;
+use crate::job_queue::JobQueue;
 use crate::webhook_service::WebhookService;
 use crate::monitoring_service::{MonitoringService, dashboard};
 use crate::models::{
@@ -61,6 +64,9 @@ pub async fn api_index() -> Json<serde_json::Value> {
             "cache_stats":     "GET  /cache/stats",
             "cache_invalidate":"POST /cache/invalidate",
             "cache_warm":      "POST /cache/warm",
+            "jobs_stats":      "GET  /jobs/stats",
+            "jobs_enqueue":    "POST /jobs/enqueue",
+            "jobs_schedule":   "POST /jobs/schedule",
             "fraud_review":    "POST /fraud/review",
             "notif_prefs_get": "GET  /notifications/preferences/:address",
             "notif_prefs_put": "PUT  /notifications/preferences/:address",
@@ -425,6 +431,8 @@ pub async fn update_fraud_review(
 pub struct AppState {
     pub database: Arc<Database>,
     pub stellar_contract_id: String,
+    pub job_queue: Arc<tokio::sync::Mutex<JobQueue>>,
+    pub job_worker: Arc<JobWorker>,
     pub ws_manager: Arc<WebSocketManager>,
     pub health: HealthState,
     pub fraud_service: Arc<FraudDetectionService>,
@@ -643,6 +651,86 @@ pub async fn get_integration_log(
 pub struct IntegrationLogQuery {
     pub connector_id: Option<String>,
     pub limit: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct EnqueueJobRequest {
+    pub job_type: String,
+    pub event_id: Option<String>,
+    pub trade_id: Option<String>,
+    pub priority: Option<String>,
+    pub payload: Option<serde_json::Value>,
+    pub run_at: Option<i64>,
+    pub max_attempts: Option<u32>,
+}
+
+/// GET /jobs/stats — job queue depths and worker status.
+pub async fn get_job_stats(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let snapshot = state.job_worker.snapshot().await?;
+    Ok(Json(serde_json::to_value(&snapshot).unwrap_or_default()))
+}
+
+/// POST /jobs/enqueue — enqueue an immediate background job.
+pub async fn enqueue_job(
+    State(state): State<AppState>,
+    Json(body): Json<EnqueueJobRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let job_type = parse_job_type(&body.job_type)?;
+    let priority = parse_job_priority(body.priority.as_deref())?;
+    let mut job = Job::new(
+        job_type,
+        body.event_id.unwrap_or_else(|| "manual".to_string()),
+        body.trade_id.unwrap_or_else(|| "manual".to_string()),
+        body.payload.unwrap_or_default(),
+        priority,
+    );
+    if let Some(max_attempts) = body.max_attempts {
+        job = job.with_max_attempts(max_attempts.max(1));
+    }
+
+    let mut queue = state.job_queue.lock().await;
+    queue.enqueue(job.clone()).await?;
+
+    Ok(Json(json!({
+        "status": "queued",
+        "job_id": job.id,
+        "priority": job.priority.as_str(),
+    })))
+}
+
+/// POST /jobs/schedule — enqueue a delayed background job.
+pub async fn schedule_job(
+    State(state): State<AppState>,
+    Json(body): Json<EnqueueJobRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let run_at = body
+        .run_at
+        .ok_or_else(|| AppError::BadRequest("run_at is required".to_string()))?;
+    let job_type = parse_job_type(&body.job_type)?;
+    let priority = parse_job_priority(body.priority.as_deref())?;
+    let mut job = Job::new(
+        job_type,
+        body.event_id.unwrap_or_else(|| "scheduled".to_string()),
+        body.trade_id.unwrap_or_else(|| "scheduled".to_string()),
+        body.payload.unwrap_or_default(),
+        priority,
+    )
+    .scheduled_at(run_at);
+    if let Some(max_attempts) = body.max_attempts {
+        job = job.with_max_attempts(max_attempts.max(1));
+    }
+
+    let mut queue = state.job_queue.lock().await;
+    queue.enqueue_at(job.clone(), run_at).await?;
+
+    Ok(Json(json!({
+        "status": "scheduled",
+        "job_id": job.id,
+        "run_at": run_at,
+        "priority": job.priority.as_str(),
+    })))
 }
 
 // =============================================================================
@@ -992,4 +1080,24 @@ pub async fn get_prometheus_metrics(
         .header("Content-Type", "text/plain; version=0.0.4")
         .body(body)
         .unwrap()
+}
+
+fn parse_job_type(value: &str) -> Result<JobType, AppError> {
+    match value {
+        "event" => Ok(JobType::Event),
+        "notification" => Ok(JobType::Notification),
+        "cache_warm" => Ok(JobType::CacheWarm),
+        "compliance" => Ok(JobType::Compliance),
+        _ => Err(AppError::BadRequest(format!("unsupported job_type '{}'", value))),
+    }
+}
+
+fn parse_job_priority(value: Option<&str>) -> Result<JobPriority, AppError> {
+    match value.unwrap_or("normal") {
+        "critical" => Ok(JobPriority::Critical),
+        "high" => Ok(JobPriority::High),
+        "normal" => Ok(JobPriority::Normal),
+        "low" => Ok(JobPriority::Low),
+        other => Err(AppError::BadRequest(format!("unsupported priority '{}'", other))),
+    }
 }

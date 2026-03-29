@@ -9,6 +9,7 @@ mod gateway;
 mod handlers;
 mod health;
 mod help;
+mod job_queue;
 mod models;
 mod notification_service;
 mod rate_limit;

@@ -11,6 +11,7 @@ A high-performance event indexing service for the Stellar Escrow smart contract 
 - **Event Replay**: Replay historical events for catch-up or analysis
 - **Configurable**: Flexible configuration for different networks and contracts
 - **Redis Caching**: Read-through caching, invalidation, monitoring, and warming for hot API paths
+- **Background Jobs**: Redis-backed queue with priorities, scheduling, retries, and monitoring
 
 ## Architecture
 

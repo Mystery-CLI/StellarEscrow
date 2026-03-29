@@ -32,6 +32,7 @@ mod handlers;
 mod health;
 mod help;
 mod integration_service;
+mod job_queue;
 mod models;
 mod notification_service;
 mod rate_limit;
@@ -59,6 +60,8 @@ use help::{
     get_contact, get_docs, get_faqs, get_tutorial_by_id, get_tutorials, help_index, search_help,
 };
 use integration_service::IntegrationService;
+use job_queue::JobQueue;
+use job_queue::worker::JobWorker;
 use notification_service::NotificationService;
 use performance_service::PerformanceService;
 use rate_limit::RateLimiter;
@@ -217,6 +220,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let webhook_service = Arc::new(WebhookService::new(database.clone()));
     webhook_service.load_endpoints().await;
 
+    // Initialize job queue + worker
+    let job_queue = Arc::new(tokio::sync::Mutex::new(
+        JobQueue::new(&config.cache.redis_url).await?
+    ));
+    let job_worker = Arc::new(JobWorker::new(job_queue.clone(), "indexer-job-worker"));
+    let worker_task = job_worker.clone();
+    tokio::spawn(async move {
+        if let Err(e) = worker_task.run().await {
+            warn!("Job worker exited with error: {}", e);
+        }
+    });
+
     // Start alert evaluation loop in background
     let monitoring_loop = monitoring_service.clone();
     tokio::spawn(async move {
@@ -231,6 +246,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fraud_service.clone(),
         notification_service.clone(),
         integration_service.clone(),
+        job_queue.clone(),
     );
 
     // Start event monitoring in background
@@ -323,6 +339,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Integrations
         .route("/integrations/stats", get(get_integration_stats))
         .route("/integrations/log", get(get_integration_log))
+        // Jobs
+        .route("/jobs/stats", get(get_job_stats))
+        .route("/jobs/enqueue", post(enqueue_job))
+        .route("/jobs/schedule", post(schedule_job))
         // Analytics
         .route("/analytics/dashboard", get(get_analytics_dashboard))
         .route("/analytics/realtime", get(get_analytics_realtime))
@@ -359,6 +379,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(AppState {
             database,
             stellar_contract_id: config.stellar.contract_id.clone(),
+            job_queue,
+            job_worker,
             ws_manager,
             health: health_state,
             fraud_service,
