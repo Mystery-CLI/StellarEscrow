@@ -30,6 +30,13 @@
   margin-top: 0.5rem;
 }
 
+@media (max-width: 600px) {
+  .trade-form button[type="submit"] {
+    align-self: stretch;
+    width: 100%;
+  }
+}
+
 /* ── Auto-save indicator ─────────────────────────────────── */
 
 .trade-form__save-indicator {

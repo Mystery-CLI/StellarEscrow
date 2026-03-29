@@ -1001,6 +1001,8 @@ import { enforceHttps, monitorTlsConnection } from '../security/src/ssl.js';
         initHelpNav();
         initKeyboardNavigation();
         initForms();
+        initTradeDetailForm();
+        initFundingInterface();
         initSmoothScroll();
         initFocusManagement();
         checkReducedMotion();
