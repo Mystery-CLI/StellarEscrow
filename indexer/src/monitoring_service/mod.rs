@@ -4,12 +4,12 @@ pub mod dashboard;
 
 use crate::config::MonitoringConfig;
 use crate::database::Database;
-use alerts::{AlertSeverity, AlertState};
+use alerts::{AlertRule, AlertSeverity, AlertState};
 use metrics::MetricsCollector;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 // ---------------------------------------------------------------------------
 // Config

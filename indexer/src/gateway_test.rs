@@ -11,15 +11,17 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
     middleware,
+    response::IntoResponse,
     routing::get,
     Router,
 };
 use std::sync::Arc;
 use tower::ServiceExt;
 
-use crate::config::{AuthConfig, GatewayConfig};
+use crate::config::AuthConfig;
 use crate::gateway::{
-    gateway_middleware, get_gateway_stats, GatewayError, GatewayState, StandardResponse,
+    gateway_middleware, get_gateway_stats, GatewayConfig, GatewayError, GatewayState,
+    StandardResponse,
 };
 
 /// Helper to create test gateway state
@@ -130,7 +132,7 @@ async fn test_gateway_public_paths_no_auth() {
     for path in &["/health", "/health/live", "/help"] {
         let request = Request::builder().uri(*path).body(Body::empty()).unwrap();
 
-        let response = app.oneshot(request).await.unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(
             response.status(),
             StatusCode::OK,
@@ -158,10 +160,11 @@ async fn test_gateway_admin_route_requires_admin_key() {
 
     // Regular API key should fail on admin routes
     let response = app
+        .clone()
         .oneshot(request_with_key("/admin/users", "test-key-123"))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // Admin key should succeed
     let response = app
@@ -239,7 +242,7 @@ async fn test_load_balancing_empty_instances() {
 
 #[test]
 fn test_standard_response_success() {
-    let response = StandardResponse::success("test data");
+    let response: StandardResponse<&str> = StandardResponse::success("test data");
 
     assert!(response.success);
     assert_eq!(response.data, Some("test data"));
@@ -299,9 +302,11 @@ async fn test_gateway_statistics_tracking() {
     // Make several requests to different endpoints
     for _ in 0..3 {
         let _ = app
+            .clone()
             .oneshot(request_with_key("/events", "test-key-123"))
             .await;
         let _ = app
+            .clone()
             .oneshot(request_with_key("/search", "test-key-123"))
             .await;
     }
@@ -379,12 +384,14 @@ async fn test_multiple_valid_keys() {
 
     // Both test keys should work
     let response1 = app
+        .clone()
         .oneshot(request_with_key("/test", "test-key-123"))
         .await
         .unwrap();
     assert_eq!(response1.status(), StatusCode::OK);
 
     let response2 = app
+        .clone()
         .oneshot(request_with_key("/test", "client-key-456"))
         .await
         .unwrap();

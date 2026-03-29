@@ -670,7 +670,7 @@ pub async fn env_health(
     let uptime_seconds = state.health.monitor.started_at.elapsed().as_secs();
 
     let (db_status, ok) = match sqlx::query("SELECT 1")
-        .execute(state.health.monitor.db_pool.as_ref())
+        .execute(&state.health.monitor.db_pool)
         .await
     {
         Ok(_) => ("connected".to_string(), true),

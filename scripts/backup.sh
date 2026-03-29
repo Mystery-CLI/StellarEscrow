@@ -53,3 +53,6 @@ log "Pruned backups older than ${RETENTION_DAYS} days."
 # ── Report metric ─────────────────────────────────────────────────────────────
 metric "{\"source\":\"backup\",\"type\":\"backup_success\",\"file\":\"$(basename "$BACKUP_FILE")\",\"ts\":$(date +%s)}"
 alert "✅ StellarEscrow backup complete: $(basename "$BACKUP_FILE") (${SIZE})"
+
+# Consumed by indexer BackupService (`run_backup_script`) to persist artifact path
+echo "BACKUP_LOCATION=${BACKUP_FILE}"

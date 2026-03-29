@@ -8,6 +8,7 @@ use crate::database::Database;
 use crate::models::Event;
 use aml::{AmlScreener, AmlResult};
 use kyc::{KycProvider, KycResult, KycStatus};
+use reporting::ComplianceReport;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use chrono::{DateTime, Utc};

@@ -52,6 +52,9 @@ pub enum AppError {
 
     #[error("Storage error: {0}")]
     Storage(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
 
 impl IntoResponse for AppError {
@@ -117,6 +120,11 @@ impl IntoResponse for AppError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "STORAGE_ERROR",
                 "Storage error",
+            ),
+            AppError::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                "Internal error",
             ),
         };
 
