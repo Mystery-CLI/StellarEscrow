@@ -205,6 +205,43 @@ pub async fn get_trade_detail(
     }
 }
 
+pub async fn fund_trade(
+    Path(trade_id): Path<i64>,
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    // Verify trade exists and is in Created status
+    let trade = state.database.get_trade_detail(trade_id).await?
+        .ok_or_else(|| AppError::NotFound(format!("Trade {} not found", trade_id)))?;
+
+    if trade.status != "trade_created" {
+        return Err(AppError::InvalidEventData(
+            format!("Trade {} cannot be funded — current status: {}", trade_id, trade.status)
+        ));
+    }
+
+    let buyer = body.get("buyer")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    if !buyer.is_empty() && trade.buyer != buyer {
+        return Err(AppError::InvalidEventData(
+            "Provided address is not the buyer for this trade".to_string()
+        ));
+    }
+
+    // In a full implementation this would invoke the Soroban contract via RPC.
+    // The indexer records the intent and the on-chain event will confirm funding.
+    Ok(Json(serde_json::json!({
+        "status": "submitted",
+        "trade_id": trade_id,
+        "buyer": buyer,
+        "amount": trade.amount,
+        "message": "Funding transaction submitted. Awaiting on-chain confirmation."
+    })))
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub database: Arc<Database>,

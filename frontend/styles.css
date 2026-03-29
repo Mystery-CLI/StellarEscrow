@@ -1336,3 +1336,328 @@ footer {
     text-align: center;
     padding: var(--space-2xl);
 }
+
+/* ============================================
+   Funding Interface (Issue #32)
+   ============================================ */
+
+/* Step indicator */
+.funding-steps {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--space-xl);
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.funding-step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    opacity: 0.45;
+    transition: opacity var(--transition-fast);
+}
+
+.funding-step.active {
+    opacity: 1;
+}
+
+.funding-step.completed {
+    opacity: 0.8;
+}
+
+.step-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-bg-tertiary);
+    border: 2px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+}
+
+.funding-step.active .step-number {
+    background: var(--color-accent-primary);
+    border-color: var(--color-accent-primary);
+    color: white;
+}
+
+.funding-step.completed .step-number {
+    background: var(--color-success);
+    border-color: var(--color-success);
+    color: white;
+}
+
+.step-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.funding-step.active .step-label {
+    color: var(--color-text-primary);
+}
+
+.funding-step-connector {
+    flex: 1;
+    min-width: 24px;
+    height: 2px;
+    background: var(--color-border);
+}
+
+/* Funding panels */
+.funding-panel {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-xl);
+    max-width: 600px;
+}
+
+.funding-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-lg);
+}
+
+.field-error {
+    font-size: var(--font-size-sm);
+    color: var(--color-error);
+    font-weight: 500;
+}
+
+/* Funding breakdown table */
+.funding-summary {
+    margin-bottom: var(--space-lg);
+}
+
+.funding-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: var(--space-md);
+}
+
+.funding-breakdown-row {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.funding-breakdown-row:last-child {
+    border-bottom: none;
+}
+
+.funding-breakdown-row dt {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    font-weight: 600;
+    align-self: center;
+}
+
+.funding-breakdown-row dd {
+    color: var(--color-text-primary);
+    margin: 0;
+    align-self: center;
+}
+
+.funding-breakdown-total {
+    background: var(--color-bg-tertiary);
+}
+
+.funding-breakdown-total dt,
+.funding-breakdown-total dd {
+    font-weight: 700;
+}
+
+.funding-amount-value { color: var(--color-text-primary); font-weight: 600; }
+.funding-fee-value    { color: var(--color-warning); font-weight: 600; }
+.funding-total-value  { color: var(--color-accent-primary); font-size: var(--font-size-lg); font-weight: 700; }
+
+/* Approval notice */
+.approval-notice {
+    display: flex;
+    gap: var(--space-sm);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent-primary);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+}
+
+.approval-icon {
+    font-size: 1.1em;
+    color: var(--color-accent-primary);
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+/* Checkbox field */
+.funding-checkbox-field {
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    accent-color: var(--color-accent-primary);
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"]:focus-visible {
+    outline: 3px solid var(--color-border-focus);
+    outline-offset: 2px;
+}
+
+/* Funding action buttons */
+.funding-actions {
+    display: flex;
+    gap: var(--space-md);
+    margin-top: var(--space-lg);
+    flex-wrap: wrap;
+}
+
+/* Confirmation card */
+.confirmation-card {
+    margin-bottom: var(--space-lg);
+}
+
+.confirmation-intro {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--space-md);
+    line-height: 1.6;
+}
+
+.confirmation-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    background: #f59e0b10;
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    font-size: var(--font-size-sm);
+    color: var(--color-warning);
+    margin-top: var(--space-md);
+    line-height: 1.6;
+}
+
+.btn-fund-confirm {
+    background: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.btn-fund-confirm:hover:not(:disabled) {
+    background: #16a34a;
+    border-color: #16a34a;
+}
+
+/* Result states */
+.funding-result {
+    text-align: center;
+    padding: var(--space-2xl) var(--space-xl);
+}
+
+.result-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 auto var(--space-lg);
+}
+
+.funding-result-success .result-icon {
+    background: #22c55e20;
+    color: var(--color-success);
+    border: 2px solid var(--color-success);
+}
+
+.funding-result-failure .result-icon {
+    background: #ef444420;
+    color: var(--color-error);
+    border: 2px solid var(--color-error);
+}
+
+.result-title {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-sm);
+}
+
+.result-message {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-xl);
+    font-size: var(--font-size-base);
+}
+
+.result-summary {
+    max-width: 400px;
+    margin: 0 auto var(--space-xl);
+    text-align: left;
+}
+
+.result-actions {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Loading spinner for async steps */
+.btn-loading {
+    position: relative;
+    color: transparent !important;
+    pointer-events: none;
+}
+
+.btn-loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}

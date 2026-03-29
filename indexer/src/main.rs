@@ -95,6 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/search/suggestions", get(search_suggestions))
         .route("/search/history", get(search_history))
         .route("/trades/:trade_id", get(get_trade_detail))
+        .route("/trades/:trade_id/fund", post(fund_trade))
         .route("/ws", get(ws_handler))
         // Help center
         .route("/help", get(help_index))

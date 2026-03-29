@@ -1102,6 +1102,314 @@
     }
 
     // ============================================
+    // Funding Interface (Issue #32)
+    // ============================================
+
+    const fundingState = {
+        tradeId: null,
+        trade: null,
+        buyerAddress: null,
+        currentStep: 1,
+    };
+
+    // Advance / retreat the step indicator UI
+    function setFundingStep(step) {
+        fundingState.currentStep = step;
+
+        // Show/hide panels
+        [1, 2, 3, 4].forEach(n => {
+            const panel = $(`#funding-step-${n}`);
+            if (panel) panel.hidden = (n !== step);
+        });
+
+        // Update step indicators
+        [1, 2, 3, 4].forEach(n => {
+            const ind = $(`#step-indicator-${n}`);
+            if (!ind) return;
+            ind.classList.remove('active', 'completed');
+            if (n < step)  ind.classList.add('completed');
+            if (n === step) ind.classList.add('active');
+            ind.setAttribute('aria-current', n === step ? 'step' : 'false');
+        });
+
+        // Move focus to the new panel heading
+        const heading = $(`#funding-step-${step}-heading`);
+        if (heading) {
+            heading.setAttribute('tabindex', '-1');
+            heading.focus({ preventScroll: false });
+        }
+
+        announce(`Step ${step} of 4`);
+    }
+
+    // Validate a Stellar public key (G... 56 chars)
+    function isValidStellarAddress(addr) {
+        return /^G[A-Z2-7]{55}$/.test(addr.trim());
+    }
+
+    function showFieldError(errId, message) {
+        const el = $(`#${errId}`);
+        if (!el) return;
+        el.textContent = message;
+        el.hidden = false;
+    }
+
+    function clearFieldError(errId) {
+        const el = $(`#${errId}`);
+        if (!el) return;
+        el.textContent = '';
+        el.hidden = true;
+    }
+
+    function setButtonLoading(btn, loading) {
+        if (!btn) return;
+        if (loading) {
+            btn.classList.add('btn-loading');
+            btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
+        } else {
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+        }
+    }
+
+    // Step 1 → 2: load trade and populate breakdown
+    async function handleFundingLookup(e) {
+        e.preventDefault();
+        clearFieldError('funding-trade-id-err');
+        clearFieldError('funding-buyer-address-err');
+
+        const tradeIdInput = $('#funding-trade-id');
+        const buyerInput   = $('#funding-buyer-address');
+        const tradeId      = tradeIdInput?.value?.trim();
+        const buyerAddress = buyerInput?.value?.trim();
+
+        let valid = true;
+
+        if (!tradeId || isNaN(tradeId) || Number(tradeId) < 1) {
+            showFieldError('funding-trade-id-err', 'Please enter a valid trade ID.');
+            tradeIdInput?.focus();
+            valid = false;
+        }
+
+        if (!buyerAddress) {
+            showFieldError('funding-buyer-address-err', 'Please enter your wallet address.');
+            if (valid) buyerInput?.focus();
+            valid = false;
+        } else if (!isValidStellarAddress(buyerAddress)) {
+            showFieldError('funding-buyer-address-err', 'Address must be a valid Stellar public key (starts with G, 56 characters).');
+            if (valid) buyerInput?.focus();
+            valid = false;
+        }
+
+        if (!valid) return;
+
+        const btn = $('#funding-lookup-btn');
+        setButtonLoading(btn, true);
+
+        try {
+            const trade = await fetchTradeDetail(tradeId);
+
+            // Validate trade is fundable
+            if (trade.status !== 'trade_created') {
+                showFieldError('funding-trade-id-err',
+                    `Trade #${tradeId} cannot be funded — current status: ${STATUS_LABELS[trade.status] || trade.status}.`);
+                return;
+            }
+
+            // Validate buyer matches
+            if (trade.buyer && trade.buyer.toLowerCase() !== buyerAddress.toLowerCase()) {
+                showFieldError('funding-buyer-address-err',
+                    'This address is not the buyer for this trade.');
+                return;
+            }
+
+            fundingState.tradeId     = tradeId;
+            fundingState.trade       = trade;
+            fundingState.buyerAddress = buyerAddress;
+
+            populateFundingBreakdown(trade, buyerAddress);
+            setFundingStep(2);
+
+        } catch (err) {
+            showFieldError('funding-trade-id-err', err.message || 'Failed to load trade.');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    function populateFundingBreakdown(trade, buyerAddress) {
+        const amount  = trade.amount;
+        const fee     = trade.fee ?? 0;
+        const payout  = trade.seller_payout ?? (amount - fee);
+
+        $('#fs-trade-id').textContent = trade.trade_id;
+        $('#fs-seller').textContent   = truncateAddress(trade.seller);
+        $('#fs-seller').title         = trade.seller || '';
+        $('#fs-amount').textContent   = formatAmount(amount);
+        $('#fs-fee').textContent      = fee > 0 ? formatAmount(fee) : 'None';
+        $('#fs-total').textContent    = formatAmount(amount);   // buyer pays full amount
+        $('#fs-payout').textContent   = formatAmount(payout);
+
+        // Inline approval label
+        const approvalInline = $('#approval-amount-inline');
+        if (approvalInline) approvalInline.textContent = formatAmount(amount);
+
+        // Reset approval checkbox
+        const checkbox = $('#usdc-approval-checkbox');
+        if (checkbox) checkbox.checked = false;
+        const approveBtn = $('#funding-approve-btn');
+        if (approveBtn) approveBtn.disabled = true;
+    }
+
+    // Step 2 → 3: populate confirmation card
+    function handleApproveAndContinue() {
+        clearFieldError('usdc-approval-err');
+
+        const checkbox = $('#usdc-approval-checkbox');
+        if (!checkbox?.checked) {
+            showFieldError('usdc-approval-err', 'You must approve the USDC transfer to continue.');
+            checkbox?.focus();
+            return;
+        }
+
+        const trade = fundingState.trade;
+        $('#fc-trade-id').textContent = trade.trade_id;
+        $('#fc-buyer').textContent    = truncateAddress(fundingState.buyerAddress);
+        $('#fc-buyer').title          = fundingState.buyerAddress;
+        $('#fc-amount').textContent   = formatAmount(trade.amount);
+
+        setFundingStep(3);
+    }
+
+    // Step 3 → 4: submit funding transaction
+    async function handleFundingConfirm() {
+        const btn = $('#funding-confirm-btn');
+        setButtonLoading(btn, true);
+        announce('Submitting funding transaction…', 'assertive');
+
+        try {
+            // Submit to indexer which proxies to the contract
+            const response = await fetch(`${CONFIG.apiBaseUrl}/trades/${fundingState.tradeId}/fund`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ buyer: fundingState.buyerAddress }),
+            });
+
+            setFundingStep(4);
+
+            if (response.ok) {
+                showFundingSuccess(fundingState.trade);
+            } else {
+                const err = await response.json().catch(() => ({}));
+                showFundingFailure(err.message || `Server error: ${response.status}`);
+            }
+        } catch (err) {
+            setFundingStep(4);
+            showFundingFailure(err.message || 'Network error — please try again.');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    function showFundingSuccess(trade) {
+        $('#funding-success').hidden  = false;
+        $('#funding-failure').hidden  = true;
+        $('#fr-trade-id').textContent = trade.trade_id;
+        $('#fr-amount').textContent   = formatAmount(trade.amount);
+        announce(`Trade #${trade.trade_id} funded successfully`, 'assertive');
+    }
+
+    function showFundingFailure(message) {
+        $('#funding-success').hidden  = true;
+        $('#funding-failure').hidden  = false;
+        $('#funding-error-msg').textContent = message;
+        announce(`Funding failed: ${message}`, 'assertive');
+    }
+
+    function resetFundingFlow() {
+        fundingState.tradeId      = null;
+        fundingState.trade        = null;
+        fundingState.buyerAddress = null;
+
+        // Clear inputs
+        const tradeInput  = $('#funding-trade-id');
+        const buyerInput  = $('#funding-buyer-address');
+        if (tradeInput) tradeInput.value  = '';
+        if (buyerInput) buyerInput.value  = '';
+
+        clearFieldError('funding-trade-id-err');
+        clearFieldError('funding-buyer-address-err');
+        clearFieldError('usdc-approval-err');
+
+        setFundingStep(1);
+        $('#funding-trade-id')?.focus();
+    }
+
+    function initFundingInterface() {
+        // Step 1 form submit
+        const lookupForm = $('#funding-lookup-form');
+        if (lookupForm) lookupForm.addEventListener('submit', handleFundingLookup);
+
+        // Approval checkbox enables the approve button
+        const checkbox   = $('#usdc-approval-checkbox');
+        const approveBtn = $('#funding-approve-btn');
+        if (checkbox && approveBtn) {
+            checkbox.addEventListener('change', () => {
+                approveBtn.disabled = !checkbox.checked;
+                clearFieldError('usdc-approval-err');
+            });
+        }
+
+        // Step 2 → 3
+        if (approveBtn) approveBtn.addEventListener('click', handleApproveAndContinue);
+
+        // Back buttons
+        const backBtn  = $('#funding-back-btn');
+        const backBtn2 = $('#funding-back-btn-2');
+        if (backBtn)  backBtn.addEventListener('click',  () => setFundingStep(1));
+        if (backBtn2) backBtn2.addEventListener('click', () => setFundingStep(2));
+
+        // Step 3 confirm
+        const confirmBtn = $('#funding-confirm-btn');
+        if (confirmBtn) confirmBtn.addEventListener('click', handleFundingConfirm);
+
+        // Result actions
+        const newBtn   = $('#funding-new-btn');
+        const retryBtn = $('#funding-retry-btn');
+        if (newBtn)   newBtn.addEventListener('click',   resetFundingFlow);
+        if (retryBtn) retryBtn.addEventListener('click', () => setFundingStep(3));
+
+        // "View Trade Detail" button — jump to trade detail section
+        const viewBtn = $('#funding-view-trade-btn');
+        if (viewBtn) {
+            viewBtn.addEventListener('click', () => {
+                const idInput = $('#trade-detail-id');
+                if (idInput && fundingState.tradeId) {
+                    idInput.value = fundingState.tradeId;
+                    const form = $('#trade-lookup-form');
+                    if (form) form.dispatchEvent(new Event('submit'));
+                }
+                const section = $('#trade-detail');
+                if (section) {
+                    section.scrollIntoView({ behavior: 'smooth' });
+                    section.setAttribute('tabindex', '-1');
+                    section.focus({ preventScroll: true });
+                }
+            });
+        }
+
+        // Deep-link: #fund-trade?id=123
+        const hash  = window.location.hash;
+        const match = hash.match(/[?&]id=(\d+)/);
+        if (match && window.location.hash.includes('fund-trade')) {
+            const input = $('#funding-trade-id');
+            if (input) input.value = match[1];
+        }
+    }
+
+    // ============================================
     // Initialization
     // ============================================
     async function init() {
@@ -1117,6 +1425,7 @@
         initKeyboardNavigation();
         initForms();
         initTradeDetailForm();
+        initFundingInterface();
         initSmoothScroll();
         initFocusManagement();
         checkReducedMotion();

@@ -54,6 +54,7 @@
                     <li role="none"><a href="#events" role="menuitem" class="nav-link">View Events</a></li>
                     <li role="none"><a href="#search" role="menuitem" class="nav-link">Search</a></li>
                     <li role="none"><a href="#trade-detail" role="menuitem" class="nav-link">Trade Detail</a></li>
+                    <li role="none"><a href="#fund-trade" role="menuitem" class="nav-link">Fund Trade</a></li>
                     <li role="none"><a href="#help" role="menuitem" class="nav-link">Help Center</a></li>
                     <li role="none"><a href="#api-docs" role="menuitem" class="nav-link">API Documentation</a></li>
                 </ul>
@@ -455,6 +456,241 @@
                 <div id="trade-detail-empty" class="trade-detail-empty" role="status" aria-live="polite">
                     <p class="empty-state">Enter a trade ID above to view its details.</p>
                 </div>
+            </div>
+        </section>
+
+        <!-- Fund Trade Section (Issue #32) -->
+        <section id="fund-trade" aria-labelledby="fund-trade-heading" class="section">
+            <div class="container">
+                <h2 id="fund-trade-heading" class="section-title">Fund Trade</h2>
+
+                <!-- Step indicator -->
+                <div class="funding-steps" role="list" aria-label="Funding flow steps">
+                    <div class="funding-step active" id="step-indicator-1" role="listitem" aria-current="step">
+                        <span class="step-number" aria-hidden="true">1</span>
+                        <span class="step-label">Trade Details</span>
+                    </div>
+                    <div class="funding-step-connector" aria-hidden="true"></div>
+                    <div class="funding-step" id="step-indicator-2" role="listitem">
+                        <span class="step-number" aria-hidden="true">2</span>
+                        <span class="step-label">USDC Approval</span>
+                    </div>
+                    <div class="funding-step-connector" aria-hidden="true"></div>
+                    <div class="funding-step" id="step-indicator-3" role="listitem">
+                        <span class="step-number" aria-hidden="true">3</span>
+                        <span class="step-label">Confirm</span>
+                    </div>
+                    <div class="funding-step-connector" aria-hidden="true"></div>
+                    <div class="funding-step" id="step-indicator-4" role="listitem">
+                        <span class="step-number" aria-hidden="true">4</span>
+                        <span class="step-label">Result</span>
+                    </div>
+                </div>
+
+                <!-- Step 1: Trade Lookup -->
+                <div id="funding-step-1" class="funding-panel" aria-labelledby="funding-step-1-heading">
+                    <h3 id="funding-step-1-heading" class="card-section-title">Enter Trade to Fund</h3>
+                    <form id="funding-lookup-form" novalidate>
+                        <div class="funding-field">
+                            <label for="funding-trade-id" class="filter-label">Trade ID</label>
+                            <input
+                                type="number"
+                                id="funding-trade-id"
+                                class="filter-input"
+                                placeholder="Enter trade ID"
+                                min="1"
+                                required
+                                aria-describedby="funding-trade-id-err"
+                            >
+                            <span id="funding-trade-id-err" class="field-error" role="alert" hidden></span>
+                        </div>
+                        <div class="funding-field">
+                            <label for="funding-buyer-address" class="filter-label">Your Wallet Address</label>
+                            <input
+                                type="text"
+                                id="funding-buyer-address"
+                                class="filter-input"
+                                placeholder="G... (Stellar public key)"
+                                required
+                                aria-describedby="funding-buyer-address-err"
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <span id="funding-buyer-address-err" class="field-error" role="alert" hidden></span>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="funding-lookup-btn">
+                            Load Trade
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Step 2: Amount & Fee Breakdown + USDC Approval -->
+                <div id="funding-step-2" class="funding-panel" hidden aria-labelledby="funding-step-2-heading">
+                    <h3 id="funding-step-2-heading" class="card-section-title">Review &amp; Approve USDC</h3>
+
+                    <!-- Trade summary -->
+                    <div class="funding-summary" role="region" aria-label="Trade funding summary">
+                        <dl class="funding-breakdown">
+                            <div class="funding-breakdown-row">
+                                <dt>Trade ID</dt>
+                                <dd id="fs-trade-id">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row">
+                                <dt>Seller</dt>
+                                <dd id="fs-seller" class="address-cell">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row">
+                                <dt>Trade Amount</dt>
+                                <dd id="fs-amount" class="funding-amount-value">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row">
+                                <dt>Platform Fee</dt>
+                                <dd id="fs-fee" class="funding-fee-value">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row funding-breakdown-total">
+                                <dt>Total You Pay</dt>
+                                <dd id="fs-total" class="funding-total-value">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row">
+                                <dt>Seller Receives</dt>
+                                <dd id="fs-payout">—</dd>
+                            </div>
+                        </dl>
+
+                        <!-- USDC approval notice -->
+                        <div class="approval-notice" role="note" aria-label="USDC approval information">
+                            <span class="approval-icon" aria-hidden="true">ℹ</span>
+                            <p>
+                                Funding requires two transactions: first approve the escrow contract
+                                to spend your USDC, then confirm the fund transfer. Both must succeed.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Approval checkbox -->
+                    <div class="funding-field funding-checkbox-field">
+                        <label class="checkbox-label">
+                            <input
+                                type="checkbox"
+                                id="usdc-approval-checkbox"
+                                aria-describedby="usdc-approval-desc"
+                            >
+                            <span>
+                                I approve the StellarEscrow contract to transfer
+                                <strong id="approval-amount-inline">—</strong> USDC from my wallet
+                            </span>
+                        </label>
+                        <span id="usdc-approval-desc" class="visually-hidden">
+                            Check this box to confirm you authorise the USDC token transfer
+                        </span>
+                        <span id="usdc-approval-err" class="field-error" role="alert" hidden></span>
+                    </div>
+
+                    <div class="funding-actions">
+                        <button type="button" class="btn btn-secondary" id="funding-back-btn">
+                            ← Back
+                        </button>
+                        <button type="button" class="btn btn-primary" id="funding-approve-btn" disabled>
+                            Approve &amp; Continue
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Transaction Confirmation -->
+                <div id="funding-step-3" class="funding-panel" hidden aria-labelledby="funding-step-3-heading">
+                    <h3 id="funding-step-3-heading" class="card-section-title">Confirm Funding Transaction</h3>
+
+                    <div class="confirmation-card" role="region" aria-label="Transaction confirmation details">
+                        <p class="confirmation-intro">
+                            Please review the details below before submitting the funding transaction.
+                            This action cannot be undone once confirmed.
+                        </p>
+                        <dl class="funding-breakdown">
+                            <div class="funding-breakdown-row">
+                                <dt>Trade ID</dt>
+                                <dd id="fc-trade-id">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row">
+                                <dt>From (Buyer)</dt>
+                                <dd id="fc-buyer" class="address-cell">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row">
+                                <dt>To (Escrow)</dt>
+                                <dd id="fc-contract" class="address-cell">StellarEscrow Contract</dd>
+                            </div>
+                            <div class="funding-breakdown-row funding-breakdown-total">
+                                <dt>Amount</dt>
+                                <dd id="fc-amount" class="funding-total-value">—</dd>
+                            </div>
+                        </dl>
+
+                        <div class="confirmation-warning" role="alert">
+                            <span aria-hidden="true">⚠</span>
+                            Funds will be held in escrow until the seller marks the trade complete
+                            and you confirm receipt.
+                        </div>
+                    </div>
+
+                    <div class="funding-actions">
+                        <button type="button" class="btn btn-secondary" id="funding-back-btn-2">
+                            ← Back
+                        </button>
+                        <button type="button" class="btn btn-primary btn-fund-confirm" id="funding-confirm-btn">
+                            Confirm &amp; Fund Trade
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Result -->
+                <div id="funding-step-4" class="funding-panel" hidden aria-labelledby="funding-step-4-heading" aria-live="assertive">
+                    <h3 id="funding-step-4-heading" class="card-section-title visually-hidden">Funding Result</h3>
+
+                    <!-- Success state -->
+                    <div id="funding-success" class="funding-result funding-result-success" hidden>
+                        <div class="result-icon" aria-hidden="true">✓</div>
+                        <h3 class="result-title">Trade Funded Successfully</h3>
+                        <p class="result-message" id="funding-success-msg">
+                            Trade has been funded and is now in escrow.
+                        </p>
+                        <dl class="funding-breakdown result-summary">
+                            <div class="funding-breakdown-row">
+                                <dt>Trade ID</dt>
+                                <dd id="fr-trade-id">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row">
+                                <dt>Amount Funded</dt>
+                                <dd id="fr-amount">—</dd>
+                            </div>
+                            <div class="funding-breakdown-row">
+                                <dt>New Status</dt>
+                                <dd><span class="status-badge funded">Funded</span></dd>
+                            </div>
+                        </dl>
+                        <div class="result-actions">
+                            <button type="button" class="btn btn-secondary" id="funding-view-trade-btn">
+                                View Trade Detail
+                            </button>
+                            <button type="button" class="btn btn-primary" id="funding-new-btn">
+                                Fund Another Trade
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Failure state -->
+                    <div id="funding-failure" class="funding-result funding-result-failure" hidden>
+                        <div class="result-icon" aria-hidden="true">✕</div>
+                        <h3 class="result-title">Funding Failed</h3>
+                        <p class="result-message" id="funding-error-msg">
+                            An error occurred while funding the trade.
+                        </p>
+                        <div class="result-actions">
+                            <button type="button" class="btn btn-secondary" id="funding-retry-btn">
+                                Try Again
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </section>
 
