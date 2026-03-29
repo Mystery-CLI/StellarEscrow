@@ -1,0 +1,72 @@
+/* ============================================================
+   TradeForm — layout + auto-save indicator animations
+   ============================================================ */
+
+@keyframes save-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes save-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Form layout ─────────────────────────────────────────── */
+
+.trade-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 500px;
+}
+
+.trade-form button[type="submit"] {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+/* ── Auto-save indicator ─────────────────────────────────── */
+
+.trade-form__save-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  min-height: 1.5rem;
+  margin-bottom: 0.25rem;
+  transition: opacity 0.3s ease;
+}
+
+.trade-form__save-indicator--idle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.trade-form__save-indicator--saving {
+  color: #888;
+  opacity: 1;
+  animation: save-fade-in 0.2s ease;
+}
+
+.trade-form__save-indicator--saved {
+  color: #198754;
+  opacity: 1;
+  animation: save-fade-in 0.2s ease;
+}
+
+/* Inline spinner for "saving" state */
+.trade-form__save-spinner {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid #ccc;
+  border-top-color: #888;
+  border-radius: 50%;
+  animation: spinner-rotate 0.6s linear infinite;
+  flex-shrink: 0;
+}

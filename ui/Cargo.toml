@@ -1,0 +1,13 @@
+[package]
+name = "stellar-escrow-ui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "stellar-escrow-ui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.26"
+crossterm = "0.27"
+anyhow = "1.0"

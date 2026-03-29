@@ -1,0 +1,178 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run full scan nightly at 03:00 UTC
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+  security-events: write # required for SARIF upload to GitHub Security tab
+
+jobs:
+  # ── Dependency vulnerability scan (Node.js) ────────────────────────────────
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace: [api, client, components, app]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Audit ${{ matrix.workspace }}
+        working-directory: ${{ matrix.workspace }}
+        run: npm audit --audit-level=high --json > npm-audit-${{ matrix.workspace }}.json || true
+
+      - name: Fail on critical vulnerabilities
+        working-directory: ${{ matrix.workspace }}
+        run: npm audit --audit-level=critical
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-${{ matrix.workspace }}
+          path: ${{ matrix.workspace }}/npm-audit-${{ matrix.workspace }}.json
+          retention-days: 30
+
+  # ── Rust dependency audit ──────────────────────────────────────────────────
+  cargo-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        run: cargo audit --json > cargo-audit.json || true
+
+      - name: Fail on critical advisories
+        run: cargo audit --deny warnings
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cargo-audit-report
+          path: cargo-audit.json
+          retention-days: 30
+
+  # ── Static Application Security Testing (SAST) ────────────────────────────
+  codeql:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # ── Container image scanning ───────────────────────────────────────────────
+  trivy-scan:
+    name: Trivy container scan
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - context: api
+            dockerfile: api/Dockerfile
+            image: stellar-escrow-api
+          - context: client
+            dockerfile: client/Dockerfile
+            image: stellar-escrow-client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f ${{ matrix.dockerfile }} -t ${{ matrix.image }}:scan ${{ matrix.context }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.image }}:scan
+          format: sarif
+          output: trivy-${{ matrix.image }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: trivy-${{ matrix.image }}
+
+  # ── Secret scanning (detect leaked credentials) ───────────────────────────
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for gitleaks
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Infrastructure-as-Code security scan ──────────────────────────────────
+  iac-scan:
+    name: IaC scan (checkov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Checkov on Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infra/terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-terraform.sarif
+          soft_fail: false
+          skip_check: CKV_AWS_18,CKV_AWS_86 # S3 access logging — handled externally
+
+      - name: Run Checkov on Kubernetes manifests
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: k8s
+          framework: kubernetes
+          output_format: sarif
+          output_file_path: checkov-k8s.sarif
+          soft_fail: true # warn only for k8s
+
+      - name: Upload Checkov SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-terraform.sarif
+          category: checkov-terraform

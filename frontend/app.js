@@ -3,6 +3,14 @@
  * WCAG 2.1 AA Compliance Implementation
  */
 
+import { registerServiceWorker, initOfflineIndicator, promptInstall, isInstallable, subscribePush } from './pwa.js';
+import { setLocale, getLocale, formatCurrency, formatDate } from './i18n.js';
+import { registerServiceWorker, initOfflineIndicator, promptInstall, isInstallable, subscribePush } from './pwa.js';
+import { observeWebVitals, initLazyRoutes, prefetchOnIdle, cachedFetch, invalidateCache } from './performance.js';
+import { initErrorBoundary, reportError, friendlyMessage, withRetry, showErrorUI, logError } from './error-handler.js';
+import { initCdn } from './cdn.js';
+import { enforceHttps, monitorTlsConnection } from '../security/src/ssl.js';
+
 (function() {
     'use strict';
 
@@ -28,7 +36,10 @@
         wsSocket: null,
         searchHistory: [],
         highContrastMode: false,
-        focusedElement: null
+        focusedElement: null,
+        walletConnected: false,
+        walletProvider: null,
+        walletAddress: null
     };
 
     // ============================================
@@ -101,8 +112,7 @@
     // ============================================
     async function fetchHealth() {
         try {
-            const response = await fetch(`${CONFIG.apiBaseUrl}/health`);
-            const data = await response.json();
+            const data = await cachedFetch(`${CONFIG.apiBaseUrl}/health`, {}, 60_000);
             updateHealthStatus(data);
             return data;
         } catch (error) {
@@ -121,18 +131,24 @@
         queryParams.set('offset', (state.currentPage - 1) * state.pageSize);
 
         try {
-            const response = await fetch(`${CONFIG.apiBaseUrl}/events?${queryParams}`);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
+            const data = await withRetry(
+                () => cachedFetch(`${CONFIG.apiBaseUrl}/events?${queryParams}`, {}, 15_000),
+                {
+                    maxAttempts: 3,
+                    onRetry: (attempt) => showToast(`Retrying… (${attempt}/3)`, 'warning'),
+                }
+            );
             state.events = data;
             state.totalEvents = data.length;
             renderEventsTable(data);
             announce(`Loaded ${data.length} events`);
             return data;
         } catch (error) {
-            console.error('Failed to fetch events:', error);
-            showToast('Failed to load events', 'error');
-            announce('Failed to load events', 'assertive');
+            logError('Failed to fetch events', { error: error?.message });
+            reportError(error, { context: 'fetchEvents' });
+            const msg = friendlyMessage(error);
+            showErrorUI(msg, { retryFn: () => fetchEvents(params) });
+            announce(msg, 'assertive');
             return [];
         }
     }
@@ -783,321 +799,175 @@
     }
 
     // ============================================
-    // Trade Detail View (Issue #31)
+    // Wallet Integration
     // ============================================
+    function initWalletUI() {
+        const connectBtn = $('#wallet-connect-btn');
+        const walletMenu = $('#wallet-menu');
+        const walletConnected = $('#wallet-connected');
+        const walletOptions = $$('.wallet-option');
+        const disconnectBtn = $('#disconnect-wallet-btn');
+        const switchWalletBtn = $('#switch-wallet-btn');
+        const walletMenuToggle = $('#wallet-menu-toggle');
+        const walletDropdown = $('#wallet-dropdown');
 
-    const STATUS_LABELS = {
-        trade_created:   'Created',
-        trade_funded:    'Funded',
-        trade_completed: 'Completed',
-        trade_confirmed: 'Confirmed',
-        trade_disputed:  'Disputed',
-        trade_cancelled: 'Cancelled',
-        dispute_resolved:'Resolved',
-    };
+        if (!connectBtn) return;
 
-    const STATUS_CLASS = {
-        trade_created:   'created',
-        trade_funded:    'funded',
-        trade_completed: 'completed',
-        trade_confirmed: 'confirmed',
-        trade_disputed:  'disputed',
-        trade_cancelled: 'cancelled',
-        dispute_resolved:'resolved',
-    };
-
-    const ACTION_LABELS = {
-        Fund:           { label: 'Fund Trade',        cls: 'action-fund' },
-        Complete:       { label: 'Mark Complete',     cls: 'action-complete' },
-        ConfirmReceipt: { label: 'Confirm Receipt',   cls: 'action-confirm' },
-        RaiseDispute:   { label: 'Raise Dispute',     cls: 'action-dispute' },
-        Cancel:         { label: 'Cancel Trade',      cls: 'action-cancel' },
-        ResolveDispute: { label: 'Resolve Dispute',   cls: 'action-resolve' },
-    };
-
-    async function fetchTradeDetail(tradeId) {
-        try {
-            const response = await fetch(`${CONFIG.apiBaseUrl}/trades/${encodeURIComponent(tradeId)}`);
-            if (!response.ok) {
-                if (response.status === 404) throw new Error(`Trade #${tradeId} not found`);
-                throw new Error(`HTTP ${response.status}`);
+        // Toggle wallet menu
+        connectBtn.addEventListener('click', () => {
+            const isOpen = !walletMenu.hidden;
+            walletMenu.hidden = isOpen;
+            connectBtn.setAttribute('aria-expanded', !isOpen);
+            if (!isOpen) {
+                announce('Wallet menu opened');
             }
-            return await response.json();
-        } catch (error) {
-            console.error('Failed to fetch trade detail:', error);
-            throw error;
-        }
-    }
+        });
 
-    function formatAmount(stroops) {
-        if (stroops == null) return '—';
-        return `${(stroops / 1e7).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 7 })} USDC`;
-    }
+        // Wallet option selection
+        walletOptions.forEach(option => {
+            option.addEventListener('click', async () => {
+                const provider = option.dataset.provider;
+                connectBtn.disabled = true;
+                connectBtn.textContent = 'Connecting...';
+                announce(`Connecting to ${provider} wallet...`);
 
-    function truncateAddress(addr) {
-        if (!addr || addr.length < 12) return addr || '—';
-        return `${addr.slice(0, 6)}…${addr.slice(-6)}`;
-    }
-
-    function renderTradeDetail(data) {
-        const panel = $('#trade-detail-panel');
-        const empty = $('#trade-detail-empty');
-        if (!panel || !empty) return;
-
-        // Show panel, hide empty state
-        panel.hidden = false;
-        empty.hidden = true;
-
-        // Basic info
-        $('#td-trade-id').textContent = data.trade_id;
-
-        const statusBadge = $('#td-status').querySelector('.status-badge') || document.createElement('span');
-        statusBadge.className = `status-badge ${STATUS_CLASS[data.status] || ''}`;
-        statusBadge.textContent = STATUS_LABELS[data.status] || data.status;
-        $('#td-status').innerHTML = '';
-        $('#td-status').appendChild(statusBadge);
-
-        $('#td-amount').textContent = formatAmount(data.amount);
-        $('#td-fee').textContent = data.fee != null ? formatAmount(data.fee) : '—';
-        $('#td-seller-payout').textContent = data.seller_payout != null ? formatAmount(data.seller_payout) : '—';
-
-        const sellerEl = $('#td-seller');
-        sellerEl.textContent = truncateAddress(data.seller);
-        sellerEl.title = data.seller || '';
-
-        const buyerEl = $('#td-buyer');
-        buyerEl.textContent = truncateAddress(data.buyer);
-        buyerEl.title = data.buyer || '';
-
-        const arbRow = $('#td-arbitrator-row');
-        if (data.arbitrator) {
-            arbRow.hidden = false;
-            const arbEl = $('#td-arbitrator');
-            arbEl.textContent = truncateAddress(data.arbitrator);
-            arbEl.title = data.arbitrator;
-        } else {
-            arbRow.hidden = true;
-        }
-
-        $('#td-created-at').textContent = data.created_at ? formatTimestamp(data.created_at) : '—';
-        $('#td-updated-at').textContent = data.updated_at ? formatTimestamp(data.updated_at) : '—';
-
-        // Metadata
-        const metaCard = $('#trade-metadata-card');
-        const metaList = $('#trade-metadata-list');
-        if (data.metadata && typeof data.metadata === 'object' && Object.keys(data.metadata).length > 0) {
-            metaCard.hidden = false;
-            metaList.innerHTML = Object.entries(data.metadata).map(([k, v]) => `
-                <div class="trade-info-row">
-                    <dt>${escapeHtml(k)}</dt>
-                    <dd>${escapeHtml(String(v))}</dd>
-                </div>
-            `).join('');
-        } else {
-            metaCard.hidden = true;
-        }
-
-        // Timeline
-        renderTimeline(data.timeline || [], data.status);
-
-        // Transaction history
-        renderTxHistory(data.transaction_history || []);
-
-        // Actions (derived from status since viewer context isn't available in indexer)
-        renderTradeActions(data);
-
-        // Wire up share/export buttons
-        const copyBtn = $('#copy-trade-link-btn');
-        if (copyBtn) {
-            copyBtn.onclick = () => {
-                const url = `${window.location.origin}${window.location.pathname}#trade-detail?id=${data.trade_id}`;
-                navigator.clipboard.writeText(url).then(() => {
-                    showToast('Trade link copied to clipboard', 'success');
-                    announce('Trade link copied to clipboard');
-                }).catch(() => showToast('Failed to copy link', 'error'));
-            };
-        }
-
-        const csvBtn = $('#export-trade-csv-btn');
-        if (csvBtn) {
-            csvBtn.onclick = () => exportTradeCSV(data);
-        }
-
-        const jsonBtn = $('#export-trade-json-btn');
-        if (jsonBtn) {
-            jsonBtn.onclick = () => exportTradeJSON(data);
-        }
-
-        announce(`Trade #${data.trade_id} loaded. Status: ${STATUS_LABELS[data.status] || data.status}`);
-    }
-
-    function renderTimeline(timeline, currentStatus) {
-        const list = $('#trade-timeline');
-        if (!list) return;
-
-        if (timeline.length === 0) {
-            list.innerHTML = '<li class="empty-state">No timeline data available</li>';
-            return;
-        }
-
-        list.innerHTML = timeline.map((entry, i) => {
-            const isLast = i === timeline.length - 1;
-            const cls = isLast ? (STATUS_CLASS[entry.status] || 'active') : 'completed';
-            const label = STATUS_LABELS[entry.status] || entry.status;
-            const ts = entry.timestamp ? formatTimestamp(entry.timestamp) : '';
-            const hash = entry.transaction_hash
-                ? `<div class="timeline-hash" title="${escapeHtml(entry.transaction_hash)}">Tx: ${escapeHtml(entry.transaction_hash.slice(0, 16))}…</div>`
-                : '';
-            return `
-                <li class="timeline-item ${cls}" aria-label="${escapeHtml(label)} at ledger ${entry.ledger}">
-                    <div class="timeline-status">${escapeHtml(label)}</div>
-                    <div class="timeline-meta">Ledger ${entry.ledger}${ts ? ` · ${ts}` : ''}</div>
-                    ${hash}
-                </li>
-            `;
-        }).join('');
-    }
-
-    function renderTxHistory(events) {
-        const tbody = $('#tx-history-body');
-        if (!tbody) return;
-
-        if (events.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No transactions</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = events.map(e => `
-            <tr tabindex="0">
-                <td>${e.ledger}</td>
-                <td><span class="event-type">${escapeHtml(e.event_type)}</span></td>
-                <td>${e.timestamp ? formatTimestamp(e.timestamp) : '—'}</td>
-                <td class="address-cell" title="${escapeHtml(e.transaction_hash || '')}">${
-                    e.transaction_hash ? escapeHtml(e.transaction_hash.slice(0, 16)) + '…' : '—'
-                }</td>
-            </tr>
-        `).join('');
-    }
-
-    function renderTradeActions(data) {
-        const container = $('#trade-actions-list');
-        if (!container) return;
-
-        // Derive available actions from status (viewer-agnostic display)
-        const actionMap = {
-            trade_created:   ['Fund', 'Cancel'],
-            trade_funded:    ['Complete', 'RaiseDispute'],
-            trade_completed: ['ConfirmReceipt', 'RaiseDispute'],
-            trade_disputed:  ['ResolveDispute'],
-            trade_confirmed: [],
-            trade_cancelled: [],
-            dispute_resolved:[],
-        };
-
-        const actions = actionMap[data.status] || [];
-        if (actions.length === 0) {
-            container.innerHTML = '<p class="empty-state">No actions available for this trade status</p>';
-            return;
-        }
-
-        container.innerHTML = actions.map(action => {
-            const { label, cls } = ACTION_LABELS[action] || { label: action, cls: '' };
-            return `
-                <button
-                    type="button"
-                    class="btn btn-secondary trade-action-btn ${cls}"
-                    data-action="${escapeHtml(action)}"
-                    aria-label="${escapeHtml(label)} for trade #${data.trade_id}"
-                >
-                    ${escapeHtml(label)}
-                </button>
-            `;
-        }).join('');
-
-        // Action click handler — shows informational toast (actual execution requires wallet)
-        container.querySelectorAll('.trade-action-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const action = btn.dataset.action;
-                showToast(`Action "${ACTION_LABELS[action]?.label || action}" requires wallet connection`, 'info');
-                announce(`${ACTION_LABELS[action]?.label || action} action selected`);
+                const result = await window.StellarWallet.connectWallet(provider);
+                
+                if (result.success) {
+                    updateWalletUI(result.address, provider);
+                    walletMenu.hidden = true;
+                    connectBtn.setAttribute('aria-expanded', 'false');
+                    showToast(`Connected to ${window.StellarWallet.getProviderDisplayName(provider)}`, 'success');
+                    announce(`Successfully connected to ${provider} wallet`);
+                } else {
+                    showToast(`Failed to connect: ${result.error}`, 'error');
+                    announce(`Failed to connect to ${provider} wallet: ${result.error}`, 'assertive');
+                    connectBtn.textContent = 'Connect Wallet';
+                    connectBtn.disabled = false;
+                }
             });
         });
-    }
 
-    function exportTradeCSV(data) {
-        const rows = [
-            ['trade_id', 'seller', 'buyer', 'amount', 'fee', 'seller_payout', 'status', 'created_at', 'updated_at'],
-            [
-                data.trade_id,
-                data.seller,
-                data.buyer,
-                data.amount,
-                data.fee ?? '',
-                data.seller_payout ?? '',
-                data.status,
-                data.created_at ?? '',
-                data.updated_at ?? '',
-            ],
-        ];
-        const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-        downloadFile(`trade_${data.trade_id}.csv`, csv, 'text/csv');
-        announce(`Trade #${data.trade_id} exported as CSV`);
-    }
+        // Disconnect wallet
+        if (disconnectBtn) {
+            disconnectBtn.addEventListener('click', () => {
+                window.StellarWallet.disconnectWallet();
+                updateWalletUI(null, null);
+                walletDropdown.hidden = true;
+                walletMenuToggle.setAttribute('aria-expanded', 'false');
+                showToast('Wallet disconnected', 'info');
+                announce('Wallet disconnected');
+            });
+        }
 
-    function exportTradeJSON(data) {
-        const json = JSON.stringify(data, null, 2);
-        downloadFile(`trade_${data.trade_id}.json`, json, 'application/json');
-        announce(`Trade #${data.trade_id} exported as JSON`);
-    }
+        // Switch wallet
+        if (switchWalletBtn) {
+            switchWalletBtn.addEventListener('click', () => {
+                walletDropdown.hidden = true;
+                walletMenuToggle.setAttribute('aria-expanded', 'false');
+                walletMenu.hidden = false;
+                connectBtn.setAttribute('aria-expanded', 'true');
+                announce('Wallet menu opened for switching');
+            });
+        }
 
-    function downloadFile(filename, content, mimeType) {
-        const blob = new Blob([content], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
+        // Wallet menu toggle
+        if (walletMenuToggle) {
+            walletMenuToggle.addEventListener('click', () => {
+                const isOpen = !walletDropdown.hidden;
+                walletDropdown.hidden = isOpen;
+                walletMenuToggle.setAttribute('aria-expanded', !isOpen);
+            });
+        }
 
-    function initTradeDetailForm() {
-        const form = $('#trade-lookup-form');
-        if (!form) return;
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const input = $('#trade-detail-id');
-            const tradeId = input?.value?.trim();
-            if (!tradeId) return;
-
-            const empty = $('#trade-detail-empty');
-            const panel = $('#trade-detail-panel');
-            if (empty) { empty.hidden = false; empty.querySelector('p').textContent = 'Loading…'; }
-            if (panel) panel.hidden = true;
-
-            try {
-                const data = await fetchTradeDetail(tradeId);
-                renderTradeDetail(data);
-            } catch (err) {
-                if (panel) panel.hidden = true;
-                if (empty) {
-                    empty.hidden = false;
-                    empty.querySelector('p').textContent = err.message || 'Failed to load trade';
-                }
-                showToast(err.message || 'Failed to load trade', 'error');
-                announce(err.message || 'Failed to load trade', 'assertive');
+        // Close menus when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#wallet-container')) {
+                walletMenu.hidden = true;
+                walletDropdown.hidden = true;
+                connectBtn.setAttribute('aria-expanded', 'false');
+                walletMenuToggle.setAttribute('aria-expanded', 'false');
             }
         });
 
-        // Support deep-link: #trade-detail?id=123
-        const hash = window.location.hash;
-        const match = hash.match(/[?&]id=(\d+)/);
-        if (match) {
-            const input = $('#trade-detail-id');
-            if (input) {
-                input.value = match[1];
-                form.dispatchEvent(new Event('submit'));
+        // Listen for wallet events
+        document.addEventListener('wallet:connected', (e) => {
+            state.walletConnected = true;
+            state.walletProvider = e.detail.provider;
+            state.walletAddress = e.detail.address;
+        });
+
+        document.addEventListener('wallet:disconnected', () => {
+            state.walletConnected = false;
+            state.walletProvider = null;
+            state.walletAddress = null;
+        });
+    }
+
+    function updateWalletUI(address, provider) {
+        const connectBtn = $('#wallet-connect-btn');
+        const walletConnected = $('#wallet-connected');
+        const walletProviderBadge = $('#wallet-provider-badge');
+        const walletAddressDisplay = $('#wallet-address-display');
+
+        if (address && provider) {
+            connectBtn.hidden = true;
+            walletConnected.hidden = false;
+            
+            const displayName = window.StellarWallet.getProviderDisplayName(provider);
+            const formattedAddress = window.StellarWallet.formatAddress(address);
+            
+            walletProviderBadge.textContent = displayName;
+            walletProviderBadge.className = `wallet-provider-badge ${provider}`;
+            walletAddressDisplay.textContent = formattedAddress;
+            walletAddressDisplay.title = address;
+            
+            state.walletConnected = true;
+            state.walletProvider = provider;
+            state.walletAddress = address;
+        } else {
+            connectBtn.hidden = false;
+            walletConnected.hidden = true;
+            connectBtn.textContent = 'Connect Wallet';
+            connectBtn.disabled = false;
+            
+            state.walletConnected = false;
+            state.walletProvider = null;
+            state.walletAddress = null;
+        }
+    }
+
+    function restoreWalletConnection() {
+        if (window.StellarWallet && window.StellarWallet.loadWalletPreferences()) {
+            const walletState = window.StellarWallet.getState();
+            if (walletState.address && walletState.provider) {
+                updateWalletUI(walletState.address, walletState.provider);
+                announce(`Wallet restored: ${window.StellarWallet.getProviderDisplayName(walletState.provider)}`);
             }
+        }
+    }
+
+    // ============================================
+    // Reduced Motion Preference
+    // ============================================
+    function checkReducedMotion() {
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        
+        prefersReducedMotion.addEventListener('change', (e) => {
+            if (e.matches) {
+                document.documentElement.style.setProperty('--transition-fast', '0ms');
+                document.documentElement.style.setProperty('--transition-normal', '0ms');
+                announce('Reduced motion enabled');
+            } else {
+                document.documentElement.style.setProperty('--transition-fast', '150ms ease');
+                document.documentElement.style.setProperty('--transition-normal', '250ms ease');
+                announce('Reduced motion disabled');
+            }
+        });
+
+        if (prefersReducedMotion.matches) {
+            document.documentElement.style.setProperty('--transition-fast', '0ms');
+            document.documentElement.style.setProperty('--transition-normal', '0ms');
         }
     }
 
@@ -1106,6 +976,21 @@
     // ============================================
     async function init() {
         console.log('Initializing StellarEscrow Dashboard...');
+
+        // Error boundary — must be first
+        initErrorBoundary();
+
+        // SSL/TLS — enforce HTTPS and report connection info
+        enforceHttps();
+        monitorTlsConnection();
+
+        // CDN setup — rewrite asset URLs, start monitoring, detect nearest region
+        initCdn().catch((err) => console.warn('[cdn] init failed:', err));
+
+        // Performance monitoring
+        observeWebVitals();
+        initLazyRoutes();
+        prefetchOnIdle();
 
         // Load preferences
         loadHighContrastPreference();
@@ -1121,10 +1006,65 @@
         initFocusManagement();
         checkReducedMotion();
 
+        // Initialize wallet
+        initWalletUI();
+        restoreWalletConnection();
+
+        // Initialize disputes
+        if (window.DisputeManager) {
+            window.DisputeManager.initDisputeUI();
+        }
+
+        // Initialize arbitrator dashboard
+        if (window.ArbitratorDashboard) {
+            window.ArbitratorDashboard.initArbitratorDashboard();
+        }
+
+        // Initialize notifications
+        if (window.NotificationManager) {
+            window.NotificationManager.initNotificationUI();
+            window.NotificationManager.loadPreferences();
+            window.NotificationManager.connectWebSocket();
+        }
+
         // Initialize high contrast toggle
         const contrastToggle = $('#contrast-toggle');
         if (contrastToggle) {
             contrastToggle.addEventListener('click', toggleHighContrast);
+        }
+
+        // Initialize language switcher
+        const langSelect = $('#lang-select');
+        if (langSelect) {
+            langSelect.value = getLocale();
+            langSelect.addEventListener('change', (e) => {
+                setLocale(e.target.value);
+                announce(document.documentElement.lang === 'ar' ? 'تم تغيير اللغة' : 'Language changed');
+            });
+        }
+
+        // Initialize PWA
+        const swReg = await registerServiceWorker();
+        initOfflineIndicator();
+
+        // Install banner
+        document.addEventListener('pwa:installable', () => {
+            const banner = $('#install-banner');
+            if (banner) banner.hidden = false;
+        });
+        $('#install-btn')?.addEventListener('click', async () => {
+            const accepted = await promptInstall();
+            if (accepted) $('#install-banner').hidden = true;
+        });
+        $('#install-dismiss')?.addEventListener('click', () => {
+            $('#install-banner').hidden = true;
+        });
+
+        // Push notifications (subscribe after SW ready)
+        if (swReg) {
+            document.addEventListener('pwa:push-subscribe', async () => {
+                await subscribePush(swReg);
+            });
         }
 
         // Fetch initial data

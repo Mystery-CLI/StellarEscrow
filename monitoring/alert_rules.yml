@@ -1,0 +1,60 @@
+groups:
+  - name: stellar_escrow_compliance
+    rules:
+      - alert: HighAmlRiskSpike
+        expr: stellar_escrow_aml_high_risk_total > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AML high-risk addresses spike detected"
+          description: "{{ $value }} high-risk AML addresses detected in the last window."
+
+      - alert: ComplianceBlocksSpike
+        expr: stellar_escrow_compliance_blocked_total > 10
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Compliance blocks spike"
+          description: "{{ $value }} addresses blocked by compliance checks."
+
+  - name: stellar_escrow_platform
+    rules:
+      - alert: HighErrorRate
+        expr: stellar_escrow_error_rate > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on StellarEscrow indexer"
+          description: "Error rate is {{ $value }}%."
+
+      - alert: HighDisputeRate
+        expr: stellar_escrow_trades_disputed_total > 50
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: "High dispute count"
+          description: "{{ $value }} trades disputed."
+
+      - alert: FraudAlertsSpike
+        expr: stellar_escrow_fraud_alerts_total > 20
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Fraud alerts spike"
+          description: "{{ $value }} fraud alerts triggered."
+
+  - name: infrastructure
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been down for more than 1 minute."

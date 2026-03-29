@@ -1,0 +1,49 @@
+﻿C:\Users\USER\.cargo\b
+in\cargo.exe : 
+warning: profiles for 
+the non root package 
+will be ignored, 
+specify profiles at 
+the workspace root:
+At line:1 char:1
++ C:\Users\USER\.cargo
+\bin\cargo.exe test 
+fraud_service > 
+cargo_test_ou ...
++ ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (warning: p   
+ rofil...workspace    
+ root::String) []    
+, RemoteException
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+package:   C:\Users\US
+ER\StellarEscrow\contr
+act\Cargo.toml
+workspace: C:\Users\US
+ER\StellarEscrow\Cargo
+.toml
+    Updating 
+crates.io index
+error: failed to 
+select a version for 
+the requirement 
+`smartcore = "^0.10"`
+candidate versions 
+found which didn't 
+match: 0.4.9, 0.4.8, 
+0.4.6, ...
+location searched: 
+crates.io index
+required by package `s
+tellar-escrow-indexer 
+v0.1.0 (C:\Users\USER\
+StellarEscrow\indexer)
+`

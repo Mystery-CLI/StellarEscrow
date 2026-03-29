@@ -1,0 +1,34 @@
+# Staging environment overrides
+# Merged on top of base.toml
+
+[meta]
+environment = "staging"
+
+[server]
+port = 3000
+
+[database]
+# Override via STELLAR_ESCROW__DATABASE__URL in CI/CD
+url = "postgres://indexer:password@staging-db:5432/stellar_escrow"
+max_connections = 10
+
+[stellar]
+network = "testnet"
+contract_id = ""   # Set via STELLAR_ESCROW__STELLAR__CONTRACT_ID
+horizon_url = "https://horizon-testnet.stellar.org"
+poll_interval_seconds = 5
+
+[rate_limit]
+default_rpm = 120
+elevated_rpm = 600
+admin_rpm = 6000
+
+[storage]
+base_dir = "/data/uploads"
+
+[api]
+base_url = "https://staging-api.stellarescrow.io/api"
+ws_url = "wss://staging-api.stellarescrow.io/api/ws"
+
+[frontend]
+api_base_url = "/api"

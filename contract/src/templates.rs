@@ -55,9 +55,12 @@ pub fn update_template(
         return Err(ContractError::Unauthorized);
     }
     if template.versions.len() >= TEMPLATE_MAX_VERSIONS {
+        // Drop the oldest entry by rebuilding from index 1
         let mut trimmed: Vec<TemplateVersion> = Vec::new(env);
-        for i in 1..template.versions.len() {
-            trimmed.push_back(template.versions.get(i).unwrap());
+        let len = template.versions.len();
+        for i in 1..len {
+            // unwrap is safe: index is within bounds
+            trimmed.push_back(template.versions.get_unchecked(i));
         }
         template.versions = trimmed;
     }
@@ -99,11 +102,11 @@ pub fn resolve_terms(
     if !template.active {
         return Err(ContractError::TemplateInactive);
     }
-    let last_idx = template
-        .versions
-        .len()
-        .checked_sub(1)
-        .ok_or(ContractError::TemplateNotFound)?;
-    let version = template.versions.get(last_idx).ok_or(ContractError::TemplateNotFound)?;
+    // versions is never empty for a valid template; last entry is always current
+    let len = template.versions.len();
+    if len == 0 {
+        return Err(ContractError::TemplateNotFound);
+    }
+    let version = template.versions.get_unchecked(len - 1);
     Ok((version.terms, version.version))
 }

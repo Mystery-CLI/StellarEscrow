@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StellarEscrow Config",
+  "description": "Unified configuration schema for all StellarEscrow services",
+  "type": "object",
+  "required": ["meta", "server", "database", "stellar", "rate_limit", "storage", "api", "frontend"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["version", "schema_version"],
+      "properties": {
+        "version":        { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "schema_version": { "type": "integer", "minimum": 1 },
+        "environment":    { "type": "string", "enum": ["development", "staging", "production"] }
+      }
+    },
+    "server": {
+      "type": "object",
+      "required": ["port"],
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "host": { "type": "string" }
+      }
+    },
+    "database": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url":                     { "type": "string", "minLength": 1 },
+        "max_connections":         { "type": "integer", "minimum": 1 },
+        "connect_timeout_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "stellar": {
+      "type": "object",
+      "required": ["network", "horizon_url", "poll_interval_seconds"],
+      "properties": {
+        "network":               { "type": "string", "enum": ["testnet", "mainnet"] },
+        "contract_id":           { "type": "string" },
+        "horizon_url":           { "type": "string", "format": "uri" },
+        "start_ledger":          { "type": "integer", "minimum": 0 },
+        "poll_interval_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "rate_limit": {
+      "type": "object",
+      "required": ["default_rpm", "elevated_rpm", "admin_rpm"],
+      "properties": {
+        "default_rpm":  { "type": "integer", "minimum": 1 },
+        "elevated_rpm": { "type": "integer", "minimum": 1 },
+        "admin_rpm":    { "type": "integer", "minimum": 1 },
+        "whitelist":    { "type": "array", "items": { "type": "string" } },
+        "blacklist":    { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "required": ["base_dir"],
+      "properties": {
+        "base_dir":         { "type": "string", "minLength": 1 },
+        "max_file_size_mb": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "notification": {
+      "type": "object",
+      "properties": {
+        "email_api_url":   { "type": "string" },
+        "email_api_key":   { "type": "string" },
+        "email_from":      { "type": "string" },
+        "sms_api_url":     { "type": "string" },
+        "sms_account_sid": { "type": "string" },
+        "sms_auth_token":  { "type": "string" },
+        "sms_from":        { "type": "string" },
+        "push_api_url":    { "type": "string" },
+        "push_project_id": { "type": "string" },
+        "push_server_key": { "type": "string" }
+      }
+    },
+    "api": {
+      "type": "object",
+      "required": ["base_url", "ws_url"],
+      "properties": {
+        "base_url":                  { "type": "string" },
+        "ws_url":                    { "type": "string" },
+        "timeout_ms":                { "type": "integer", "minimum": 1000 },
+        "retry_max":                 { "type": "integer", "minimum": 0 },
+        "retry_delay_ms":            { "type": "integer", "minimum": 0 },
+        "retry_backoff_multiplier":  { "type": "number", "minimum": 1 }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "required": ["api_base_url"],
+      "properties": {
+        "api_base_url":              { "type": "string" },
+        "ws_reconnect_delay_ms":     { "type": "integer", "minimum": 0 },
+        "max_events_in_feed":        { "type": "integer", "minimum": 1 },
+        "search_debounce_delay_ms":  { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "if": {
+    "properties": { "meta": { "properties": { "environment": { "const": "production" } } } }
+  },
+  "then": {
+    "properties": {
+      "stellar": {
+        "properties": { "network": { "const": "mainnet" } }
+      }
+    }
+  }
+}

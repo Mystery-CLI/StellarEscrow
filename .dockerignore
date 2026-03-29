@@ -1,0 +1,7 @@
+target/
+node_modules/
+.git/
+*.md
+*.log
+.env*
+docker-compose*.yml

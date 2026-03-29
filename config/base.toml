@@ -1,0 +1,90 @@
+# Base configuration — shared defaults for all environments.
+# Environment-specific files override these values.
+# Version is bumped on every structural change.
+
+[meta]
+version = "1.0.0"
+schema_version = 1
+
+[server]
+port = 3000
+host = "0.0.0.0"
+
+[database]
+url = "postgres://indexer:password@localhost:5432/stellar_escrow"
+max_connections = 10
+connect_timeout_seconds = 30
+
+[stellar]
+network = "testnet"
+contract_id = ""
+horizon_url = "https://horizon-testnet.stellar.org"
+poll_interval_seconds = 5
+# start_ledger is optional — omit to start from latest
+
+[rate_limit]
+default_rpm = 60
+elevated_rpm = 300
+admin_rpm = 6000
+whitelist = []
+blacklist = []
+
+[storage]
+base_dir = "./uploads"
+max_file_size_mb = 10
+
+[notification]
+email_api_url = "https://api.sendgrid.com"
+email_api_key = ""
+email_from = "noreply@stellarescrow.io"
+sms_api_url = "https://api.twilio.com"
+sms_account_sid = ""
+sms_auth_token = ""
+sms_from = ""
+push_api_url = "https://fcm.googleapis.com"
+push_project_id = ""
+push_server_key = ""
+
+[api]
+base_url = "http://localhost:3000/api"
+ws_url = "ws://localhost:3000/api/ws"
+timeout_ms = 30000
+retry_max = 3
+retry_delay_ms = 1000
+retry_backoff_multiplier = 2.0
+
+[frontend]
+api_base_url = "/api"
+ws_reconnect_delay_ms = 3000
+max_events_in_feed = 100
+search_debounce_delay_ms = 300
+
+[analytics]
+retention_days = 90
+export_limit = 10000
+
+[backup]
+database_url = ""
+script_path = "scripts/backup.sh"
+backup_dir = "/var/backups/stellarescrow"
+s3_bucket = ""
+retention_days = 30
+interval_hours = 24
+alert_webhook = ""
+[compliance]
+kyc_provider_url = ""
+kyc_api_key = ""
+aml_provider_url = ""
+aml_api_key = ""
+required_kyc_level = 1
+aml_risk_threshold = 70
+blocked_jurisdictions = []
+reporting_webhook_url = ""
+
+[monitoring]
+metrics_port = 9090
+alert_webhook_url = ""
+grafana_url = ""
+log_aggregation_url = ""
+incident_webhook_url = ""
+alert_eval_interval_secs = 30

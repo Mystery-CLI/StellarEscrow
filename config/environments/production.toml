@@ -1,0 +1,49 @@
+# Production environment overrides
+# Merged on top of base.toml
+# Secrets MUST be injected via environment variables — never commit real values here.
+
+[meta]
+environment = "production"
+
+[server]
+port = 3000
+
+[database]
+# STELLAR_ESCROW__DATABASE__URL must be set in the deployment environment
+url = ""
+max_connections = 20
+connect_timeout_seconds = 10
+
+[stellar]
+network = "mainnet"
+contract_id = ""   # STELLAR_ESCROW__STELLAR__CONTRACT_ID
+horizon_url = "https://horizon.stellar.org"
+poll_interval_seconds = 3
+
+[rate_limit]
+default_rpm = 60
+elevated_rpm = 300
+admin_rpm = 6000
+
+[storage]
+base_dir = "/data/uploads"
+max_file_size_mb = 25
+
+[notification]
+email_api_url = "https://api.sendgrid.com"
+email_from = "noreply@stellarescrow.io"
+sms_api_url = "https://api.twilio.com"
+push_api_url = "https://fcm.googleapis.com"
+# Keys injected via env vars:
+# STELLAR_ESCROW__NOTIFICATION__EMAIL_API_KEY
+# STELLAR_ESCROW__NOTIFICATION__SMS_ACCOUNT_SID
+# STELLAR_ESCROW__NOTIFICATION__SMS_AUTH_TOKEN
+# STELLAR_ESCROW__NOTIFICATION__PUSH_SERVER_KEY
+
+[api]
+base_url = "https://api.stellarescrow.io/api"
+ws_url = "wss://api.stellarescrow.io/api/ws"
+timeout_ms = 30000
+
+[frontend]
+api_base_url = "/api"

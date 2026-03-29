@@ -1,0 +1,167 @@
+name: Test Automation Framework
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 3 * * *'   # nightly full run
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Suite to run'
+        required: false
+        default: 'all'
+        type: choice
+        options: [all, unit, api, uat, a11y]
+
+concurrency:
+  group: test-framework-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ── 1. Unit + regression ────────────────────────────────────────────────────
+  unit:
+    name: Unit & Regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm ci
+        working-directory: testing/regression
+      - name: Run unit regression
+        run: npm run test:ci
+        working-directory: testing/regression
+        env:
+          TEST_ENV: ci
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+      - run: node scripts/generate-report.js && node scripts/analyze-regression.js
+        working-directory: testing/regression
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports-unit-${{ github.run_number }}
+          path: testing/regression/reports/
+          retention-days: 30
+
+  # ── 2. API tests ────────────────────────────────────────────────────────────
+  api:
+    name: API Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+        working-directory: api
+      - run: npm test
+        working-directory: api
+        env:
+          TEST_ENV: ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports-api-${{ github.run_number }}
+          path: api/coverage/
+          retention-days: 30
+
+  # ── 3. Accessibility ────────────────────────────────────────────────────────
+  a11y:
+    name: Accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm ci
+        working-directory: testing/accessibility
+      - run: npm run test:ci
+        working-directory: testing/accessibility
+        env:
+          TEST_ENV: ci
+          GITHUB_SHA: ${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports-a11y-${{ github.run_number }}
+          path: testing/accessibility/reports/
+          retention-days: 30
+
+  # ── 4. Analytics + maintenance ──────────────────────────────────────────────
+  analytics:
+    name: Analytics & Maintenance
+    runs-on: ubuntu-latest
+    needs: [unit, api, a11y]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: reports-*-${{ github.run_number }}
+          merge-multiple: true
+          path: reports/
+
+      - name: Run test analytics
+        run: node scripts/test-analytics.js
+
+      - name: Run maintenance check
+        run: node scripts/maintain-tests.js
+        continue-on-error: true   # report but don't block
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-analytics-${{ github.run_number }}
+          path: reports/
+          retention-days: 90
+
+  # ── 5. PR comment ───────────────────────────────────────────────────────────
+  pr-comment:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: analytics
+    if: github.event_name == 'pull_request' && always()
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-analytics-${{ github.run_number }}
+          path: reports/
+
+      - name: Post summary comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const p = 'reports/test-analytics.json';
+            if (!fs.existsSync(p)) return;
+            const a = JSON.parse(fs.readFileSync(p, 'utf-8'));
+            const icon = a.overall === 'PASSED' ? '✅' : '❌';
+            const rows = (a.suites.breakdown ?? [])
+              .map(s => `| ${s.label ?? s.suite} | ${s.status === 'passed' ? '✅' : '❌'} | ${(s.duration_ms/1000).toFixed(1)}s |`)
+              .join('\n');
+            const body = [
+              `### ${icon} Test Automation — ${a.overall}`,
+              '',
+              `| Suite | Status | Duration |`,
+              `|-------|--------|----------|`,
+              rows,
+              '',
+              a.regression ? `**Regression trend:** ${a.regression.trend} · Flaky: ${a.regression.flaky_test_count}` : '',
+              a.uat        ? `**UAT pass rate:** ${a.uat.pass_rate}%` : '',
+              a.accessibility ? `**A11y violations:** ${a.accessibility.violations}` : '',
+            ].filter(Boolean).join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

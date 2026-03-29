@@ -1,0 +1,14 @@
+{
+  "name": "@stellar-escrow/frontend",
+  "version": "1.0.0",
+  "description": "StellarEscrow accessible dashboard",
+  "scripts": {
+    "test": "jest --testEnvironment jsdom",
+    "test:coverage": "jest --coverage --testEnvironment jsdom"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "jest-fetch-mock": "^3.0.3"
+  }
+}

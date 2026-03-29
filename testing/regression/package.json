@@ -1,0 +1,24 @@
+{
+  "name": "@stellar-escrow/regression",
+  "version": "1.0.0",
+  "description": "Automated regression testing suite for StellarEscrow",
+  "private": true,
+  "scripts": {
+    "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
+    "test:ci": "jest --runInBand --ci --json --outputFile=reports/regression-results.json",
+    "report": "node scripts/generate-report.js",
+    "detect-changes": "node scripts/detect-changes.js",
+    "analyze": "node scripts/analyze-regression.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.10",
+    "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.2"
+  }
+}

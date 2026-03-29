@@ -1,0 +1,3 @@
+# Clippy configuration
+# Deny common correctness and security lints
+avoid-breaking-exported-api = false

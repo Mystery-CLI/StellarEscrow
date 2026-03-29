@@ -1,0 +1,123 @@
+groups:
+  - name: security_monitoring
+    interval: 30s
+    rules:
+      # ── Authentication & Access ──────────────────────────────────────────
+      - alert: HighAuthFailureRate
+        expr: |
+          rate(stellar_escrow_auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "{{ $value | humanize }} auth failures/sec — possible brute-force attack."
+          runbook: "https://github.com/Mystery-CLI/StellarEscrow/blob/main/docs/security.md#auth-failures"
+
+      - alert: AdminKeyUsedFromUnknownIP
+        expr: |
+          stellar_escrow_admin_requests_total{trusted_ip="false"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Admin API key used from untrusted IP"
+          description: "Admin key accessed from IP {{ $labels.remote_addr }}."
+
+      # ── Rate limiting & DDoS ─────────────────────────────────────────────
+      - alert: RateLimitThrottlingSpike
+        expr: |
+          rate(stellar_escrow_rate_limit_exceeded_total[5m]) > 50
+        for: 1m
+        labels:
+          severity: high
+          category: security
+        annotations:
+          summary: "Rate limit throttling spike — possible DDoS"
+          description: "{{ $value | humanize }} rate-limited requests/sec."
+
+      # ── TLS / Certificate ────────────────────────────────────────────────
+      - alert: TLSCertExpiryWarning
+        expr: |
+          stellar_escrow_ssl_cert_expiry_days < 30
+        for: 0m
+        labels:
+          severity: high
+          category: security
+        annotations:
+          summary: "TLS certificate expiring soon"
+          description: "Certificate for {{ $labels.domain }} expires in {{ $value }} days."
+
+      - alert: TLSCertExpiryCritical
+        expr: |
+          stellar_escrow_ssl_cert_expiry_days < 7
+        for: 0m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "TLS certificate expiring in < 7 days"
+          description: "Certificate for {{ $labels.domain }} expires in {{ $value }} days — immediate action required."
+
+      # ── Anomalous traffic ────────────────────────────────────────────────
+      - alert: UnexpectedHTTPMethods
+        expr: |
+          rate(stellar_escrow_http_requests_total{method=~"TRACE|CONNECT|OPTIONS"}[5m]) > 1
+        for: 1m
+        labels:
+          severity: high
+          category: security
+        annotations:
+          summary: "Unexpected HTTP methods detected"
+          description: "Method {{ $labels.method }} on {{ $labels.path }} — possible probe/scan."
+
+      - alert: SuspiciousPayloadSize
+        expr: |
+          stellar_escrow_request_body_bytes_max > 10485760
+        for: 0m
+        labels:
+          severity: high
+          category: security
+        annotations:
+          summary: "Oversized request body detected"
+          description: "Request body of {{ $value | humanizeBytes }} exceeds 10 MB limit."
+
+      # ── Database ─────────────────────────────────────────────────────────
+      - alert: DatabaseConnectionExhaustion
+        expr: |
+          stellar_escrow_db_connections_active / stellar_escrow_db_connections_max > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "{{ $value | humanizePercentage }} of DB connections in use — possible connection leak or DoS."
+
+      # ── Container / Host ─────────────────────────────────────────────────
+      - alert: ContainerRunningAsRoot
+        expr: |
+          container_processes{user="root", container!="", container!="POD"} > 0
+        for: 0m
+        labels:
+          severity: high
+          category: security
+        annotations:
+          summary: "Container process running as root"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} has root processes."
+
+      - alert: UnexpectedPrivilegedContainer
+        expr: |
+          kube_pod_container_info{namespace="stellar-escrow"} * on(pod, container) group_left()
+          kube_pod_container_status_running{namespace="stellar-escrow"} > 0
+          unless on(pod, container)
+          kube_pod_spec_containers_security_context_privileged{namespace="stellar-escrow", privileged="false"}
+        for: 0m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Privileged container detected in stellar-escrow namespace"
+          description: "Pod {{ $labels.pod }} container {{ $labels.container }} may be running privileged."

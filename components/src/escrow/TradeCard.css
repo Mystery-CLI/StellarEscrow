@@ -1,0 +1,72 @@
+.trade-card {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.trade-card:hover {
+  transform: translateY(-2px);
+}
+
+.trade-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.trade-id {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.trade-timestamp {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.875rem;
+  color: #999;
+}
+
+.trade-card-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.trade-party {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.party-label {
+  font-weight: 500;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.party-address {
+  font-family: monospace;
+  color: #0066cc;
+  font-size: 0.875rem;
+}
+
+.trade-amount {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.amount-label {
+  font-weight: 600;
+  color: #333;
+}
+
+.amount-value {
+  font-weight: 700;
+  color: #28a745;
+  font-size: 1.1rem;
+}

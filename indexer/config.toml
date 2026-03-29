@@ -3,6 +3,13 @@ port = 3000
 
 [database]
 url = "postgres://user:password@localhost/stellar_escrow"
+max_connections = 10
+min_connections = 2
+
+[cache]
+redis_url = ""          # Set to redis://localhost:6379 to enable
+default_ttl_secs = 30
+events_ttl_secs = 10
 
 [stellar]
 network = "testnet"
@@ -10,3 +17,25 @@ contract_id = "CA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ"
 horizon_url = "https://horizon-testnet.stellar.org"
 # start_ledger = 123456  # Optional: start from specific ledger
 poll_interval_seconds = 5
+
+[rate_limit]
+# Requests per minute per IP
+default_rpm = 60
+elevated_rpm = 300
+admin_rpm = 6000
+# whitelist = ["127.0.0.1"]
+# blacklist = []
+
+[auth]
+# API keys for authentication
+api_keys = ["demo-key-123", "client-key-456"]
+admin_keys = ["admin-key-123", "admin-key-789"]
+
+[storage]
+base_dir = "./uploads"
+
+[gateway]
+# Optional: Configure service instances for load balancing
+# Leave empty to run as standalone (default)
+# Example: service_instances = ["http://localhost:3001", "http://localhost:3002"]
+# service_instances = []

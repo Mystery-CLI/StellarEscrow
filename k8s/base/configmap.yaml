@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stellar-escrow-config
+  namespace: stellar-escrow
+data:
+  RUST_LOG: "info"
+  SERVER_PORT: "3000"
+  API_PORT: "4000"
+  CLIENT_PORT: "3001"
+  INDEXER_URL: "http://indexer:3000"
+  PUBLIC_API_URL: "http://api:4000"
+  PUBLIC_INDEXER_URL: "http://indexer:3000"

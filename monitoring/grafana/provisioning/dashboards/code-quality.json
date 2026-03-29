@@ -1,0 +1,57 @@
+{
+  "title": "Code Quality Metrics",
+  "uid": "code-quality",
+  "schemaVersion": 36,
+  "refresh": "1h",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Lint Errors (last 30 days)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(ci_lint_errors_total)",
+          "legendFormat": "Lint Errors"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Security Vulnerabilities",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(ci_security_vulnerabilities_total) by (severity)",
+          "legendFormat": "{{severity}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Code Quality Gate Pass Rate",
+      "type": "gauge",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "minVehicle": 0, "maxValue": 100 },
+      "targets": [
+        {
+          "expr": "100 * sum(ci_quality_gate_passed_total) / sum(ci_quality_gate_total)",
+          "legendFormat": "Pass Rate %"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "CI Quality Check Duration",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "ci_job_duration_seconds{job=~\"lint.*|security.*\"}",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    }
+  ]
+}

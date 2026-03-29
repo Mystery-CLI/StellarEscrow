@@ -47,24 +47,24 @@ pub fn record_volume(env: &Env, user: &Address, amount: u64) -> Result<(), Contr
         save_user_tier(env, user, &info);
         return Ok(());
     }
-    let old_tier = info.tier.clone();
     info.total_volume = info.total_volume.checked_add(amount).ok_or(ContractError::Overflow)?;
     let new_tier = volume_tier(info.total_volume);
-    let tier_changed = old_tier != new_tier;
-    let upgraded = matches!(
-        (&old_tier, &new_tier),
-        (UserTier::Bronze, UserTier::Silver)
-            | (UserTier::Bronze, UserTier::Gold)
-            | (UserTier::Silver, UserTier::Gold)
-    );
-    info.tier = new_tier.clone();
-    save_user_tier(env, user, &info);
-    if tier_changed {
+    if new_tier != info.tier {
+        let upgraded = matches!(
+            (&info.tier, &new_tier),
+            (UserTier::Bronze, UserTier::Silver)
+                | (UserTier::Bronze, UserTier::Gold)
+                | (UserTier::Silver, UserTier::Gold)
+        );
+        info.tier = new_tier.clone();
+        save_user_tier(env, user, &info);
         if upgraded {
             events::emit_tier_upgraded(env, user.clone(), new_tier);
         } else {
             events::emit_tier_downgraded(env, user.clone(), new_tier);
         }
+    } else {
+        save_user_tier(env, user, &info);
     }
     Ok(())
 }

@@ -1,28 +1,251 @@
-version: '3.8'
+version: "3.8"
 
 services:
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     environment:
       POSTGRES_DB: stellar_escrow
       POSTGRES_USER: indexer
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    # Do NOT expose postgres port externally in production
+    # ports:
+    #   - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indexer -d stellar_escrow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    # Do NOT expose redis port externally in production
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      --protected-mode yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   indexer:
     build:
       context: .
       dockerfile: indexer/Dockerfile
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      - DATABASE_URL=postgres://indexer:password@postgres:5432/stellar_escrow
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      RUST_LOG: info
+      CDN_PURGE_URL: ${CDN_PURGE_URL:-}
+      CDN_PURGE_TOKEN: ${CDN_PURGE_TOKEN:-}
+      STELLAR_ESCROW__CACHE__REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
-      - postgres
-    command: ["./indexer", "--config", "config.toml"]
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: api
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      INDEXER_URL: http://indexer:3000
+      NODE_ENV: production
+      API_KEYS: ${API_KEYS:?API_KEYS must be set}
+      ADMIN_KEYS: ${ADMIN_KEYS:?ADMIN_KEYS must be set}
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  client:
+    build:
+      context: client
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      PUBLIC_API_URL: http://api:4000
+      PUBLIC_INDEXER_URL: http://indexer:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ssl.nginx.conf:/etc/nginx/conf.d/ssl.conf:ro
+      - ./cdn-headers.nginx.conf:/etc/nginx/conf.d/cdn-headers.conf:ro
+      - certbot_webroot:/var/www/certbot:ro
+      - letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      indexer:
+        condition: service_healthy
+      client:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_webroot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do
+               certbot renew --webroot -w /var/www/certbot --quiet;
+               sleep 12h & wait $${!};
+             done"
+
+  backup:
+    image: postgres:15-alpine
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://indexer:password@postgres:5432/stellar_escrow}
+      S3_BUCKET: ${S3_BUCKET:-}
+      BACKUP_DIR: /var/backups/stellarescrow
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+      BACKUP_ALERT_WEBHOOK: ${BACKUP_ALERT_WEBHOOK:-}
+    volumes:
+      - backup_data:/var/backups/stellarescrow
+      - ./scripts/backup.sh:/scripts/backup.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do
+               sleep 86400 & wait $${!};
+               bash /scripts/backup.sh;
+             done"
+
+  # ---------------------------------------------------------------------------
+  # Monitoring Stack
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    depends_on:
+      - indexer
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_URL:-http://localhost:3002}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  redis_data:
+  certbot_webroot:
+  letsencrypt:
+  backup_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:

@@ -3,9 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- CDN base URL — set to your CDN origin (e.g. https://cdn.stellarescrow.app) or leave empty to serve locally -->
+    <meta name="cdn-url" content="">
     <meta name="description" content="StellarEscrow - Accessible decentralized escrow dashboard for peer-to-peer USDC trades on Stellar blockchain">
     <meta name="theme-color" content="#1a1a2e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="StellarEscrow">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <title>StellarEscrow Dashboard</title>
+    <!-- Critical resource hints -->
+    <link rel="modulepreload" href="/app.js">
+    <link rel="modulepreload" href="/i18n.js">
+    <link rel="modulepreload" href="/pwa.js">
+    <link rel="modulepreload" href="/performance.js">
+    <link rel="preload" href="/styles.css" as="style">
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,7 +27,7 @@
 </head>
 <body>
     <!-- Skip to main content link for screen readers -->
-    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <a href="#main-content" class="skip-link" data-i18n="a11y.skipToMain">Skip to main content</a>
     
     <!-- High contrast mode toggle -->
     <button 
@@ -22,13 +36,26 @@
         type="button"
         aria-pressed="false"
         aria-label="Toggle high contrast mode"
+        data-i18n-aria="a11y.highContrast"
     >
         <span class="toggle-icon" aria-hidden="true">◐</span>
-        <span class="toggle-text">High Contrast</span>
+        <span class="toggle-text" data-i18n="a11y.highContrast">High Contrast</span>
     </button>
 
     <!-- Live region for announcements -->
     <div id="live-region" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Offline indicator -->
+    <div id="offline-indicator" class="offline-indicator" role="status" aria-live="polite" hidden>
+        <span aria-hidden="true">⚡</span> You're offline — showing cached data
+    </div>
+
+    <!-- PWA install banner -->
+    <div id="install-banner" class="install-banner" hidden>
+        <span>Install StellarEscrow for a faster, app-like experience.</span>
+        <button id="install-btn" type="button" class="btn btn-sm">Install</button>
+        <button id="install-dismiss" type="button" class="btn btn-sm btn-ghost" aria-label="Dismiss">✕</button>
+    </div>
 
     <header role="banner">
         <nav role="navigation" aria-label="Main navigation">
@@ -50,13 +77,140 @@
                     <span class="hamburger" aria-hidden="true"></span>
                 </button>
                 <ul id="main-menu" class="nav-menu" role="menubar">
-                    <li role="none"><a href="#dashboard" role="menuitem" class="nav-link active" aria-current="page">Dashboard</a></li>
-                    <li role="none"><a href="#events" role="menuitem" class="nav-link">View Events</a></li>
-                    <li role="none"><a href="#search" role="menuitem" class="nav-link">Search</a></li>
-                    <li role="none"><a href="#trade-detail" role="menuitem" class="nav-link">Trade Detail</a></li>
-                    <li role="none"><a href="#help" role="menuitem" class="nav-link">Help Center</a></li>
-                    <li role="none"><a href="#api-docs" role="menuitem" class="nav-link">API Documentation</a></li>
+                    <li role="none"><a href="#dashboard" role="menuitem" class="nav-link active" aria-current="page" data-i18n="nav.dashboard">Dashboard</a></li>
+                    <li role="none"><a href="#trade-dashboard" role="menuitem" class="nav-link" data-i18n="nav.tradeDashboard">My Trades</a></li>
+                    <li role="none"><a href="#events" role="menuitem" class="nav-link" data-i18n="nav.events">View Events</a></li>
+                    <li role="none"><a href="#search" role="menuitem" class="nav-link" data-i18n="nav.search">Search</a></li>
+                    <li role="none"><a href="#create-trade" role="menuitem" class="nav-link" data-i18n="nav.createTrade">Create Trade</a></li>
+                    <li role="none"><a href="#history" role="menuitem" class="nav-link" data-i18n="nav.history">History</a></li>
+                    <li role="none"><a href="#disputes" role="menuitem" class="nav-link" data-i18n="nav.disputes">Disputes</a></li>
+                    <li role="none"><a href="#arbitrator" role="menuitem" class="nav-link" data-i18n="nav.arbitrator">Arbitrator</a></li>
+                    <li role="none"><a href="#help" role="menuitem" class="nav-link" data-i18n="nav.help">Help Center</a></li>
+                    <li role="none"><a href="#api-docs" role="menuitem" class="nav-link" data-i18n="nav.apiDocs">API Documentation</a></li>
                 </ul>
+
+                <!-- Language Switcher -->
+                <div class="lang-switcher">
+                    <label for="lang-select" class="visually-hidden" data-i18n="common.language">Language</label>
+                    <select id="lang-select" aria-label="Select language">
+                        <option value="en">English</option>
+                        <option value="fr">Français</option>
+                        <option value="es">Español</option>
+                        <option value="ar">العربية</option>
+                    </select>
+                </div>
+                
+                <!-- Notifications -->
+                <div class="notification-controls">
+                    <button 
+                        id="notification-center-btn"
+                        type="button"
+                        class="btn btn-icon"
+                        aria-label="Notification center"
+                        aria-expanded="false"
+                        aria-controls="notification-center"
+                    >
+                        🔔
+                        <span id="notification-badge" class="notification-badge" hidden>0</span>
+                    </button>
+                    <button 
+                        id="notification-prefs-btn"
+                        type="button"
+                        class="btn btn-icon"
+                        aria-label="Notification preferences"
+                    >
+                        ⚙️
+                    </button>
+                </div>
+                
+                <!-- Wallet Connection -->
+                <div id="wallet-container" class="wallet-container" role="region" aria-label="Wallet connection">
+                    <button 
+                        id="wallet-connect-btn"
+                        class="btn btn-wallet"
+                        type="button"
+                        aria-label="Connect Stellar wallet"
+                        data-i18n-aria="wallet.connect"
+                        aria-expanded="false"
+                        aria-controls="wallet-menu"
+                    >
+                        <span class="wallet-icon" aria-hidden="true">◆</span>
+                        <span class="wallet-text" data-i18n="wallet.connect">Connect Wallet</span>
+                    </button>
+                    
+                    <!-- Wallet Menu -->
+                    <div id="wallet-menu" class="wallet-menu" hidden role="menu" aria-label="Wallet options">
+                        <div class="wallet-menu-header">
+                            <h3>Select Wallet</h3>
+                        </div>
+                        <button 
+                            type="button"
+                            class="wallet-option"
+                            data-provider="freighter"
+                            role="menuitem"
+                            aria-label="Connect with Freighter wallet"
+                        >
+                            <span class="wallet-option-icon">🔐</span>
+                            <span class="wallet-option-name">Freighter</span>
+                        </button>
+                        <button 
+                            type="button"
+                            class="wallet-option"
+                            data-provider="albedo"
+                            role="menuitem"
+                            aria-label="Connect with Albedo wallet"
+                        >
+                            <span class="wallet-option-icon">🛡️</span>
+                            <span class="wallet-option-name">Albedo</span>
+                        </button>
+                        <button 
+                            type="button"
+                            class="wallet-option"
+                            data-provider="walletconnect"
+                            role="menuitem"
+                            aria-label="Connect with WalletConnect"
+                        >
+                            <span class="wallet-option-icon">📱</span>
+                            <span class="wallet-option-name">WalletConnect</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Connected Wallet Display -->
+                    <div id="wallet-connected" class="wallet-connected" hidden>
+                        <div class="wallet-info">
+                            <span id="wallet-provider-badge" class="wallet-provider-badge"></span>
+                            <span id="wallet-address-display" class="wallet-address-display"></span>
+                        </div>
+                        <button 
+                            id="wallet-menu-toggle"
+                            type="button"
+                            class="wallet-menu-toggle"
+                            aria-label="Wallet menu"
+                            aria-expanded="false"
+                            aria-controls="wallet-dropdown"
+                        >
+                            ⋮
+                        </button>
+                        <div id="wallet-dropdown" class="wallet-dropdown" hidden role="menu">
+                            <button 
+                                type="button"
+                                class="wallet-dropdown-item"
+                                id="switch-wallet-btn"
+                                role="menuitem"
+                            >
+                                Switch Wallet
+                            </button>
+                            <button 
+                                type="button"
+                                class="wallet-dropdown-item"
+                                id="disconnect-wallet-btn"
+                                role="menuitem"
+                            >
+                                Disconnect
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </nav>
     </header>
@@ -116,6 +270,156 @@
                 </div>
             </div>
         </section>
+
+        <!-- Trade Dashboard Section -->
+        <section id="trade-dashboard" aria-labelledby="trade-dashboard-heading" class="section">
+            <div class="container">
+                <div class="td-header">
+                    <h2 id="trade-dashboard-heading" class="section-title">Trade Dashboard</h2>
+                    <div class="td-live-status" role="status" aria-live="polite" aria-label="Real-time connection status">
+                        <span id="td-live-dot" class="indicator-dot disconnected" aria-hidden="true"></span>
+                        <span id="td-live-text" class="indicator-text">Connecting…</span>
+                    </div>
+                </div>
+
+                <!-- Active Trades -->
+                <div class="td-panel" role="region" aria-labelledby="td-active-heading">
+                    <div class="td-panel-header">
+                        <h3 id="td-active-heading" class="td-panel-title">Active Trades</h3>
+                    </div>
+
+                    <!-- Filter / Search / Sort -->
+                    <form id="td-active-filter-form" class="td-filter-bar" role="search" aria-label="Filter active trades">
+                        <label for="td-active-search" class="visually-hidden">Search trades</label>
+                        <input
+                            type="search"
+                            id="td-active-search"
+                            class="filter-input td-search-input"
+                            placeholder="Search by ID, buyer, or seller…"
+                            aria-label="Search active trades"
+                            autocomplete="off"
+                        >
+                        <label for="td-active-status-filter" class="visually-hidden">Filter by status</label>
+                        <select id="td-active-status-filter" class="filter-select" aria-label="Filter by trade status">
+                            <option value="">All Statuses</option>
+                            <option value="Created">Created</option>
+                            <option value="Funded">Funded</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Disputed">Disputed</option>
+                        </select>
+                        <label for="td-active-sort" class="visually-hidden">Sort by</label>
+                        <select id="td-active-sort" class="filter-select" aria-label="Sort trades">
+                            <option value="created_desc">Newest First</option>
+                            <option value="created_asc">Oldest First</option>
+                            <option value="amount_desc">Amount ↓</option>
+                            <option value="amount_asc">Amount ↑</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                    </form>
+
+                    <!-- Active Trades Table -->
+                    <div class="table-container" role="region" aria-label="Active trades table">
+                        <table class="data-table td-table" aria-describedby="td-active-caption">
+                            <caption id="td-active-caption" class="visually-hidden">Active trades with status, amount, parties, and quick actions</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Amount (USDC)</th>
+                                    <th scope="col">Buyer</th>
+                                    <th scope="col">Seller</th>
+                                    <th scope="col">Created</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="td-active-tbody">
+                                <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                        <p id="td-active-empty" class="td-empty-msg" hidden>No active trades found.</p>
+                    </div>
+
+                    <!-- Pagination -->
+                    <nav class="pagination td-pagination" aria-label="Active trades pagination">
+                        <button id="td-active-prev" type="button" class="btn btn-secondary pagination-btn" aria-label="Previous page">← Prev</button>
+                        <button id="td-active-next" type="button" class="btn btn-secondary pagination-btn" aria-label="Next page">Next →</button>
+                    </nav>
+                </div>
+
+                <!-- Trade History -->
+                <div class="td-panel" role="region" aria-labelledby="td-history-heading">
+                    <div class="td-panel-header">
+                        <h3 id="td-history-heading" class="td-panel-title">Trade History</h3>
+                    </div>
+
+                    <!-- History Filter / Search / Sort -->
+                    <form id="td-history-filter-form" class="td-filter-bar" role="search" aria-label="Filter trade history">
+                        <label for="td-history-search" class="visually-hidden">Search history</label>
+                        <input
+                            type="search"
+                            id="td-history-search"
+                            class="filter-input td-search-input"
+                            placeholder="Search by ID, buyer, or seller…"
+                            aria-label="Search trade history"
+                            autocomplete="off"
+                        >
+                        <label for="td-history-status-filter" class="visually-hidden">Filter by status</label>
+                        <select id="td-history-status-filter" class="filter-select" aria-label="Filter history by status">
+                            <option value="">All Statuses</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Cancelled">Cancelled</option>
+                            <option value="Disputed">Disputed</option>
+                        </select>
+                        <label for="td-history-sort" class="visually-hidden">Sort history</label>
+                        <select id="td-history-sort" class="filter-select" aria-label="Sort history">
+                            <option value="created_desc">Newest First</option>
+                            <option value="created_asc">Oldest First</option>
+                            <option value="amount_desc">Amount ↓</option>
+                            <option value="amount_asc">Amount ↑</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                    </form>
+
+                    <!-- History Table -->
+                    <div class="table-container" role="region" aria-label="Trade history table">
+                        <table class="data-table td-table" aria-describedby="td-history-caption">
+                            <caption id="td-history-caption" class="visually-hidden">Completed and historical trades with status, amount, and parties</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Amount (USDC)</th>
+                                    <th scope="col">Buyer</th>
+                                    <th scope="col">Seller</th>
+                                    <th scope="col">Settled</th>
+                                </tr>
+                            </thead>
+                            <tbody id="td-history-tbody">
+                                <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                        <p id="td-history-empty" class="td-empty-msg" hidden>No trade history found.</p>
+                    </div>
+
+                    <!-- Pagination -->
+                    <nav class="pagination td-pagination" aria-label="Trade history pagination">
+                        <button id="td-history-prev" type="button" class="btn btn-secondary pagination-btn" aria-label="Previous page">← Prev</button>
+                        <button id="td-history-next" type="button" class="btn btn-secondary pagination-btn" aria-label="Next page">Next →</button>
+                    </nav>
+                </div>
+            </div>
+        </section>
+
+        <!-- Trade Detail Modal -->
+        <div id="td-detail-modal" class="modal td-detail-modal" hidden role="dialog" aria-labelledby="td-detail-title" aria-modal="true" tabindex="-1">
+            <div class="modal-content td-detail-content">
+                <div class="modal-header">
+                    <h3 id="td-detail-title" class="modal-title">Trade Details</h3>
+                    <button id="td-detail-close" type="button" class="btn btn-close" aria-label="Close trade details">✕</button>
+                </div>
+                <div id="td-detail-body" class="td-detail-body"></div>
+            </div>
+        </div>
 
         <!-- Events Section -->
         <section id="events" aria-labelledby="events-heading" class="section">
@@ -290,173 +594,217 @@
             </div>
         </section>
 
-        <!-- Trade Detail Section -->
-        <section id="trade-detail" aria-labelledby="trade-detail-heading" class="section">
+        <!-- Disputes Section -->
+        <section id="disputes" aria-labelledby="disputes-heading" class="section" data-route="disputes">
             <div class="container">
-                <h2 id="trade-detail-heading" class="section-title">Trade Detail</h2>
-
-                <!-- Trade Lookup Form -->
-                <form id="trade-lookup-form" class="filter-form" role="search" aria-label="Trade lookup">
-                    <div class="filter-group">
-                        <label for="trade-detail-id" class="filter-label">Trade ID</label>
-                        <input
-                            type="number"
-                            id="trade-detail-id"
-                            class="filter-input"
-                            placeholder="Enter trade ID"
-                            min="0"
-                            aria-describedby="trade-detail-id-help"
-                            required
-                        >
-                        <span id="trade-detail-id-help" class="visually-hidden">
-                            Enter a trade ID to view its full details, status timeline, and available actions
-                        </span>
-                    </div>
-                    <button type="submit" class="btn btn-primary" aria-label="Load trade details">
-                        Load Trade
+                <h2 id="disputes-heading" class="section-title">Dispute Management</h2>
+                
+                <div class="disputes-header">
+                    <button 
+                        id="raise-dispute-btn"
+                        type="button"
+                        class="btn btn-primary"
+                        aria-label="Raise a new dispute"
+                    >
+                        Raise Dispute
                     </button>
-                </form>
-
-                <!-- Trade Detail Panel (hidden until loaded) -->
-                <div id="trade-detail-panel" hidden aria-live="polite">
-
-                    <!-- Trade Info + Actions -->
-                    <div class="trade-detail-grid">
-
-                        <!-- Trade Information Card -->
-                        <article class="trade-info-card" aria-labelledby="trade-info-heading">
-                            <h3 id="trade-info-heading" class="card-section-title">Trade Information</h3>
-                            <dl class="trade-info-list">
-                                <div class="trade-info-row">
-                                    <dt>Trade ID</dt>
-                                    <dd id="td-trade-id">—</dd>
-                                </div>
-                                <div class="trade-info-row">
-                                    <dt>Status</dt>
-                                    <dd id="td-status"><span class="status-badge">—</span></dd>
-                                </div>
-                                <div class="trade-info-row">
-                                    <dt>Amount</dt>
-                                    <dd id="td-amount">—</dd>
-                                </div>
-                                <div class="trade-info-row">
-                                    <dt>Fee</dt>
-                                    <dd id="td-fee">—</dd>
-                                </div>
-                                <div class="trade-info-row">
-                                    <dt>Seller Payout</dt>
-                                    <dd id="td-seller-payout">—</dd>
-                                </div>
-                                <div class="trade-info-row">
-                                    <dt>Seller</dt>
-                                    <dd id="td-seller" class="address-cell">—</dd>
-                                </div>
-                                <div class="trade-info-row">
-                                    <dt>Buyer</dt>
-                                    <dd id="td-buyer" class="address-cell">—</dd>
-                                </div>
-                                <div class="trade-info-row" id="td-arbitrator-row">
-                                    <dt>Arbitrator</dt>
-                                    <dd id="td-arbitrator" class="address-cell">—</dd>
-                                </div>
-                                <div class="trade-info-row">
-                                    <dt>Created</dt>
-                                    <dd id="td-created-at">—</dd>
-                                </div>
-                                <div class="trade-info-row">
-                                    <dt>Last Updated</dt>
-                                    <dd id="td-updated-at">—</dd>
-                                </div>
-                            </dl>
-                        </article>
-
-                        <!-- Actions Card -->
-                        <article class="trade-actions-card" aria-labelledby="trade-actions-heading">
-                            <h3 id="trade-actions-heading" class="card-section-title">Available Actions</h3>
-                            <div id="trade-actions-list" class="trade-actions-list" role="group" aria-label="Trade actions">
-                                <p class="empty-state">No actions available</p>
-                            </div>
-                            <div class="trade-share-export">
-                                <h4 class="share-export-title">Share &amp; Export</h4>
-                                <div class="share-export-btns">
-                                    <button
-                                        type="button"
-                                        id="copy-trade-link-btn"
-                                        class="btn btn-secondary"
-                                        aria-label="Copy link to this trade"
-                                    >
-                                        Copy Link
-                                    </button>
-                                    <button
-                                        type="button"
-                                        id="export-trade-csv-btn"
-                                        class="btn btn-secondary"
-                                        aria-label="Export trade data as CSV"
-                                    >
-                                        Export CSV
-                                    </button>
-                                    <button
-                                        type="button"
-                                        id="export-trade-json-btn"
-                                        class="btn btn-secondary"
-                                        aria-label="Export trade data as JSON"
-                                    >
-                                        Export JSON
-                                    </button>
-                                </div>
-                            </div>
-                        </article>
-                    </div>
-
-                    <!-- Metadata Card (shown only when metadata present) -->
-                    <article id="trade-metadata-card" class="trade-metadata-card" hidden aria-labelledby="trade-metadata-heading">
-                        <h3 id="trade-metadata-heading" class="card-section-title">Trade Metadata</h3>
-                        <dl id="trade-metadata-list" class="trade-info-list">
-                            <!-- Populated dynamically -->
-                        </dl>
-                    </article>
-
-                    <!-- Status Timeline -->
-                    <article class="trade-timeline-card" aria-labelledby="trade-timeline-heading">
-                        <h3 id="trade-timeline-heading" class="card-section-title">Status Timeline</h3>
-                        <ol id="trade-timeline" class="trade-timeline" aria-label="Trade status timeline">
-                            <!-- Populated dynamically -->
-                        </ol>
-                    </article>
-
-                    <!-- Transaction History -->
-                    <article class="trade-history-card" aria-labelledby="trade-history-heading">
-                        <h3 id="trade-history-heading" class="card-section-title">Transaction History</h3>
-                        <div class="table-container" role="region" aria-label="Transaction history table">
-                            <table class="data-table" aria-describedby="tx-history-caption">
-                                <caption id="tx-history-caption" class="visually-hidden">
-                                    All on-chain events for this trade with ledger, type, and transaction hash
-                                </caption>
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Ledger</th>
-                                        <th scope="col">Event Type</th>
-                                        <th scope="col">Timestamp</th>
-                                        <th scope="col">Tx Hash</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tx-history-body">
-                                    <tr>
-                                        <td colspan="4" class="empty-state">No transactions</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </article>
-
                 </div>
 
-                <!-- Loading / Error state -->
-                <div id="trade-detail-empty" class="trade-detail-empty" role="status" aria-live="polite">
-                    <p class="empty-state">Enter a trade ID above to view its details.</p>
+                <!-- Disputes List -->
+                <div class="disputes-container" role="region" aria-label="Disputes list">
+                    <div id="disputes-list" class="disputes-list">
+                        <p class="empty-state">No disputes found</p>
+                    </div>
+                </div>
+
+                <!-- Dispute Details -->
+                <div id="dispute-details" class="dispute-details" role="region" aria-label="Dispute details">
                 </div>
             </div>
         </section>
+
+        <!-- Dispute Modal -->
+        <div id="dispute-modal" class="modal" hidden role="dialog" aria-labelledby="dispute-modal-title" aria-modal="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="dispute-modal-title">Raise Dispute</h3>
+                    <button 
+                        id="dispute-modal-close"
+                        type="button"
+                        class="btn btn-close"
+                        aria-label="Close dialog"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <form id="dispute-form" class="dispute-form">
+                    <div class="form-group">
+                        <label for="dispute-trade-id" class="form-label">Trade ID *</label>
+                        <input 
+                            type="number"
+                            id="dispute-trade-id"
+                            class="form-input"
+                            required
+                            min="1"
+                            aria-describedby="trade-id-help"
+                        >
+                        <span id="trade-id-help" class="form-help">Enter the trade ID to dispute</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dispute-reason" class="form-label">Reason for Dispute *</label>
+                        <textarea 
+                            id="dispute-reason"
+                            class="form-textarea"
+                            required
+                            rows="4"
+                            placeholder="Describe the issue..."
+                            aria-describedby="reason-help"
+                        ></textarea>
+                        <span id="reason-help" class="form-help">Provide details about the dispute</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="evidence-input" class="form-label">Upload Evidence</label>
+                        <input 
+                            type="file"
+                            id="evidence-input"
+                            class="form-input"
+                            multiple
+                            accept=".jpg,.jpeg,.png,.pdf,.txt"
+                            aria-describedby="evidence-help"
+                        >
+                        <span id="evidence-help" class="form-help">
+                            Supported: JPG, PNG, PDF, TXT (max 5MB each)
+                        </span>
+                    </div>
+
+                    <div id="evidence-list" class="evidence-list">
+                        <p class="empty-state">No evidence uploaded</p>
+                    </div>
+
+                    <div class="form-actions">
+                        <button 
+                            type="submit"
+                            class="btn btn-primary"
+                            aria-label="Submit dispute"
+                        >
+                            Submit Dispute
+                        </button>
+                        <button 
+                            type="button"
+                            class="btn btn-secondary"
+                            id="dispute-cancel-btn"
+                            aria-label="Cancel"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Arbitrator Dashboard Section -->
+        <section id="arbitrator" aria-labelledby="arbitrator-heading" class="section" data-route="arbitrator">
+            <div class="container">
+                <h2 id="arbitrator-heading" class="section-title">Arbitrator Dashboard</h2>
+                
+                <div id="arbitrator-dashboard" role="region" aria-label="Arbitrator dashboard">
+                    <!-- Performance Metrics -->
+                    <div id="performance-metrics" class="performance-section">
+                    </div>
+
+                    <!-- Statistics -->
+                    <div id="arbitrator-stats" class="stats-section">
+                    </div>
+
+                    <!-- Assigned Disputes -->
+                    <div class="disputes-section">
+                        <h3>Assigned Disputes</h3>
+                        <div id="assigned-disputes" class="assigned-disputes-list">
+                            <p class="empty-state">Loading disputes...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Resolution Modal -->
+        <div id="resolution-modal" class="modal" hidden role="dialog" aria-labelledby="resolution-modal-title" aria-modal="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="resolution-modal-title">Resolve Dispute</h3>
+                    <button 
+                        type="button"
+                        class="btn btn-close"
+                        id="resolution-modal-close"
+                        aria-label="Close dialog"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <div id="resolution-dispute-info" class="dispute-info">
+                </div>
+
+                <form id="resolution-form" class="resolution-form">
+                    <div class="form-group">
+                        <input type="hidden" id="resolution-dispute-id">
+                        
+                        <label class="form-label">Resolution Decision *</label>
+                        <div class="resolution-options">
+                            <label class="radio-label">
+                                <input 
+                                    type="radio"
+                                    name="resolution"
+                                    value="ReleaseToBuyer"
+                                    required
+                                >
+                                <span>Release to Buyer</span>
+                            </label>
+                            <label class="radio-label">
+                                <input 
+                                    type="radio"
+                                    name="resolution"
+                                    value="ReleaseToSeller"
+                                    required
+                                >
+                                <span>Release to Seller</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="resolution-notes" class="form-label">Resolution Notes</label>
+                        <textarea 
+                            id="resolution-notes"
+                            class="form-textarea"
+                            rows="4"
+                            placeholder="Explain your decision..."
+                        ></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button 
+                            type="submit"
+                            class="btn btn-primary"
+                            aria-label="Submit resolution"
+                        >
+                            Submit Resolution
+                        </button>
+                        <button 
+                            type="button"
+                            class="btn btn-secondary"
+                            id="resolution-cancel-btn"
+                            aria-label="Cancel"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <!-- Help Center Section -->
         <section id="help" aria-labelledby="help-heading" class="section">
@@ -524,6 +872,122 @@
                 </div>
             </div>
         </section>
+
+        <!-- Notification Center -->
+        <div id="notification-center" class="notification-center" hidden role="region" aria-label="Notification center">
+            <div class="notification-center-header">
+                <h3>Notifications</h3>
+                <button 
+                    type="button"
+                    class="btn btn-close"
+                    id="notification-center-close"
+                    aria-label="Close notification center"
+                >
+                    ✕
+                </button>
+            </div>
+            <div class="notification-center-list">
+                <p class="empty-state">No notifications</p>
+            </div>
+        </div>
+
+        <!-- Notification Preferences Modal -->
+        <div id="notification-prefs-modal" class="modal" hidden role="dialog" aria-labelledby="notification-prefs-title" aria-modal="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="notification-prefs-title">Notification Preferences</h3>
+                    <button 
+                        type="button"
+                        class="btn btn-close"
+                        id="notification-prefs-close"
+                        aria-label="Close dialog"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <form id="notification-prefs-form" class="notification-prefs-form">
+                    <div class="form-section">
+                        <h4>Notification Types</h4>
+                        
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-trade-updates"
+                                checked
+                            >
+                            <span>Trade Updates</span>
+                        </label>
+
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-disputes"
+                                checked
+                            >
+                            <span>Disputes</span>
+                        </label>
+
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-arbitration"
+                                checked
+                            >
+                            <span>Arbitration</span>
+                        </label>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Notification Channels</h4>
+                        
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-push"
+                            >
+                            <span>Push Notifications</span>
+                        </label>
+                        <button 
+                            type="button"
+                            id="request-push-permission"
+                            class="btn btn-sm btn-secondary"
+                        >
+                            Enable Push
+                        </button>
+
+                        <label class="checkbox-label">
+                            <input 
+                                type="checkbox"
+                                id="pref-email"
+                            >
+                            <span>Email Notifications</span>
+                        </label>
+
+                        <input 
+                            type="email"
+                            id="pref-email-address"
+                            class="form-input"
+                            placeholder="your@email.com"
+                            aria-label="Email address for notifications"
+                        >
+                    </div>
+
+                    <div class="form-actions">
+                        <button 
+                            type="submit"
+                            class="btn btn-primary"
+                            aria-label="Save preferences"
+                        >
+                            Save Preferences
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Notification Toast Container -->
+        <div id="notification-toast-container" class="notification-toast-container" role="region" aria-label="Notifications" aria-live="polite"></div>
 
         <!-- API Documentation Section -->
         <section id="api-docs" aria-labelledby="api-docs-heading" class="section">
@@ -648,6 +1112,105 @@
                 </div>
             </div>
         </section>
+        <!-- Create Trade Section -->
+        <section id="create-trade" aria-labelledby="tc-heading" class="section">
+            <div class="container">
+                <h2 id="tc-heading" class="section-title">Create Trade</h2>
+                <div class="td-panel tc-panel-wrap">
+                    <div id="tc-panel" role="region" aria-live="polite" aria-label="Trade creation form"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Transaction History Section -->
+        <section id="history" aria-labelledby="hx-heading" class="section">
+            <div class="container">
+                <div class="td-header">
+                    <h2 id="hx-heading" class="section-title">Transaction History</h2>
+                    <div class="hx-export-bar">
+                        <button id="hx-export-csv" type="button" class="btn btn-secondary btn-sm" aria-label="Export current view as CSV">Export CSV</button>
+                        <button id="hx-export-pdf" type="button" class="btn btn-secondary btn-sm" aria-label="Export current view as PDF">Export PDF</button>
+                    </div>
+                </div>
+
+                <div class="td-panel">
+                    <!-- Filters -->
+                    <form id="hx-filter-form" class="td-filter-bar" role="search" aria-label="Filter transaction history">
+                        <label for="hx-search" class="visually-hidden">Search</label>
+                        <input type="search" id="hx-search" class="filter-input td-search-input" placeholder="Search by ID, buyer, or seller…" aria-label="Search transactions" autocomplete="off">
+
+                        <label for="hx-status-filter" class="visually-hidden">Filter by status</label>
+                        <select id="hx-status-filter" class="filter-select" aria-label="Filter by status">
+                            <option value="">All Statuses</option>
+                            <option value="Created">Created</option>
+                            <option value="Funded">Funded</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Disputed">Disputed</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+
+                        <label for="hx-date-from" class="visually-hidden">From date</label>
+                        <input type="date" id="hx-date-from" class="filter-input hx-date-input" aria-label="From date">
+
+                        <label for="hx-date-to" class="visually-hidden">To date</label>
+                        <input type="date" id="hx-date-to" class="filter-input hx-date-input" aria-label="To date">
+
+                        <label for="hx-sort" class="visually-hidden">Sort by</label>
+                        <select id="hx-sort" class="filter-select" aria-label="Sort transactions">
+                            <option value="date_desc">Newest First</option>
+                            <option value="date_asc">Oldest First</option>
+                            <option value="amount_desc">Amount ↓</option>
+                            <option value="amount_asc">Amount ↑</option>
+                            <option value="status_asc">Status A–Z</option>
+                            <option value="status_desc">Status Z–A</option>
+                        </select>
+
+                        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                        <button type="reset" class="btn btn-secondary btn-sm">Reset</button>
+                    </form>
+
+                    <!-- Table -->
+                    <div class="table-container" role="region" aria-label="Transaction history table">
+                        <table class="data-table td-table" aria-describedby="hx-caption">
+                            <caption id="hx-caption" class="visually-hidden">Transaction history with date, status, amount, counterparty, and arbitrator</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Date</th>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Amount (USDC)</th>
+                                    <th scope="col">Counterparty</th>
+                                    <th scope="col">Arbitrator</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hx-tbody">
+                                <tr><td colspan="6" class="td-loading">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                        <p id="hx-empty" class="td-empty-msg" hidden>No transactions found.</p>
+                    </div>
+
+                    <!-- Pagination -->
+                    <nav class="pagination td-pagination hx-pagination" aria-label="Transaction history pagination">
+                        <button id="hx-prev" type="button" class="btn btn-secondary pagination-btn" aria-label="Previous page" disabled>← Prev</button>
+                        <span id="hx-page-info" class="hx-page-info" aria-live="polite"></span>
+                        <button id="hx-next" type="button" class="btn btn-secondary pagination-btn" aria-label="Next page">Next →</button>
+                    </nav>
+                </div>
+            </div>
+        </section>
+
+        <!-- Transaction Detail Modal -->
+        <div id="hx-detail-modal" class="modal td-detail-modal" hidden role="dialog" aria-labelledby="hx-detail-title" aria-modal="true" tabindex="-1">
+            <div class="modal-content td-detail-content">
+                <div class="modal-header">
+                    <h3 id="hx-detail-title" class="modal-title">Transaction Details</h3>
+                    <button id="hx-detail-close" type="button" class="btn btn-close" aria-label="Close transaction details">✕</button>
+                </div>
+                <div id="hx-detail-body" class="td-detail-body"></div>
+            </div>
+        </div>
+
     </main>
 
     <footer role="contentinfo">
@@ -668,6 +1231,23 @@
     <!-- Toast notifications container -->
     <div id="toast-container" class="toast-container" role="alert" aria-live="assertive" aria-label="Notifications"></div>
 
-    <script src="app.js"></script>
+    <!-- Error modal -->
+    <div id="error-modal" class="error-modal" role="alertdialog" aria-modal="true" aria-labelledby="error-modal-title" aria-describedby="error-modal-message" hidden>
+        <div class="error-modal-content">
+            <h2 id="error-modal-title" class="error-modal-title">Something went wrong</h2>
+            <p id="error-modal-message" class="error-modal-message"></p>
+            <div class="error-modal-actions">
+                <button id="error-modal-retry" type="button" class="btn btn-primary" hidden>Retry</button>
+                <button id="error-modal-close" type="button" class="btn btn-ghost" onclick="document.getElementById('error-modal').hidden=true">Dismiss</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="compat.js"></script>
+    <script src="wallet.js"></script>
+    <script type="module" src="app.js"></script>
+    <script src="dashboard.js"></script>
+    <script src="history.js"></script>
+    <script src="trade-create.js"></script>
 </body>
 </html>

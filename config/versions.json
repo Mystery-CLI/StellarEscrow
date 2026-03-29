@@ -1,0 +1,13 @@
+{
+  "current": "1.0.0",
+  "schema_version": 1,
+  "history": [
+    {
+      "version": "1.0.0",
+      "schema_version": 1,
+      "date": "2026-03-25",
+      "description": "Initial centralized config — covers server, database, stellar, rate_limit, storage, notification, api, frontend sections",
+      "breaking": false
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+name: Environment Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_env:
+        description: Source environment
+        required: true
+        default: staging
+        type: choice
+        options: [staging]
+      to_env:
+        description: Target environment
+        required: true
+        default: production
+        type: choice
+        options: [production]
+      image_tag:
+        description: Docker image tag to promote (e.g. sha-abc1234)
+        required: true
+
+concurrency:
+  group: promote-${{ inputs.to_env }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.from_env }} → ${{ inputs.to_env }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.to_env }}   # requires manual approval gate in GitHub
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify staging health before promotion
+        run: |
+          STATUS=$(curl -sf "${{ vars.STAGING_URL }}/health" | jq -r '.status')
+          if [ "$STATUS" != "ok" ]; then
+            echo "Staging health check failed (status=$STATUS). Aborting promotion."
+            exit 1
+          fi
+          echo "Staging is healthy — proceeding."
+
+      - name: Log promotion intent
+        run: |
+          echo "Promoting image ${{ inputs.image_tag }}"
+          echo "  from: ${{ inputs.from_env }}"
+          echo "  to:   ${{ inputs.to_env }}"
+          echo "  actor: ${{ github.actor }}"
+          echo "  run:   ${{ github.run_id }}"
+
+      - name: Deploy to ${{ inputs.to_env }}
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_PROD }}
+        run: |
+          echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl set image deployment/stellar-escrow-indexer \
+            indexer=ghcr.io/${{ github.repository }}/indexer:${{ inputs.image_tag }} \
+            --namespace stellar-escrow-prod
+          kubectl rollout status deployment/stellar-escrow-indexer \
+            --namespace stellar-escrow-prod --timeout=120s
+
+      - name: Verify production health after deploy
+        run: |
+          sleep 10
+          STATUS=$(curl -sf "${{ vars.PROD_URL }}/health" | jq -r '.status')
+          if [ "$STATUS" != "ok" ]; then
+            echo "Production health check failed after deploy. Consider rolling back."
+            exit 1
+          fi
+          echo "Production is healthy."
+
+      - name: Rollback on failure
+        if: failure()
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_PROD }}
+        run: |
+          echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl rollout undo deployment/stellar-escrow-indexer \
+            --namespace stellar-escrow-prod

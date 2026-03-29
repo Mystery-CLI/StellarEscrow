@@ -1,0 +1,56 @@
+# Pod Security Standards — enforce restricted policy at namespace level
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stellar-escrow
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+---
+# RBAC: minimal service account for the indexer
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stellar-escrow-indexer
+  namespace: stellar-escrow
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/stellar-escrow-indexer"
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stellar-escrow-api
+  namespace: stellar-escrow
+automountServiceAccountToken: false
+---
+# Role: read-only access to own secrets
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: stellar-escrow-secret-reader
+  namespace: stellar-escrow
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["stellar-escrow-secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: indexer-secret-reader
+  namespace: stellar-escrow
+subjects:
+  - kind: ServiceAccount
+    name: stellar-escrow-indexer
+    namespace: stellar-escrow
+  - kind: ServiceAccount
+    name: stellar-escrow-api
+    namespace: stellar-escrow
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: stellar-escrow-secret-reader

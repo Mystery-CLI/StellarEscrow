@@ -1,0 +1,52 @@
+{
+  "name": "stellar-escrow",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --workspace=app",
+    "build": "npm run build --workspace=app",
+    "test": "npm run test --workspaces --if-present",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace=components",
+    "test:security": "npm run test --workspace=security",
+    "test:performance": "npm run test:performance --workspace=api",
+    "test:browser": "playwright test",
+    "test:browser:ui": "playwright test --ui",
+    "test:browser:report": "playwright show-report",
+    "test:regression": "npm run test:ci --workspace=testing/regression",
+    "test:regression:report": "npm run report --workspace=testing/regression",
+    "test:regression:analyze": "npm run analyze --workspace=testing/regression",
+    "test:uat": "npm run test:ci --workspace=testing/uat",
+    "test:uat:report": "npm run report --workspace=testing/uat",
+    "test:uat:automate": "npm run automate --workspace=testing/uat",
+    "test:a11y": "npm run test:ci --workspace=testing/accessibility",
+    "test:a11y:report": "npm run report --workspace=testing/accessibility",
+    "lint": "eslint . --ext .ts,.tsx,.js,.svelte",
+    "lint:fix": "eslint . --ext .ts,.tsx,.js,.svelte --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,svelte,json,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,svelte,json,css}\"",
+    "test:orchestrate": "node scripts/orchestrate.js",
+    "test:orchestrate:suite": "node scripts/orchestrate.js --suite",
+    "test:analytics": "node scripts/test-analytics.js",
+    "test:maintain": "node scripts/maintain-tests.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.43.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.0",
+    "prettier-plugin-svelte": "^3.2.0",
+    "serve": "^14.2.3"
+  },
+  "workspaces": [
+    "app",
+    "components",
+    "api",
+    "state",
+    "security",
+    "testing/regression",
+    "testing/uat",
+    "testing/accessibility",
+    "tests"
+  ]
+}

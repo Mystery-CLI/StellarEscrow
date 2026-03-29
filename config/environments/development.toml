@@ -1,0 +1,33 @@
+# Development environment overrides
+# Merged on top of base.toml
+
+[meta]
+environment = "development"
+
+[server]
+port = 3000
+
+[database]
+url = "postgres://indexer:password@localhost:5432/stellar_escrow"
+max_connections = 5
+
+[stellar]
+network = "testnet"
+contract_id = "CA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ"
+horizon_url = "https://horizon-testnet.stellar.org"
+poll_interval_seconds = 5
+
+[rate_limit]
+default_rpm = 600
+elevated_rpm = 3000
+admin_rpm = 60000
+
+[storage]
+base_dir = "./uploads/dev"
+
+[api]
+base_url = "http://localhost:3000/api"
+ws_url = "ws://localhost:3000/api/ws"
+
+[frontend]
+api_base_url = "http://localhost:3000/api"

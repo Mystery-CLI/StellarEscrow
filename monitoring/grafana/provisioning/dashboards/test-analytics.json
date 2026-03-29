@@ -1,0 +1,60 @@
+{
+  "title": "Test Automation Analytics",
+  "uid": "test-analytics",
+  "schemaVersion": 36,
+  "refresh": "1h",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Overall Pass Rate",
+      "type": "gauge",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "options": { "minValue": 0, "maxValue": 100 },
+      "targets": [{ "expr": "test_suite_pass_rate", "legendFormat": "Pass Rate %" }]
+    },
+    {
+      "id": 2,
+      "title": "Flaky Tests",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "test_flaky_count", "legendFormat": "Flaky" }]
+    },
+    {
+      "id": 3,
+      "title": "Suite Duration (ms)",
+      "type": "bargauge",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 4 },
+      "targets": [{ "expr": "test_suite_duration_ms", "legendFormat": "{{suite}}" }]
+    },
+    {
+      "id": 4,
+      "title": "Pass Rate Trend",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 16, "h": 8 },
+      "targets": [
+        { "expr": "test_regression_pass_rate", "legendFormat": "Regression" },
+        { "expr": "test_uat_pass_rate",        "legendFormat": "UAT" },
+        { "expr": "test_a11y_pass_rate",       "legendFormat": "Accessibility" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "A11y Violations",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 4 },
+      "targets": [{ "expr": "test_a11y_violations", "legendFormat": "Violations" }]
+    },
+    {
+      "id": 6,
+      "title": "Consecutive Failures",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 8, "w": 8, "h": 4 },
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [
+        { "color": "green", "value": 0 },
+        { "color": "yellow", "value": 2 },
+        { "color": "red", "value": 3 }
+      ]}}},
+      "targets": [{ "expr": "test_consecutive_failures", "legendFormat": "Consecutive Failures" }]
+    }
+  ]
+}

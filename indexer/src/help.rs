@@ -254,7 +254,7 @@ static DOCS: &[HelpArticle] = &[
         id: "doc-event-types",
         category: "api",
         title: "Contract Event Types",
-        content: "The indexer tracks these event types emitted by the contract: trade_created, trade_funded, trade_completed, trade_confirmed, dispute_raised, dispute_resolved, trade_cancelled, arbitrator_registered, arbitrator_removed, fee_updated, fees_withdrawn.",
+        content: "The indexer tracks these event types emitted by the contract: trade_created, trade_funded, trade_completed, trade_confirmed, dispute_raised, dispute_resolved, trade_cancelled, arbitrator_registered, arbitrator_removed, fee_updated, fees_withdrawn, compliance_passed, compliance_failed.",
         tags: &["events", "indexer", "types"],
     },
     HelpArticle {
@@ -305,9 +305,7 @@ pub async fn help_index() -> Json<serde_json::Value> {
 pub async fn get_faqs(Query(params): Query<SearchQuery>) -> Json<serde_json::Value> {
     let items: Vec<&FaqItem> = FAQS
         .iter()
-        .filter(|f| {
-            params.category.as_deref().map_or(true, |c| f.category == c)
-        })
+        .filter(|f| params.category.as_deref().map_or(true, |c| f.category == c))
         .collect();
 
     let categories: std::collections::HashSet<&str> = FAQS.iter().map(|f| f.category).collect();
@@ -323,14 +321,16 @@ pub async fn get_faqs(Query(params): Query<SearchQuery>) -> Json<serde_json::Val
 pub async fn get_tutorials() -> Json<serde_json::Value> {
     let summaries: Vec<serde_json::Value> = TUTORIALS
         .iter()
-        .map(|t| json!({
-            "id": t.id,
-            "title": t.title,
-            "description": t.description,
-            "difficulty": t.difficulty,
-            "step_count": t.steps.len(),
-            "url": format!("/help/tutorials/{}", t.id),
-        }))
+        .map(|t| {
+            json!({
+                "id": t.id,
+                "title": t.title,
+                "description": t.description,
+                "difficulty": t.difficulty,
+                "step_count": t.steps.len(),
+                "url": format!("/help/tutorials/{}", t.id),
+            })
+        })
         .collect();
 
     Json(json!({ "total": summaries.len(), "tutorials": summaries }))
@@ -349,13 +349,9 @@ pub async fn get_tutorial_by_id(
 
 /// GET /help/docs?category=<optional>
 pub async fn get_docs(Query(params): Query<SearchQuery>) -> Json<serde_json::Value> {
-    let articles: Vec<&&HelpArticle> = DOCS
+    let articles: Vec<&HelpArticle> = DOCS
         .iter()
-        .filter(|a| {
-            params.category.as_deref().map_or(true, |c| a.category == c)
-        })
-        .collect::<Vec<_>>()
-        .iter()
+        .filter(|a| params.category.as_deref().map_or(true, |c| a.category == c))
         .collect();
 
     let categories: std::collections::HashSet<&str> = DOCS.iter().map(|a| a.category).collect();
@@ -407,13 +403,15 @@ pub async fn search_help(Query(params): Query<SearchQuery>) -> Json<serde_json::
                         || s.description.to_lowercase().contains(&query)
                 })
         })
-        .map(|t| json!({
-            "id": t.id,
-            "title": t.title,
-            "description": t.description,
-            "difficulty": t.difficulty,
-            "url": format!("/help/tutorials/{}", t.id),
-        }))
+        .map(|t| {
+            json!({
+                "id": t.id,
+                "title": t.title,
+                "description": t.description,
+                "difficulty": t.difficulty,
+                "url": format!("/help/tutorials/{}", t.id),
+            })
+        })
         .collect();
 
     Json(json!({
