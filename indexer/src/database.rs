@@ -968,22 +968,8 @@ impl Database {
     ) -> Result<crate::models::NotificationPreferences, AppError> {
         // Fetch existing or use defaults, then apply partial update
         let existing = self.get_notification_preferences(address).await?;
-        let base = existing.unwrap_or_else(|| crate::models::NotificationPreferences {
-            address: address.to_string(),
-            email_enabled: false,
-            email_address: None,
-            sms_enabled: false,
-            phone_number: None,
-            push_enabled: false,
-            push_token: None,
-            on_trade_created: true,
-            on_trade_funded: true,
-            on_trade_completed: true,
-            on_trade_confirmed: true,
-            on_dispute_raised: true,
-            on_dispute_resolved: true,
-            on_trade_cancelled: true,
-            updated_at: chrono::Utc::now(),
+        let base = existing.unwrap_or_else(|| {
+            crate::models::NotificationPreferences::default_for_address(address.to_string())
         });
 
         let row = sqlx::query_as::<_, crate::models::NotificationPreferences>(
@@ -1030,6 +1016,23 @@ impl Database {
         .await?;
 
         Ok(row)
+    }
+
+    pub async fn unregister_push_token(&self, token: &str) -> Result<u64, AppError> {
+        let result = sqlx::query(
+            r#"
+            UPDATE notification_preferences
+            SET push_enabled = FALSE,
+                push_token = NULL,
+                updated_at = NOW()
+            WHERE push_token = $1
+            "#,
+        )
+        .bind(token)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
     }
 
     pub async fn log_notification(

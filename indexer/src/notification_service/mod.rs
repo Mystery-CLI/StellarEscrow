@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tracing::warn;
-
 use crate::config::NotificationConfig;
 use crate::database::Database;
-use crate::models::Event;
+use crate::models::{Event, NotificationPreferences};
 
 mod channels;
 pub mod templates;
 
-use templates::TemplateId;
+use templates::{NotificationChannel, TemplateId};
 
 pub struct NotificationService {
     db: Arc<Database>,
@@ -28,35 +26,38 @@ impl NotificationService {
             return;
         };
 
-        // Build template variables from event data
         let vars = event_vars(&event.data);
-
-        // Fetch addresses that are parties to this trade
         let addresses = trade_addresses(&event.data);
+        if addresses.is_empty() {
+            return;
+        }
+
+        let template = templates::get(&template_id);
 
         for address in addresses {
-            let Ok(Some(prefs)) = self.db.get_notification_preferences(&address).await else {
-                continue;
+            let prefs = match self.db.get_notification_preferences(&address).await {
+                Ok(Some(prefs)) => prefs,
+                Ok(None) => NotificationPreferences::default_for_address(address.clone()),
+                Err(_) => continue,
             };
 
-            // Check per-event toggle
             if !prefs_allow(&prefs, &template_id) {
                 continue;
             }
 
-            let tmpl = templates::get(&template_id);
-            let (subject, body) = templates::render(&tmpl, &vars);
-
             if prefs.email_enabled {
-                if let Some(ref email) = prefs.email_address {
-                    let result = channels::send_email(&self.cfg, email, &subject, &body).await;
+                if let Some(email) = non_empty(prefs.email_address.as_deref()) {
+                    let rendered = templates::render(&template, NotificationChannel::Email, &vars);
+                    let result =
+                        channels::send_email(&self.cfg, email, &rendered.subject, &rendered.body)
+                            .await;
                     self.db
                         .log_notification(
                             &address,
-                            "email",
+                            NotificationChannel::Email.as_str(),
                             template_id.as_str(),
-                            Some(&subject),
-                            &body,
+                            Some(&rendered.subject),
+                            &rendered.body,
                             result,
                         )
                         .await;
@@ -64,15 +65,16 @@ impl NotificationService {
             }
 
             if prefs.sms_enabled {
-                if let Some(ref phone) = prefs.phone_number {
-                    let result = channels::send_sms(&self.cfg, phone, &body).await;
+                if let Some(phone) = non_empty(prefs.phone_number.as_deref()) {
+                    let rendered = templates::render(&template, NotificationChannel::Sms, &vars);
+                    let result = channels::send_sms(&self.cfg, phone, &rendered.body).await;
                     self.db
                         .log_notification(
                             &address,
-                            "sms",
+                            NotificationChannel::Sms.as_str(),
                             template_id.as_str(),
                             None,
-                            &body,
+                            &rendered.body,
                             result,
                         )
                         .await;
@@ -80,15 +82,18 @@ impl NotificationService {
             }
 
             if prefs.push_enabled {
-                if let Some(ref token) = prefs.push_token {
-                    let result = channels::send_push(&self.cfg, token, &subject, &body).await;
+                if let Some(token) = non_empty(prefs.push_token.as_deref()) {
+                    let rendered = templates::render(&template, NotificationChannel::Push, &vars);
+                    let result =
+                        channels::send_push(&self.cfg, token, &rendered.subject, &rendered.body)
+                            .await;
                     self.db
                         .log_notification(
                             &address,
-                            "push",
+                            NotificationChannel::Push.as_str(),
                             template_id.as_str(),
-                            Some(&subject),
-                            &body,
+                            Some(&rendered.subject),
+                            &rendered.body,
                             result,
                         )
                         .await;
@@ -98,12 +103,19 @@ impl NotificationService {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+fn non_empty(value: Option<&str>) -> Option<&str> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
+}
 
 fn event_vars(data: &serde_json::Value) -> HashMap<&'static str, String> {
-    let mut m = HashMap::new();
+    let mut vars = HashMap::new();
     let keys = [
         "trade_id",
         "seller",
@@ -115,32 +127,37 @@ fn event_vars(data: &serde_json::Value) -> HashMap<&'static str, String> {
         "resolution",
         "recipient",
     ];
-    for k in keys {
-        if let Some(v) = data.get(k) {
-            m.insert(
-                k,
-                v.as_str()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| v.to_string()),
-            );
-        }
+
+    for key in keys {
+        let value = data
+            .get(key)
+            .map(|value| match value {
+                serde_json::Value::Null => String::new(),
+                serde_json::Value::String(s) => s.clone(),
+                _ => value.to_string(),
+            })
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "unknown".to_string());
+        vars.insert(key, value);
     }
-    m
+
+    vars
 }
 
 fn trade_addresses(data: &serde_json::Value) -> Vec<String> {
     let mut addrs = Vec::new();
     for key in ["seller", "buyer", "raised_by", "recipient"] {
-        if let Some(v) = data.get(key).and_then(|v| v.as_str()) {
-            if !v.is_empty() && !addrs.contains(&v.to_string()) {
-                addrs.push(v.to_string());
+        if let Some(value) = data.get(key).and_then(|value| value.as_str()) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() && !addrs.iter().any(|existing| existing == trimmed) {
+                addrs.push(trimmed.to_string());
             }
         }
     }
     addrs
 }
 
-fn prefs_allow(prefs: &crate::models::NotificationPreferences, id: &TemplateId) -> bool {
+fn prefs_allow(prefs: &NotificationPreferences, id: &TemplateId) -> bool {
     match id {
         TemplateId::TradeCreated => prefs.on_trade_created,
         TemplateId::TradeFunded => prefs.on_trade_funded,
@@ -149,5 +166,45 @@ fn prefs_allow(prefs: &crate::models::NotificationPreferences, id: &TemplateId) 
         TemplateId::DisputeRaised => prefs.on_dispute_raised,
         TemplateId::DisputeResolved => prefs.on_dispute_resolved,
         TemplateId::TradeCancelled => prefs.on_trade_cancelled,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{event_vars, prefs_allow, trade_addresses};
+    use crate::models::NotificationPreferences;
+    use crate::notification_service::templates::TemplateId;
+    use serde_json::json;
+
+    #[test]
+    fn extracts_unique_addresses_from_event_payload() {
+        let data = json!({
+            "seller": "S1",
+            "buyer": "B1",
+            "raised_by": "S1",
+            "recipient": "R1"
+        });
+
+        let addresses = trade_addresses(&data);
+
+        assert_eq!(addresses, vec!["S1", "B1", "R1"]);
+    }
+
+    #[test]
+    fn fills_missing_template_values_with_unknown() {
+        let vars = event_vars(&json!({ "trade_id": 44 }));
+
+        assert_eq!(vars.get("trade_id").map(String::as_str), Some("44"));
+        assert_eq!(vars.get("buyer").map(String::as_str), Some("unknown"));
+        assert_eq!(vars.get("amount").map(String::as_str), Some("unknown"));
+    }
+
+    #[test]
+    fn respects_event_level_preferences() {
+        let mut prefs = NotificationPreferences::default_for_address("GABC");
+        prefs.on_dispute_raised = false;
+
+        assert!(prefs_allow(&prefs, &TemplateId::TradeCreated));
+        assert!(!prefs_allow(&prefs, &TemplateId::DisputeRaised));
     }
 }

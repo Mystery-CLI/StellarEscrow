@@ -62,6 +62,8 @@ pub async fn api_index() -> Json<serde_json::Value> {
             "notif_prefs_get": "GET  /notifications/preferences/:address",
             "notif_prefs_put": "PUT  /notifications/preferences/:address",
             "notif_log":       "GET  /notifications/log/:address",
+            "push_register":   "POST /push/register",
+            "push_unregister": "DELETE /push/unregister/:device_token",
             "help":            "GET  /help"
         }
     }))
@@ -473,7 +475,7 @@ pub async fn get_notification_preferences(
         .database
         .get_notification_preferences(&address)
         .await?
-        .ok_or_else(|| AppError::NotFound("preferences not found".into()))?;
+        .unwrap_or_else(|| crate::models::NotificationPreferences::default_for_address(address));
     Ok(Json(prefs))
 }
 
@@ -501,6 +503,61 @@ pub async fn get_notification_log(
         .get_notification_log(&address, params.limit.unwrap_or(50))
         .await?;
     Ok(Json(entries))
+}
+
+/// POST /push/register
+pub async fn register_push_token(
+    State(state): State<AppState>,
+    Json(body): Json<crate::models::PushRegistrationRequest>,
+) -> Result<Json<crate::models::NotificationPreferences>, AppError> {
+    let token = body.device_token.trim();
+    let address = body.address.trim();
+
+    if token.is_empty() || address.is_empty() {
+        return Err(AppError::BadRequest(
+            "address and device_token are required".to_string(),
+        ));
+    }
+
+    let prefs = state
+        .database
+        .upsert_notification_preferences(
+            address,
+            &crate::models::UpdateNotificationPreferences {
+                email_enabled: None,
+                email_address: None,
+                sms_enabled: None,
+                phone_number: None,
+                push_enabled: Some(true),
+                push_token: Some(token.to_string()),
+                on_trade_created: None,
+                on_trade_funded: None,
+                on_trade_completed: None,
+                on_trade_confirmed: None,
+                on_dispute_raised: None,
+                on_dispute_resolved: None,
+                on_trade_cancelled: None,
+            },
+        )
+        .await?;
+
+    Ok(Json(prefs))
+}
+
+/// DELETE /push/unregister/:device_token
+pub async fn unregister_push_token(
+    Path(device_token): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let removed = state
+        .database
+        .unregister_push_token(device_token.trim())
+        .await?;
+
+    Ok(Json(json!({
+        "status": "ok",
+        "removed": removed,
+    })))
 }
 
 // =============================================================================

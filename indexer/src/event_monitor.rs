@@ -277,6 +277,9 @@ impl EventMonitor {
         };
         self.ws_manager.broadcast(ws_message).await;
 
+        // Notifications are best-effort and should not block the rest of event processing.
+        self.notification_service.process_event(event).await;
+
         // Fraud detection for high-value trade events
         let report = match event.event_type.as_str() {
             "trade_created" => self.fraud_service.process_event(event).await,

@@ -23,6 +23,9 @@ pub enum AppError {
     #[error("Invalid event data: {0}")]
     InvalidEventData(String),
 
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
     #[error("Event not found")]
     EventNotFound,
 
@@ -81,6 +84,11 @@ impl IntoResponse for AppError {
                 StatusCode::BAD_REQUEST,
                 "INVALID_EVENT_DATA",
                 "Invalid event data",
+            ),
+            AppError::BadRequest(_) => (
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                "Bad request",
             ),
             AppError::EventNotFound => {
                 (StatusCode::NOT_FOUND, "EVENT_NOT_FOUND", "Event not found")

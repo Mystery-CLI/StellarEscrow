@@ -517,6 +517,28 @@ pub struct NotificationPreferences {
     pub updated_at: DateTime<Utc>,
 }
 
+impl NotificationPreferences {
+    pub fn default_for_address(address: impl Into<String>) -> Self {
+        Self {
+            address: address.into(),
+            email_enabled: false,
+            email_address: None,
+            sms_enabled: false,
+            phone_number: None,
+            push_enabled: false,
+            push_token: None,
+            on_trade_created: true,
+            on_trade_funded: true,
+            on_trade_completed: true,
+            on_trade_confirmed: true,
+            on_dispute_raised: true,
+            on_dispute_resolved: true,
+            on_trade_cancelled: true,
+            updated_at: Utc::now(),
+        }
+    }
+}
+
 /// Upsert payload — all fields optional so callers only send what they want to change.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateNotificationPreferences {
@@ -546,4 +568,11 @@ pub struct NotificationLogEntry {
     pub status: String,
     pub error: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PushRegistrationRequest {
+    pub device_token: String,
+    pub platform: String,
+    pub address: String,
 }

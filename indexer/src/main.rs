@@ -289,6 +289,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(get_notification_preferences).put(upsert_notification_preferences),
         )
         .route("/notifications/log/:address", get(get_notification_log))
+        .route("/push/register", post(register_push_token))
+        .route("/push/unregister/:device_token", delete(unregister_push_token))
         // Performance monitoring
         .route("/performance/dashboard", get(get_performance_dashboard))
         .route("/performance/alerts", get(get_performance_alerts))
