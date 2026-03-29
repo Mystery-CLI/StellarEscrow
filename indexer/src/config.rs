@@ -30,6 +30,8 @@ pub struct Config {
     pub analytics: AnalyticsConfig,
     #[serde(default)]
     pub backup: BackupConfig,
+    #[serde(default)]
+    pub audit: AuditConfig,
 }
 
 // ---------------------------------------------------------------------------
@@ -519,6 +521,32 @@ impl Default for Config {
             gateway: GatewayConfig::default(),
 
             integration: IntegrationConfig::default(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Audit config
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditConfig {
+    /// Retention period in days (default 90). Logs older than this are purged.
+    #[serde(default = "default_audit_retention")]
+    pub retention_days: u32,
+    /// How often to run the retention purge, in hours (0 = disabled, default 24).
+    #[serde(default = "default_audit_purge_interval")]
+    pub purge_interval_hours: u64,
+}
+
+fn default_audit_retention() -> u32 { 90 }
+fn default_audit_purge_interval() -> u64 { 24 }
+
+impl Default for AuditConfig {
+    fn default() -> Self {
+        Self {
+            retention_days: default_audit_retention(),
+            purge_interval_hours: default_audit_purge_interval(),
         }
     }
 }
