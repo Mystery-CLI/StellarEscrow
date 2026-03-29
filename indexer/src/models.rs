@@ -83,6 +83,40 @@ pub struct FeesWithdrawnData {
     pub to: String,
 }
 
+// =============================================================================
+// Trade Detail View (Issue #31)
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradeTimelineEntry {
+    pub status: String,
+    pub ledger: i64,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub transaction_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradeDetailResponse {
+    pub trade_id: i64,
+    pub seller: String,
+    pub buyer: String,
+    pub amount: i64,
+    pub fee: Option<i64>,
+    pub seller_payout: Option<i64>,
+    pub arbitrator: Option<String>,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub timeline: Vec<TradeTimelineEntry>,
+    pub transaction_history: Vec<Event>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradeDetailQuery {
+    pub viewer: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventQuery {
     pub limit: Option<i64>,
