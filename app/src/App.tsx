@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Routes, Route, NavLink } from 'react-router-dom';
 import { Routes, Route } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Button, Box, Container } from '@mui/material';
 import { NavLink } from 'react-router-dom';
@@ -7,8 +9,27 @@ import CreateTrade from './pages/CreateTrade';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export default function App() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   return (
     <ErrorBoundary>
+      <div className="app">
+        <nav className="nav">
+          <span className="nav-brand">StellarEscrow</span>
+          <button 
+            className="nav-mobile-toggle" 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label="Toggle navigation"
+            aria-expanded={isMenuOpen}
+          >
+            ☰
+          </button>
+          <div className={`nav-links ${isMenuOpen ? 'nav-links-open' : ''}`}>
+            <NavLink to="/" end onClick={() => setIsMenuOpen(false)}>Dashboard</NavLink>
+            <NavLink to="/trades/new" onClick={() => setIsMenuOpen(false)}>New Trade</NavLink>
+          </div>
+        </nav>
+        <main className="main">
       <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <AppBar position="static" color="primary">
           <Toolbar sx={{ gap: 2 }}>

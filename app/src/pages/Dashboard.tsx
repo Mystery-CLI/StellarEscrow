@@ -11,17 +11,18 @@ export default function Dashboard() {
 
   return (
     <div>
+      <div className="dashboard-header">
       <OnboardingFlow />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: '1.5rem' }}>Trades</h1>
-        <Link to="/trades/new" style={{ padding: '0.5rem 1rem', background: '#1a1a2e', color: 'white', borderRadius: 6, textDecoration: 'none' }}>
+        <Link to="/trades/new" className="dashboard-new-btn">
           + New Trade
         </Link>
       </div>
       {trades.length === 0 ? (
         <p style={{ color: '#666' }}>No trades yet.</p>
       ) : (
-        <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
+        <div className="trades-grid">
           {trades.map((trade) => (
             <Link key={trade.id} to={`/trades/${trade.id}`} style={{ textDecoration: 'none' }}>
               <TradeCard
