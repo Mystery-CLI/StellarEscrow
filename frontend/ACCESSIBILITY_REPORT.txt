@@ -1,19 +1,20 @@
 
 StellarEscrow Accessibility Test Report
-Generated: 2026-03-24T12:59:57.193Z
+Generated: 2026-03-29T17:57:27.786Z
 WCAG Level: AA
 
 Summary:
-- Total Tests: 60
-- Passed: 57
-- Failed: 3
+- Total Tests: 63
+- Passed: 59
+- Failed: 4
 - Warnings: 2
-- Pass Rate: 95.0%
+- Pass Rate: 93.7%
 
 
 Failed Tests:
-- Core buttons have accessible names: 4 buttons need accessible names
-- Core links have accessible text: 6 links need accessible text
+- All form inputs have labels: Form inputs missing labels: resolution-dispute-id, pref-trade-updates, pref-disputes, pref-arbitration, pref-push, pref-email
+- Core buttons have accessible names: 14 buttons need accessible names
+- Core links have accessible text: 11 links need accessible text
 - Toasts have role="alert": Toast notifications missing role="alert"
 
 Warnings:
