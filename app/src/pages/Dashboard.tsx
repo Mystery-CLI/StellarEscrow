@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useGetTradesQuery } from '@stellar-escrow/state';
 import { TradeCard } from '@stellar-escrow/components';
+import OnboardingFlow from '../components/OnboardingFlow';
 
 export default function Dashboard() {
   const { data: trades = [], isLoading, error } = useGetTradesQuery({});
@@ -10,6 +11,7 @@ export default function Dashboard() {
 
   return (
     <div>
+      <OnboardingFlow />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: '1.5rem' }}>Trades</h1>
         <Link to="/trades/new" style={{ padding: '0.5rem 1rem', background: '#1a1a2e', color: 'white', borderRadius: 6, textDecoration: 'none' }}>
