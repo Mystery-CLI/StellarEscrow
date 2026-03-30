@@ -113,3 +113,31 @@ test.describe('Mobile browser — iOS Safari specific', () => {
     expect(overflow).toBe(false);
   });
 });
+
+test.describe('Mobile browser — Samsung Internet specific', () => {
+  test.use({ ...require('@playwright/test').devices['Galaxy S9+'] });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('page loads without JS errors on Samsung Internet', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    expect(errors).toHaveLength(0);
+  });
+
+  test('StellarCompat initialises on Samsung Internet', async ({ page }) => {
+    const compat = await page.evaluate(() => typeof (window as any).StellarCompat);
+    expect(compat).toBe('object');
+  });
+
+  test('no horizontal overflow on Galaxy S9+', async ({ page }) => {
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth > window.innerWidth
+    );
+    expect(overflow).toBe(false);
+  });
+});
