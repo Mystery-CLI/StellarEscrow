@@ -167,6 +167,7 @@ pub struct EventMonitor {
     integration_service: Arc<crate::integration_service::IntegrationService>,
     webhook_service: Arc<WebhookService>,
     job_queue: Option<Arc<tokio::sync::Mutex<JobQueue>>>,
+    cache_service: Option<Arc<crate::cache_service::CacheService>>,
 }
 
 impl EventMonitor {
@@ -191,7 +192,14 @@ impl EventMonitor {
             job_queue,
             client: Client::new(),
             last_ledger: config.start_ledger.map(|l| l as i64),
+            cache_service: None,
         }
+    }
+
+    /// Attach a cache service so the monitor can invalidate RPC caches on events.
+    pub fn with_cache_service(mut self, cache_service: Arc<crate::cache_service::CacheService>) -> Self {
+        self.cache_service = Some(cache_service);
+        self
     }
 
     pub async fn start(&mut self) -> Result<(), AppError> {
@@ -284,6 +292,24 @@ impl EventMonitor {
             timestamp: event.timestamp,
         };
         self.ws_manager.broadcast(ws_message).await;
+
+        // Invalidate RPC caches for relevant contract events
+        if let Some(ref cs) = self.cache_service {
+            let trade_id_opt = event.data.get("trade_id").and_then(|v| {
+                v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            });
+            match event.category.as_str() {
+                "trade" => {
+                    if let Some(trade_id) = trade_id_opt {
+                        cs.invalidate_rpc_trade(trade_id).await;
+                    }
+                }
+                "fee" => {
+                    cs.invalidate_rpc_global().await;
+                }
+                _ => {}
+            }
+        }
 
         // Notifications are best-effort and should not block the rest of event processing.
         self.notification_service.process_event(event).await;
