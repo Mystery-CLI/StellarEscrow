@@ -21,11 +21,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Cache app shell + static assets
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         runtimeCaching: [
           {
-            // Cache API responses (indexer) with network-first strategy
             urlPattern: ({ url }) => url.pathname.startsWith('/events') || url.pathname.startsWith('/search'),
             handler: 'NetworkFirst',
             options: {
@@ -37,5 +35,24 @@ export default defineConfig({
         ]
       }
     })
-  ]
+  ],
+
+  build: {
+    // Raise chunk warning threshold to 600kb (stellar-sdk is large)
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        // Manual code splitting: vendor libs into separate chunks
+        manualChunks(id) {
+          if (id.includes('node_modules/@stellar')) return 'stellar-sdk';
+          if (id.includes('node_modules')) return 'vendor';
+        }
+      }
+    }
+  },
+
+  // Aggressive dependency pre-bundling for faster dev cold starts
+  optimizeDeps: {
+    include: ['@stellar/stellar-sdk']
+  }
 });

@@ -5,8 +5,15 @@
   import ThemeToggle from '$lib/ThemeToggle.svelte';
   import SearchBar from '$lib/SearchBar.svelte';
   import OfflineIndicator from '$lib/OfflineIndicator.svelte';
+  import { collectWebVitals } from '$lib/perf';
 
-  onMount(() => themeStore.init());
+  onMount(() => {
+    themeStore.init();
+    collectWebVitals((m) => {
+      // In production, forward to your analytics endpoint here
+      if (import.meta.env.DEV) console.info(`[vitals] ${m.name}: ${m.value.toFixed(1)} (${m.rating})`);
+    });
+  });
 </script>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">

@@ -1,4 +1,4 @@
-import { apiFetch, type ClientConfig } from './client';
+import { apiFetch, cachedFetch, type ClientConfig } from './client';
 import type { Event, PagedResponse, TradeSearchResult, UserSearchResult, SearchSuggestion } from './types';
 
 export function createIndexerApi(config: ClientConfig) {
@@ -19,17 +19,18 @@ export function createIndexerApi(config: ClientConfig) {
           .filter(([, v]) => v !== undefined)
           .map(([k, v]) => [k, String(v)])
       ).toString();
-      return get(`/events${qs ? `?${qs}` : ''}`);
+      const path = `/events${qs ? `?${qs}` : ''}`;
+      return cachedFetch(path, 30_000, () => get(path));
     },
 
     /** GET /events/:id */
     getEvent(id: string): Promise<Event> {
-      return get(`/events/${id}`);
+      return cachedFetch(`/events/${id}`, 60_000, () => get(`/events/${id}`));
     },
 
     /** GET /events/trade/:trade_id */
     getTradeEvents(tradeId: number): Promise<Event[]> {
-      return get(`/events/trade/${tradeId}`);
+      return cachedFetch(`/events/trade/${tradeId}`, 30_000, () => get(`/events/trade/${tradeId}`));
     },
 
     /** GET /search/trades */
