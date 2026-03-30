@@ -58,3 +58,72 @@ groups:
         annotations:
           summary: "Service {{ $labels.job }} is down"
           description: "{{ $labels.job }} has been down for more than 1 minute."
+
+  - name: rate_limiting
+    interval: 15s
+    rules:
+      # ── Limit exceeded spike ──────────────────────────────────────────────
+      - alert: RateLimitExceededSpike
+        expr: |
+          rate(stellar_escrow_rate_limit_exceeded_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: high
+          category: rate_limiting
+        annotations:
+          summary: "Rate limit exceeded - possible abuse"
+          description: "{{ $value | humanize }} rate-limited requests/sec on tier {{ $labels.tier }}."
+          runbook: "https://github.com/Mystery-CLI/StellarEscrow/blob/main/docs/security.md#rate-limiting"
+
+      # ── Blacklist hit increase ────────────────────────────────────────────
+      - alert: BlacklistHitsIncreasing
+        expr: |
+          rate(stellar_escrow_rate_limit_blacklist_hits_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: high
+          category: rate_limiting
+        annotations:
+          summary: "Blacklist hit rate elevated"
+          description: "{{ $value | humanize }} blacklisted requests/sec — blocked actors are actively retrying."
+
+      # ── Free-tier abuse ───────────────────────────────────────────────────
+      - alert: FreeTierThrottleSpike
+        expr: |
+          rate(stellar_escrow_rate_limit_exceeded_total{tier="free"}[5m]) > 20
+        for: 2m
+        labels:
+          severity: medium
+          category: rate_limiting
+        annotations:
+          summary: "Free-tier rate limit spike"
+          description: "{{ $value | humanize }} free-tier throttle events/sec — consider auto-blacklisting offenders."
+
+      # ── Warning-level usage saturation ────────────────────────────────────
+      - alert: RateLimitWarningThresholdSaturation
+        expr: |
+          rate(stellar_escrow_rate_limit_warnings_total[5m]) > 30
+        for: 3m
+        labels:
+          severity: low
+          category: rate_limiting
+        annotations:
+          summary: "Many keys approaching their rate limit"
+          description: "{{ $value | humanize }} warning-level events/sec — traffic may be legitimate but growing."
+
+      # ── Overall block ratio ───────────────────────────────────────────────
+      - alert: HighRateLimitBlockRatio
+        expr: |
+          (
+            rate(stellar_escrow_rate_limit_blocked_total[5m])
+            /
+            rate(stellar_escrow_rate_limit_requests_total[5m])
+          ) > 0.25
+        for: 5m
+        labels:
+          severity: high
+          category: rate_limiting
+        annotations:
+          summary: "More than 25% of requests are being rate-limited"
+          description: "Block ratio is {{ $value | humanizePercentage }} — investigate traffic origin and tier distribution."
+
