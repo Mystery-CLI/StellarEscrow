@@ -6,11 +6,22 @@ import CreateTrade from './pages/CreateTrade';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import UserProfile from './pages/UserProfile';
+import ArbitratorRegister from './pages/ArbitratorRegister';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export default function App() {
   return (
     <ErrorBoundary>
+      <div className="app">
+        <nav className="nav">
+          <span className="nav-brand">StellarEscrow</span>
+          <NavLink to="/" end>Dashboard</NavLink>
+          <NavLink to="/trades/new">New Trade</NavLink>
+          <NavLink to="/arbitrators/register">Become Arbitrator</NavLink>
+          <NavLink to="/login">Login</NavLink>
+          <NavLink to="/register">Register</NavLink>
+        </nav>
+        <main className="main">
       <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <AppBar position="static" color="primary">
           <Toolbar sx={{ gap: 2 }}>
@@ -23,6 +34,8 @@ export default function App() {
             <Button color="inherit" component={NavLink} to="/trades/new">
               New Trade
             </Button>
+            <Button color="inherit" component={NavLink} to="/arbitrators/register">
+              Become Arbitrator
             <Button color="inherit" component={NavLink} to="/login">
               Login
             </Button>
@@ -41,6 +54,7 @@ export default function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/login" element={<Login />} />
               <Route path="/users/:address" element={<UserProfile />} />
+              <Route path="/arbitrators/register" element={<ArbitratorRegister />} />
             </Routes>
           </ErrorBoundary>
         </Container>
