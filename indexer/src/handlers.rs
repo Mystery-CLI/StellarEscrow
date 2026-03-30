@@ -826,6 +826,8 @@ pub struct ExportQuery {
     pub from: Option<chrono::DateTime<chrono::Utc>>,
     pub to: Option<chrono::DateTime<chrono::Utc>>,
     pub format: Option<String>,
+    pub event_type: Option<String>,
+    pub limit: Option<u64>,
 }
 
 /// GET /analytics/export — export analytics data as CSV or JSON.
@@ -834,6 +836,7 @@ pub async fn export_analytics(
     State(state): State<AppState>,
 ) -> Result<axum::response::Response<String>, AppError> {
     use crate::analytics_service::export::ExportFormat;
+    use crate::analytics_service::ExportOptions;
     use std::str::FromStr;
 
     let from = params.from.unwrap_or_else(|| chrono::Utc::now() - chrono::Duration::days(30));
@@ -842,7 +845,18 @@ pub async fn export_analytics(
         .unwrap_or(ExportFormat::Json);
 
     let is_csv = fmt == ExportFormat::Csv;
-    let body = state.analytics_service.export(from, to, fmt).await
+    let body = state
+        .analytics_service
+        .export(
+            from,
+            to,
+            fmt,
+            ExportOptions {
+                event_type: params.event_type.clone(),
+                limit: params.limit,
+            },
+        )
+        .await
         .map_err(|_| AppError::InternalServerError)?;
 
     let content_type = if is_csv { "text/csv" } else { "application/json" };
