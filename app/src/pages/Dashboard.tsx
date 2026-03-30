@@ -12,13 +12,22 @@ export default function Dashboard() {
   return (
     <div>
       <div className="dashboard-header">
-      <OnboardingFlow />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem' }}>Trades</h1>
-        <Link to="/trades/new" className="dashboard-new-btn">
-          + New Trade
-        </Link>
+        <OnboardingFlow />
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1.5rem',
+          }}
+        >
+          <h1 style={{ fontSize: '1.5rem' }}>Trades</h1>
+          <Link to="/trades/new" className="dashboard-new-btn">
+            + New Trade
+          </Link>
+        </div>
       </div>
+
       {trades.length === 0 ? (
         <p style={{ color: '#666' }}>No trades yet.</p>
       ) : (
