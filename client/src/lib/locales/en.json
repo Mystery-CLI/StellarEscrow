@@ -1,0 +1,83 @@
+{
+  "nav": {
+    "brand": "StellarEscrow",
+    "home": "Home"
+  },
+  "home": {
+    "title": "StellarEscrow",
+    "subtitle": "Decentralized escrow on Stellar/Soroban",
+    "viewTrade": "View Trade #1",
+    "viewTradeDesc": "Test funding interface",
+    "comingSoon": "Coming Soon",
+    "comingSoonDesc": "Create trades, buyer dashboard"
+  },
+  "trade": {
+    "title": "Trade #{id}",
+    "backToTrades": "← Back to trades",
+    "loading": "Loading trade details...",
+    "status": "Status: {status}",
+    "created": "Created: {time}",
+    "fundTrade": "Fund Trade",
+    "seller": "Seller",
+    "buyer": "Buyer",
+    "amount": "Amount",
+    "platformFee": "Platform Fee",
+    "you": "(you)",
+    "statusTimeline": "Status Timeline",
+    "tradeCreated": "Trade Created",
+    "tradeFunded": "Trade Funded",
+    "hoursAgo": "{count} hours ago",
+    "statuses": {
+      "Created": "Created",
+      "Funded": "Funded",
+      "Completed": "Completed",
+      "Disputed": "Disputed",
+      "Cancelled": "Cancelled"
+    }
+  },
+  "funding": {
+    "modalTitle": "Fund Trade #{id}",
+    "loadingPreview": "Loading preview...",
+    "youllPay": "You'll pay:",
+    "amount": "Amount:",
+    "platformFee": "Platform fee:",
+    "balance": "Balance:",
+    "allowanceNeeded": "Allowance needed:",
+    "allowanceDesc": "{amount} USDC to escrow contract",
+    "approveUsdc": "Approve USDC",
+    "approving": "Approving...",
+    "usdcApproved": "USDC Approved ✓",
+    "readyToFund": "Ready to fund",
+    "cancel": "Cancel",
+    "confirmFund": "Confirm & Fund",
+    "funding": "Funding...",
+    "successTitle": "Trade funded successfully!",
+    "successTx": "Tx: {hash}",
+    "errorGeneric": "An error occurred"
+  },
+  "offline": {
+    "banner": "You are offline. Some features may not work.",
+    "backOnline": "Back online!"
+  },
+  "search": {
+    "placeholder": "Search trades..."
+  },
+  "errors": {
+    "loadPreviewFailed": "Failed to load preview",
+    "approvalFailed": "Approval failed",
+    "fundingFailed": "Funding failed"
+  },
+  "currency": {
+    "usdc": "USDC",
+    "suffix": "USDC"
+  },
+  "language": {
+    "select": "Language",
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "pt": "Português",
+    "ar": "العربية",
+    "zh": "中文"
+  }
+}

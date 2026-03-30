@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "brand": "StellarEscrow",
+    "home": "首页"
+  },
+  "home": {
+    "title": "StellarEscrow",
+    "subtitle": "基于 Stellar/Soroban 的去中心化托管",
+    "viewTrade": "查看交易 #1",
+    "viewTradeDesc": "测试资金界面",
+    "comingSoon": "即将推出",
+    "comingSoonDesc": "创建交易，买家仪表板"
+  },
+  "trade": {
+    "title": "交易 #{id}",
+    "backToTrades": "← 返回交易列表",
+    "loading": "正在加载交易详情...",
+    "status": "状态: {status}",
+    "created": "创建时间: {time}",
+    "fundTrade": "资助交易",
+    "seller": "卖家",
+    "buyer": "买家",
+    "amount": "金额",
+    "platformFee": "平台费用",
+    "you": "（您）",
+    "statusTimeline": "状态时间线",
+    "tradeCreated": "交易已创建",
+    "tradeFunded": "交易已资助",
+    "hoursAgo": "{count} 小时前",
+    "statuses": {
+      "Created": "已创建",
+      "Funded": "已资助",
+      "Completed": "已完成",
+      "Disputed": "争议中",
+      "Cancelled": "已取消"
+    }
+  },
+  "funding": {
+    "modalTitle": "资助交易 #{id}",
+    "loadingPreview": "正在加载预览...",
+    "youllPay": "您将支付：",
+    "platformFee": "平台费：",
+    "balance": "余额：",
+    "allowanceNeeded": "需要授权：",
+    "allowanceDesc": "向托管合约授权 {amount} USDC",
+    "approveUsdc": "授权 USDC",
+    "approving": "授权中...",
+    "usdcApproved": "USDC 已授权 ✓",
+    "readyToFund": "准备资助",
+    "cancel": "取消",
+    "confirmFund": "确认并资助",
+    "funding": "资助中...",
+    "successTitle": "交易资助成功！",
+    "successTx": "交易哈希: {hash}",
+    "errorGeneric": "发生错误"
+  },
+  "offline": {
+    "banner": "您已离线，部分功能可能无法使用。",
+    "backOnline": "网络已恢复！"
+  },
+  "search": {
+    "placeholder": "搜索交易..."
+  },
+  "errors": {
+    "loadPreviewFailed": "加载预览失败",
+    "approvalFailed": "授权失败",
+    "fundingFailed": "资助失败"
+  },
+  "currency": {
+    "usdc": "USDC",
+    "suffix": "USDC"
+  },
+  "language": {
+    "select": "语言",
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "pt": "Português",
+    "ar": "العربية",
+    "zh": "中文"
+  }
+}

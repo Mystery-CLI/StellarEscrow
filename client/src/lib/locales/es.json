@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "brand": "StellarEscrow",
+    "home": "Inicio"
+  },
+  "home": {
+    "title": "StellarEscrow",
+    "subtitle": "Garantía descentralizada en Stellar/Soroban",
+    "viewTrade": "Ver Operación #1",
+    "viewTradeDesc": "Interfaz de financiación de prueba",
+    "comingSoon": "Próximamente",
+    "comingSoonDesc": "Crear operaciones, panel del comprador"
+  },
+  "trade": {
+    "title": "Operación #{id}",
+    "backToTrades": "← Volver a operaciones",
+    "loading": "Cargando detalles de la operación...",
+    "status": "Estado: {status}",
+    "created": "Creada: {time}",
+    "fundTrade": "Financiar Operación",
+    "seller": "Vendedor",
+    "buyer": "Comprador",
+    "amount": "Monto",
+    "platformFee": "Comisión de la Plataforma",
+    "you": "(tú)",
+    "statusTimeline": "Línea de Tiempo",
+    "tradeCreated": "Operación Creada",
+    "tradeFunded": "Operación Financiada",
+    "hoursAgo": "hace {count} horas",
+    "statuses": {
+      "Created": "Creada",
+      "Funded": "Financiada",
+      "Completed": "Completada",
+      "Disputed": "En Disputa",
+      "Cancelled": "Cancelada"
+    }
+  },
+  "funding": {
+    "modalTitle": "Financiar Operación #{id}",
+    "loadingPreview": "Cargando vista previa...",
+    "youllPay": "Pagarás:",
+    "platformFee": "Comisión:",
+    "balance": "Saldo:",
+    "allowanceNeeded": "Permiso necesario:",
+    "allowanceDesc": "{amount} USDC al contrato de garantía",
+    "approveUsdc": "Aprobar USDC",
+    "approving": "Aprobando...",
+    "usdcApproved": "USDC Aprobado ✓",
+    "readyToFund": "Listo para financiar",
+    "cancel": "Cancelar",
+    "confirmFund": "Confirmar y Financiar",
+    "funding": "Financiando...",
+    "successTitle": "¡Operación financiada con éxito!",
+    "successTx": "Tx: {hash}",
+    "errorGeneric": "Ocurrió un error"
+  },
+  "offline": {
+    "banner": "Estás sin conexión. Algunas funciones pueden no funcionar.",
+    "backOnline": "¡Conexión restaurada!"
+  },
+  "search": {
+    "placeholder": "Buscar operaciones..."
+  },
+  "errors": {
+    "loadPreviewFailed": "Error al cargar la vista previa",
+    "approvalFailed": "Error de aprobación",
+    "fundingFailed": "Error de financiación"
+  },
+  "currency": {
+    "usdc": "USDC",
+    "suffix": "USDC"
+  },
+  "language": {
+    "select": "Idioma",
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "pt": "Português",
+    "ar": "العربية",
+    "zh": "中文"
+  }
+}

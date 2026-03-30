@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "brand": "StellarEscrow",
+    "home": "الرئيسية"
+  },
+  "home": {
+    "title": "StellarEscrow",
+    "subtitle": "ضمان مالي لامركزي على شبكة Stellar/Soroban",
+    "viewTrade": "عرض الصفقة #1",
+    "viewTradeDesc": "واجهة التمويل التجريبية",
+    "comingSoon": "قريباً",
+    "comingSoonDesc": "إنشاء الصفقات، لوحة تحكم المشتري"
+  },
+  "trade": {
+    "title": "الصفقة #{id}",
+    "backToTrades": "→ العودة إلى الصفقات",
+    "loading": "جارٍ تحميل تفاصيل الصفقة...",
+    "status": "الحالة: {status}",
+    "created": "تاريخ الإنشاء: {time}",
+    "fundTrade": "تمويل الصفقة",
+    "seller": "البائع",
+    "buyer": "المشتري",
+    "amount": "المبلغ",
+    "platformFee": "رسوم المنصة",
+    "you": "(أنت)",
+    "statusTimeline": "الجدول الزمني للحالة",
+    "tradeCreated": "تم إنشاء الصفقة",
+    "tradeFunded": "تم تمويل الصفقة",
+    "hoursAgo": "منذ {count} ساعات",
+    "statuses": {
+      "Created": "مُنشأة",
+      "Funded": "مُموَّلة",
+      "Completed": "مكتملة",
+      "Disputed": "متنازع عليها",
+      "Cancelled": "ملغاة"
+    }
+  },
+  "funding": {
+    "modalTitle": "تمويل الصفقة #{id}",
+    "loadingPreview": "جارٍ تحميل المعاينة...",
+    "youllPay": "ستدفع:",
+    "platformFee": "الرسوم:",
+    "balance": "الرصيد:",
+    "allowanceNeeded": "التفويض المطلوب:",
+    "allowanceDesc": "{amount} USDC لعقد الضمان",
+    "approveUsdc": "الموافقة على USDC",
+    "approving": "جارٍ الموافقة...",
+    "usdcApproved": "تمت الموافقة على USDC ✓",
+    "readyToFund": "جاهز للتمويل",
+    "cancel": "إلغاء",
+    "confirmFund": "تأكيد وتمويل",
+    "funding": "جارٍ التمويل...",
+    "successTitle": "تم تمويل الصفقة بنجاح!",
+    "successTx": "معرف المعاملة: {hash}",
+    "errorGeneric": "حدث خطأ"
+  },
+  "offline": {
+    "banner": "أنت غير متصل بالإنترنت. بعض الميزات قد لا تعمل.",
+    "backOnline": "عدت إلى الإنترنت!"
+  },
+  "search": {
+    "placeholder": "البحث في الصفقات..."
+  },
+  "errors": {
+    "loadPreviewFailed": "فشل تحميل المعاينة",
+    "approvalFailed": "فشل الموافقة",
+    "fundingFailed": "فشل التمويل"
+  },
+  "currency": {
+    "usdc": "USDC",
+    "suffix": "USDC"
+  },
+  "language": {
+    "select": "اللغة",
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "pt": "Português",
+    "ar": "العربية",
+    "zh": "中文"
+  }
+}

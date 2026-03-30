@@ -1,0 +1,13 @@
+{
+	"/": [
+		"src/routes/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/search": [
+		"src/routes/+layout.ts"
+	],
+	"/trades/[id]": [
+		"src/routes/trades/[id]/+page.ts",
+		"src/routes/+layout.ts"
+	]
+}
