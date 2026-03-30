@@ -69,8 +69,14 @@ describe('ApiClient unit', () => {
       retryConfig: { maxRetries: 2, delayMs: 0, backoffMultiplier: 1 },
     });
 
+    const transientError = {
+      response: { status: 503, data: { error: 'service unavailable' } },
+      message: 'service unavailable',
+      code: 'ERR_SERVER',
+    };
+
     mockAxiosInstance.get
-      .mockRejectedValueOnce({ response: { status: 503 }, message: 'service unavailable' })
+      .mockRejectedValueOnce(transientError)
       .mockResolvedValueOnce({ data: { ok: true } });
 
     await expect(client.get('/trades')).resolves.toEqual({ ok: true });

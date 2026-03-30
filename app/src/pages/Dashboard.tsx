@@ -33,6 +33,9 @@ export default function Dashboard() {
         role="region"
         aria-labelledby="dashboard-title"
       >
+    <div>
+      <div className="dashboard-header">
+        <OnboardingFlow />
         <div
           style={{
             display: 'flex',
@@ -53,6 +56,29 @@ export default function Dashboard() {
           >
             + New Trade
           </Link>
+          <h1 style={{ fontSize: '1.5rem' }}>Trades</h1>
+          <Link to="/trades/new" className="dashboard-new-btn">
+            + New Trade
+          </Link>
+        </div>
+      </div>
+
+      {trades.length === 0 ? (
+        <p style={{ color: '#666' }}>No trades yet.</p>
+      ) : (
+        <div className="trades-grid">
+          {trades.map((trade) => (
+            <Link key={trade.id} to={`/trades/${trade.id}`} style={{ textDecoration: 'none' }}>
+              <TradeCard
+                tradeId={trade.id}
+                seller={trade.seller}
+                buyer={trade.buyer}
+                amount={trade.amount}
+                status={trade.status}
+                timestamp={trade.timestamp}
+              />
+            </Link>
+          ))}
         </div>
 
         {trades.length === 0 ? (

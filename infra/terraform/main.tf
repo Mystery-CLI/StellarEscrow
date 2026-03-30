@@ -4,11 +4,11 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.40"
+      version = "5.40.0"
     }
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.6"
+      version = "3.6.0"
     }
   }
 
@@ -16,7 +16,9 @@ terraform {
   # Bucket and table are bootstrapped by infra/bootstrap/main.tf.
   backend "s3" {
     bucket         = "stellarescrow-tfstate"
-    key            = "stellar-escrow/${var.environment}/terraform.tfstate"
+    # Key is provided via -backend-config during init or hardcoded to a base path.
+    # example: terraform init -backend-config="key=stellar-escrow/staging/terraform.tfstate"
+    key            = "stellar-escrow/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
     dynamodb_table = "stellarescrow-tfstate-lock"
@@ -28,10 +30,11 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "StellarEscrow"
-      Environment = var.environment
-      ManagedBy   = "Terraform"
-      Version     = var.app_version
+      Project      = "StellarEscrow"
+      Environment  = var.environment
+      ManagedBy    = "Terraform"
+      Version      = var.app_version
+      InfraVersion = local.infra_version
     }
   }
 }

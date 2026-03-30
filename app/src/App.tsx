@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Button, Box, Container } from '@mui/material';
 import Dashboard from './pages/Dashboard';
@@ -10,19 +9,8 @@ import UserProfile from './pages/UserProfile';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export default function App() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
   return (
     <ErrorBoundary>
-      <div className="app">
-        <nav className="nav">
-          <span className="nav-brand">StellarEscrow</span>
-          <NavLink to="/" end>Dashboard</NavLink>
-          <NavLink to="/trades/new">New Trade</NavLink>
-          <NavLink to="/login">Login</NavLink>
-          <NavLink to="/register">Register</NavLink>
-        </nav>
-        <main className="main">
       <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <AppBar position="static" color="primary">
           <Toolbar sx={{ gap: 2 }}>
@@ -35,8 +23,15 @@ export default function App() {
             <Button color="inherit" component={NavLink} to="/trades/new">
               New Trade
             </Button>
+            <Button color="inherit" component={NavLink} to="/login">
+              Login
+            </Button>
+            <Button color="inherit" component={NavLink} to="/register">
+              Register
+            </Button>
           </Toolbar>
         </AppBar>
+
         <Container component="main" sx={{ flex: 1, py: 4 }}>
           <ErrorBoundary>
             <Routes>

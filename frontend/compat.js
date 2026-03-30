@@ -14,8 +14,9 @@
     var isBrave = !!(navigator.brave && typeof navigator.brave.isBrave === 'function');
     if (isBrave)              return { name: 'Brave',   version: (ua.match(/Chrome\/([\d.]+)/) || [])[1] };
     if (/Edg\//.test(ua))     return { name: 'Edge',    version: (ua.match(/Edg\/([\d.]+)/)    || [])[1] };
-    if (/OPR\//.test(ua))     return { name: 'Opera',   version: (ua.match(/OPR\/([\d.]+)/)    || [])[1] };
-    if (/Chrome\//.test(ua))  return { name: 'Chrome',  version: (ua.match(/Chrome\/([\d.]+)/) || [])[1] };
+    if (/OPR\//.test(ua))          return { name: 'Opera',            version: (ua.match(/OPR\/([\d.]+)/)           || [])[1] };
+    if (/SamsungBrowser\//.test(ua)) return { name: 'Samsung Internet', version: (ua.match(/SamsungBrowser\/([\d.]+)/) || [])[1] };
+    if (/Chrome\//.test(ua))       return { name: 'Chrome',            version: (ua.match(/Chrome\/([\d.]+)/)         || [])[1] };
     if (/Firefox\//.test(ua)) return { name: 'Firefox', version: (ua.match(/Firefox\/([\d.]+)/)|| [])[1] };
     if (/Safari\//.test(ua))  return { name: 'Safari',  version: (ua.match(/Version\/([\d.]+)/)|| [])[1] };
     if (/Trident\//.test(ua)) return { name: 'IE',      version: (ua.match(/rv:([\d.]+)/)      || [])[1] };
@@ -23,7 +24,7 @@
   })();
 
   // Minimum supported versions
-  var MIN_VERSIONS = { Chrome: 90, Firefox: 88, Safari: 14, Edge: 90, Opera: 76, Brave: 90 };
+  var MIN_VERSIONS = { Chrome: 90, Firefox: 88, Safari: 14, Edge: 90, Opera: 76, Brave: 90, 'Samsung Internet': 14 };
 
   var majorVersion = parseInt((browser.version || '0').split('.')[0], 10);
   var isSupported   = browser.name !== 'IE' &&
@@ -254,7 +255,7 @@
   }
 
   // Chrome / Edge / Brave: custom scrollbar styling if supported
-  var isChromium = /Chrome/.test(browser.name) || /Edge/.test(browser.name) || /Brave/.test(browser.name);
+  var isChromium = /Chrome/.test(browser.name) || /Edge/.test(browser.name) || /Brave/.test(browser.name) || browser.name === 'Samsung Internet';
   if (isChromium) {
     var scrollStyle = document.createElement('style');
     scrollStyle.textContent = [
