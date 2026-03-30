@@ -41,6 +41,7 @@ export default function Register() {
     setSaveState('saving');
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
 
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     autoSaveTimer.current = setTimeout(() => {
       localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(formData));
       setSaveState('saved');
@@ -93,7 +94,7 @@ export default function Register() {
       localStorage.removeItem(AUTO_SAVE_KEY);
       navigate(`/users/${formData.address}`);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
@@ -112,6 +113,66 @@ export default function Register() {
   };
 
   return (
+    <main style={styles.card} aria-labelledby="register-title">
+      <h2 id="register-title">Register</h2>
+      <p style={styles.hint}>
+        Hashes are SHA-256 of the plaintext, computed client-side before submission.
+      </p>
+      <form onSubmit={handleSubmit} style={styles.form} aria-describedby="register-error">
+        <label style={styles.label}>
+          Stellar Address
+          <input
+            style={styles.input}
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="G…"
+            required
+            aria-required="true"
+            aria-label="Stellar Address"
+          />
+        </label>
+        <label style={styles.label}>
+          Username Hash (SHA-256)
+          <input
+            style={styles.input}
+            value={usernameHash}
+            onChange={(e) => setUsernameHash(e.target.value)}
+            placeholder="64-character hex"
+            required
+            aria-required="true"
+            aria-label="Username Hash"
+          />
+        </label>
+        <label style={styles.label}>
+          Contact Hash (SHA-256)
+          <input
+            style={styles.input}
+            value={contactHash}
+            onChange={(e) => setContactHash(e.target.value)}
+            placeholder="64-character hex"
+            required
+            aria-required="true"
+            aria-label="Contact Hash"
+          />
+        </label>
+
+        {error && (
+          <p id="register-error" role="alert" style={styles.error}>
+            {error}
+          </p>
+        )}
+
+        <button
+          style={styles.btn}
+          type="submit"
+          disabled={loading}
+          aria-busy={loading}
+        >
+          {loading ? 'Registering…' : 'Register'}
+        </button>
+      </form>
+
+      <p style={{ marginTop: '1rem', fontSize: '0.875rem' }}>
     <div style={styles.card}>
       <div style={styles.header}>
         <h2>Register</h2>
@@ -170,11 +231,34 @@ export default function Register() {
       <p style={{ marginTop: '1.5rem', fontSize: '0.875rem' }}>
         Already registered? <Link to="/login">Login</Link>
       </p>
-    </div>
+    </main>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  card: {
+    maxWidth: 480,
+    margin: '2rem auto',
+    padding: '2rem',
+    border: '1px solid #e2e8f0',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  hint: { fontSize: '0.8rem', color: '#666', marginBottom: '1rem' },
+  form: { display: 'flex', flexDirection: 'column', gap: '1rem' },
+  label: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.875rem', fontWeight: 500 },
+  input: { padding: '0.5rem', border: '1px solid #cbd5e0', borderRadius: 4, fontSize: '0.875rem' },
+  btn: {
+    padding: '0.6rem',
+    background: '#1a1a2e',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: '0.875rem',
+  },
+  error: { color: '#e53e3e', fontSize: '0.875rem' },
+};
   card: { maxWidth: 480, margin: '2rem auto', padding: '2rem', border: '1px solid #e2e8f0', borderRadius: 12, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' },
   saveIndicator: { fontSize: '0.75rem', fontStyle: 'italic' },

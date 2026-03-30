@@ -45,6 +45,8 @@ export default function App() {
           </ErrorBoundary>
         </Container>
       </Box>
+      </main>
+      </div>
     </ErrorBoundary>
   );
 }

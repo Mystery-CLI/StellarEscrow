@@ -14,10 +14,36 @@ export default function CreateTrade() {
   };
 
   return (
-    <div className="create-trade-container">
-      <h1 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Create Trade</h1>
-      {error && <p style={{ color: 'red', marginBottom: '1rem' }}>Failed to create trade.</p>}
-      <TradeForm onSubmit={handleSubmit} loading={isLoading} />
-    </div>
+    <section
+      className="create-trade-container"
+      role="region"
+      aria-labelledby="create-trade-title"
+    >
+      <h1
+        id="create-trade-title"
+        style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}
+      >
+        Create Trade
+      </h1>
+
+      {error && (
+        <p
+          id="create-trade-error"
+          role="alert"
+          aria-live="assertive"
+          style={{ color: 'red', marginBottom: '1rem' }}
+        >
+          Failed to create trade. Please try again.
+        </p>
+      )}
+
+      <div
+        role="form"
+        aria-busy={isLoading}
+        aria-describedby={error ? 'create-trade-error' : undefined}
+      >
+        <TradeForm onSubmit={handleSubmit} loading={isLoading} />
+      </div>
+    </section>
   );
 }
