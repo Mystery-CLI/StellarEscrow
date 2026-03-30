@@ -12,6 +12,7 @@ use crate::analytics_service::AnalyticsService;
 use crate::backup_service::BackupService;
 use crate::cache_service::CacheService;
 use crate::compliance_service::{ComplianceService, ComplianceStatus};
+use crate::config::PublicConfigSnapshot;
 use crate::database::Database;
 use crate::error::AppError;
 use crate::fraud_service::FraudDetectionService;
@@ -448,8 +449,7 @@ pub struct AppState {
     pub cache_service: Arc<CacheService>,
     pub backup_service: Arc<BackupService>,
     pub webhook_service: Arc<WebhookService>,
-    pub compliance_service: Arc<ComplianceService>,
-    pub monitoring_service: Arc<MonitoringService>,
+    pub public_config: PublicConfigSnapshot,
 }
 
 // =============================================================================
@@ -992,6 +992,13 @@ pub async fn get_webhook_stats(
 ) -> Json<serde_json::Value> {
     let stats = state.webhook_service.get_stats().await;
     Json(serde_json::to_value(&stats).unwrap_or_default())
+}
+
+/// GET /config/public — centralized, non-secret configuration snapshot (deployment & validation).
+pub async fn get_public_config(State(state): State<AppState>) -> Json<PublicConfigSnapshot> {
+    Json(state.public_config.clone())
+}
+
 // Compliance Handlers
 // =============================================================================
 

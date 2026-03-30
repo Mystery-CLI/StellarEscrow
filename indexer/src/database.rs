@@ -337,50 +337,41 @@ impl Database {
     }
 
     pub async fn count_events(&self, query: &EventQuery) -> Result<i64, AppError> {
-        let mut sql = "SELECT COUNT(*) FROM events WHERE 1=1".to_string();
-        let mut bindings: Vec<String> = vec![];
-
-        if let Some(event_type) = &query.event_type {
-            sql.push_str(&format!(" AND event_type = ${}", bindings.len() + 1));
-            bindings.push(event_type.clone());
+        let mut b = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM events WHERE 1=1");
+        if let Some(ref event_type) = query.event_type {
+            b.push(" AND event_type = ");
+            b.push_bind(event_type);
         }
-        if let Some(category) = &query.category {
-            sql.push_str(&format!(" AND category = ${}", bindings.len() + 1));
-            bindings.push(category.clone());
+        if let Some(ref category) = query.category {
+            b.push(" AND category = ");
+            b.push_bind(category);
         }
-        if let Some(contract_id) = &query.contract_id {
-            sql.push_str(&format!(" AND contract_id = ${}", bindings.len() + 1));
-            bindings.push(contract_id.clone());
+        if let Some(ref contract_id) = query.contract_id {
+            b.push(" AND contract_id = ");
+            b.push_bind(contract_id);
         }
         if let Some(trade_id) = query.trade_id {
-            sql.push_str(&format!(" AND data->>'trade_id' = ${}", bindings.len() + 1));
-            bindings.push(trade_id.to_string());
+            b.push(" AND data->>'trade_id' = ");
+            b.push_bind(trade_id.to_string());
         }
         if let Some(from_ledger) = query.from_ledger {
-            sql.push_str(&format!(" AND ledger >= ${}", bindings.len() + 1));
-            bindings.push(from_ledger.to_string());
+            b.push(" AND ledger >= ");
+            b.push_bind(from_ledger);
         }
         if let Some(to_ledger) = query.to_ledger {
-            sql.push_str(&format!(" AND ledger <= ${}", bindings.len() + 1));
-            bindings.push(to_ledger.to_string());
+            b.push(" AND ledger <= ");
+            b.push_bind(to_ledger);
         }
-
-        let mut q = sqlx::query(&sql);
-        for b in &bindings {
-            q = q.bind(b);
-        }
-        // Timestamp filters bound separately (DateTime type)
         if let Some(from_time) = query.from_time {
-            sql.push_str(&format!(" AND timestamp >= ${}", bindings.len() + 1));
-            q = q.bind(from_time);
+            b.push(" AND timestamp >= ");
+            b.push_bind(from_time);
         }
         if let Some(to_time) = query.to_time {
-            sql.push_str(&format!(" AND timestamp <= ${}", bindings.len() + 1));
-            q = q.bind(to_time);
+            b.push(" AND timestamp <= ");
+            b.push_bind(to_time);
         }
-
-        let row = q.fetch_one(&self.pool).await?;
-        Ok(row.get::<i64, _>(0))
+        let total: i64 = b.build_query_scalar().fetch_one(&self.pool).await?;
+        Ok(total)
     }
 
     pub async fn get_events_in_range(
@@ -1230,6 +1221,12 @@ impl Database {
         .bind(status_code as i16)
         .bind(duration_ms as i64)
         .bind(is_error)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
     // Integration service
     // -----------------------------------------------------------------------
 
@@ -1281,6 +1278,7 @@ impl Database {
         Ok(())
     }
 
+    pub async fn get_integration_deliveries(
     /// Query the hourly APM rollup materialized view for the last `hours` hours.
     pub async fn get_perf_hourly_rollup(
         &self,
@@ -1566,6 +1564,42 @@ impl Database {
         .bind(ep.active)
         .bind(ep.created_at)
         .bind(ep.failure_count as i32)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn deactivate_webhook_endpoint(&self, id: Uuid) -> Result<(), anyhow::Error> {
+        sqlx::query("UPDATE webhook_endpoints SET active = false WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn insert_webhook_delivery(
+        &self,
+        record: &crate::webhook_service::WebhookDeliveryRecord,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "INSERT INTO webhook_deliveries (id, endpoint_id, event_type, payload, status_code, success, attempt, error, delivered_at, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
+        )
+        .bind(record.id)
+        .bind(record.endpoint_id)
+        .bind(&record.event_type)
+        .bind(&record.payload)
+        .bind(record.status_code.map(|c| c as i32))
+        .bind(record.success)
+        .bind(record.attempt as i32)
+        .bind(&record.error)
+        .bind(record.delivered_at)
+        .bind(record.duration_ms as i64)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+}
+
 // Compliance Operations
 // =============================================================================
 
@@ -1668,34 +1702,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn deactivate_webhook_endpoint(&self, id: Uuid) -> Result<(), anyhow::Error> {
-        sqlx::query("UPDATE webhook_endpoints SET active = false WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn insert_webhook_delivery(
-        &self,
-        record: &crate::webhook_service::WebhookDeliveryRecord,
-    ) -> Result<(), AppError> {
-        sqlx::query(
-            "INSERT INTO webhook_deliveries (id, endpoint_id, event_type, payload, status_code, success, attempt, error, delivered_at, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
-        )
-        .bind(record.id)
-        .bind(record.endpoint_id)
-        .bind(&record.event_type)
-        .bind(&record.payload)
-        .bind(record.status_code.map(|c| c as i32))
-        .bind(record.success)
-        .bind(record.attempt as i32)
-        .bind(&record.error)
-        .bind(record.delivered_at)
-        .bind(record.duration_ms as i64)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
     fn row_to_compliance_check(
         &self,
         row: &sqlx::postgres::PgRow,

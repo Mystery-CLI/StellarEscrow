@@ -19,6 +19,7 @@ mod cache_service;
 mod compliance_service;
 mod monitoring_service;
 mod webhook_service;
+mod job_queue;
 mod auth;
 mod cache;
 mod config;
@@ -45,9 +46,11 @@ mod performance_service;
 #[cfg(test)]
 mod test;
 
-use compliance_service::ComplianceService;
-use monitoring_service::MonitoringService;
+use analytics_service::AnalyticsService;
 use auth::auth_middleware;
+use backup_service::BackupService;
+use cache_service::CacheService;
+use compliance_service::ComplianceService;
 use handlers::{AppState, *};
 use config::Config;
 use database::Database;
@@ -55,24 +58,22 @@ use event_monitor::EventMonitor;
 use file_handlers::{delete_file, download_file, list_files, upload_file};
 use fraud_service::FraudDetectionService;
 use gateway::{GatewayConfig, GatewayState};
+use handlers::{AppState, *};
 use health::{liveness, HealthMonitor, HealthState};
 use help::{
     get_contact, get_docs, get_faqs, get_tutorial_by_id, get_tutorials, help_index, search_help,
 };
 use integration_service::IntegrationService;
 use job_queue::JobQueue;
+use monitoring_service::MonitoringService;
 use job_queue::worker::JobWorker;
 use notification_service::NotificationService;
 use performance_service::PerformanceService;
 use rate_limit::RateLimiter;
 use rate_limit_handlers::*;
 use storage::StorageService;
+use tokio::sync::Mutex;
 use websocket::WebSocketManager;
-use analytics_service::AnalyticsService;
-use backup_service::BackupService;
-use cache_service::CacheService;
-use compliance_service::ComplianceService;
-use monitoring_service::MonitoringService;
 use webhook_service::WebhookService;
 
 #[derive(Parser)]
@@ -220,6 +221,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let webhook_service = Arc::new(WebhookService::new(database.clone()));
     webhook_service.load_endpoints().await;
 
+    let job_queue: Option<Arc<Mutex<JobQueue>>> = if !config.cache.redis_url.is_empty() {
+        match JobQueue::new(&config.cache.redis_url).await {
+            Ok(q) => Some(Arc::new(Mutex::new(q))),
+            Err(e) => {
+                warn!("Redis job queue unavailable: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
     // Scheduled audit log retention purge
     if config.audit.purge_interval_hours > 0 {
         let db_purge = database.clone();
@@ -262,6 +274,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fraud_service.clone(),
         notification_service.clone(),
         integration_service.clone(),
+        webhook_service.clone(),
         job_queue.clone(),
     );
 
@@ -378,6 +391,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/backup/status", get(get_backup_status))
         .route("/backup/history", get(get_backup_history))
         .route("/backup/recovery-plan", get(get_recovery_plan))
+        .route("/config/public", get(get_public_config))
         // Webhooks
         .route("/webhooks", post(register_webhook).get(list_webhooks))
         .route("/webhooks/:id", delete(deactivate_webhook))
@@ -429,6 +443,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             cache_service,
             backup_service,
             webhook_service,
+            public_config: config.public_snapshot(),
         })
         // Apply gateway middleware for centralized routing and auth
         .layer(middleware::from_fn_with_state(

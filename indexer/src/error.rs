@@ -56,6 +56,8 @@ pub enum AppError {
     #[error("Storage error: {0}")]
     Storage(String),
 
+    #[error("Internal error: {0}")]
+    Internal(String),
     #[error("Conflict: {0}")]
     Conflict(String),
 
@@ -131,6 +133,11 @@ impl IntoResponse for AppError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "STORAGE_ERROR",
                 "Storage error",
+            ),
+            AppError::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                "Internal error",
             ),
             AppError::Conflict(_) => (StatusCode::CONFLICT, "CONFLICT", "Resource already exists"),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", "Bad request"),

@@ -29,7 +29,7 @@
 ## 3. Backup System
 
 ### Automated Daily Backup
-The `backup` Docker service runs `scripts/backup.sh` daily at 02:00 UTC.
+The `backup` Docker service runs `scripts/backup.sh` daily at 02:00 UTC. The script prints `BACKUP_LOCATION=<path>` on success for automation; the indexer `BackupService` records runs and exposes `GET /backup/status`, `GET /backup/history`, and `GET /backup/recovery-plan` for operators.
 
 ```bash
 # Manual backup trigger

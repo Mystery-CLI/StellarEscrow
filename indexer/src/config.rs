@@ -105,6 +105,19 @@ fn default_schema_version() -> u32 {
     1
 }
 
+/// Non-secret subset of `Config` for operators and deployment validation (issue #313).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicConfigSnapshot {
+    pub meta: MetaConfig,
+    pub server: ServerConfig,
+    pub stellar_network: String,
+    pub stellar_horizon_url: String,
+    pub stellar_contract_configured: bool,
+    pub cache_redis_configured: bool,
+    pub backup_interval_hours: u64,
+    pub gateway_instance_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub port: u16,
@@ -476,6 +489,20 @@ impl Config {
             Err(ConfigValidationError(errors))
         }
     }
+
+    /// Safe, privacy-preserving view for `/config/public` (no API keys, DB URLs, or webhook secrets).
+    pub fn public_snapshot(&self) -> PublicConfigSnapshot {
+        PublicConfigSnapshot {
+            meta: self.meta.clone(),
+            server: self.server.clone(),
+            stellar_network: self.stellar.network.clone(),
+            stellar_horizon_url: self.stellar.horizon_url.clone(),
+            stellar_contract_configured: !self.stellar.contract_id.is_empty(),
+            cache_redis_configured: !self.cache.redis_url.is_empty(),
+            backup_interval_hours: self.backup.interval_hours,
+            gateway_instance_count: self.gateway.service_instances.len(),
+        }
+    }
 }
 
 impl Default for Config {
@@ -493,7 +520,7 @@ impl Default for Config {
             database: DatabaseConfig {
                 url: "postgres://indexer:password@localhost/stellar_escrow".to_string(),
                 max_connections: 10,
-                connect_timeout_seconds: 30,
+                min_connections: 2,
             },
             stellar: StellarConfig {
                 network: "testnet".to_string(),
@@ -509,11 +536,11 @@ impl Default for Config {
                 whitelist: vec![],
                 blacklist: vec![],
             },
+            auth: AuthConfig::default(),
             storage: StorageConfig {
                 base_dir: "./uploads".to_string(),
                 max_file_size_mb: 10,
             },
-            notification: NotificationConfig::default(),
             notification: NotificationConfig {
                 email_api_url: "https://api.sendgrid.com".to_string(),
                 email_api_key: String::new(),
@@ -526,9 +553,13 @@ impl Default for Config {
                 push_project_id: String::new(),
                 push_server_key: String::new(),
             },
+            cache: CacheConfig::default(),
             gateway: GatewayConfig::default(),
-
             integration: IntegrationConfig::default(),
+            compliance: ComplianceConfig::default(),
+            monitoring: MonitoringConfig::default(),
+            analytics: AnalyticsConfig::default(),
+            backup: BackupConfig::default(),
         }
     }
 }

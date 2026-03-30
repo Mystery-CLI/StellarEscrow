@@ -338,12 +338,12 @@ mod tests {
 
     #[test]
     fn test_standard_response() {
-        let resp = StandardResponse::success("test data");
+        let resp: StandardResponse<&str> = StandardResponse::success("test data");
         assert!(resp.success);
         assert_eq!(resp.data, Some("test data"));
         assert!(resp.error.is_none());
 
-        let resp = StandardResponse::error("something went wrong");
+        let resp: StandardResponse<String> = StandardResponse::error("something went wrong");
         assert!(!resp.success);
         assert!(resp.data.is_none());
         assert_eq!(resp.error, Some("something went wrong".to_string()));
