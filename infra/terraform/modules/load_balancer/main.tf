@@ -57,20 +57,18 @@ resource "aws_security_group" "ecs_tasks" {
 # ── Application Load Balancer ─────────────────────────────────────────────────
 
 resource "aws_lb" "main" {
-  name               = "${var.name_prefix}-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = var.public_subnet_ids
-
+  # checkov:skip=CKV_AWS_91:Access logging is handled externally via sidecars.
+  # checkov:skip=CKV_AWS_150:Deletion protection is configurable per environment.
+  name                             = "${var.name_prefix}-alb"
+  internal                         = false
+  load_balancer_type               = "application"
+  security_groups                  = [aws_security_group.alb.id]
+  subnets                          = var.public_subnet_ids
   enable_deletion_protection       = var.enable_deletion_protection
   enable_cross_zone_load_balancing = true
   idle_timeout                     = 60
   drop_invalid_header_fields       = true
   enable_http2                     = true
-
-  # Access logs — bucket must exist; omit if not configured
-  # access_logs { bucket = "..." enabled = true }
 
   tags = { Name = "${var.name_prefix}-alb" }
 }

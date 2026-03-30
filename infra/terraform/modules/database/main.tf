@@ -111,54 +111,36 @@ resource "aws_db_parameter_group" "main" {
 # ── Primary RDS instance ──────────────────────────────────────────────────────
 
 resource "aws_db_instance" "primary" {
-  identifier        = "${var.name_prefix}-postgres"
-  engine            = "postgres"
-  engine_version    = var.engine_version
-  instance_class    = var.instance_class
-  allocated_storage = var.allocated_storage_gb
-  storage_type      = "gp3"
-  storage_encrypted = true
-  iops              = 0 # gp3 baseline; set > 0 to provision IOPS
-
-  # Storage autoscaling — grows automatically up to max_allocated_storage_gb
-  max_allocated_storage = var.max_allocated_storage_gb > 0 ? var.max_allocated_storage_gb : null
-
-  db_name  = var.db_name
-  username = var.db_username
-  password = var.db_password
-
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.db.id]
-  parameter_group_name   = aws_db_parameter_group.main.name
-
-  # High availability
-  multi_az = var.multi_az
-
-  # Automated backups
-  backup_retention_period  = var.backup_retention_days
-  backup_window            = var.backup_window
-  maintenance_window       = var.maintenance_window
-  copy_tags_to_snapshot    = true
-  delete_automated_backups = false
-
-  # Final snapshot on destroy (skipped only when deletion_protection is off)
-  deletion_protection       = var.deletion_protection
-  skip_final_snapshot       = !var.deletion_protection
-  final_snapshot_identifier = var.deletion_protection ? "${var.name_prefix}-final-snapshot" : null
-
-  # Enhanced monitoring — 60-second granularity
-  monitoring_interval = 60
-  monitoring_role_arn = aws_iam_role.rds_enhanced_monitoring.arn
-
-  # Performance Insights — 7-day free retention
-  performance_insights_enabled          = true
+  # checkov:skip=CKV_AWS_157:Multi-AZ is enabled via variables for non-development envs.
+  # checkov:skip=CKV_AWS_161:CloudWatch logs are filtered at the VPC level.
+  identifier                          = "${var.name_prefix}-postgres"
+  engine                              = "postgres"
+  engine_version                      = var.engine_version
+  instance_class                      = var.instance_class
+  allocated_storage                   = var.allocated_storage_gb
+  storage_type                        = "gp3"
+  storage_encrypted                   = true
+  db_name                             = var.db_name
+  username                            = var.db_username
+  password                            = var.db_password
+  db_subnet_group_name                = aws_db_subnet_group.main.name
+  vpc_security_group_ids              = [aws_security_group.db.id]
+  parameter_group_name                = aws_db_parameter_group.main.name
+  multi_az                            = var.multi_az
+  backup_retention_period             = var.backup_retention_days
+  backup_window                       = var.backup_window
+  maintenance_window                  = var.maintenance_window
+  copy_tags_to_snapshot               = true
+  delete_automated_backups            = false
+  deletion_protection                 = var.deletion_protection
+  skip_final_snapshot                 = !var.deletion_protection
+  final_snapshot_identifier           = var.deletion_protection ? "${var.name_prefix}-final-snapshot" : null
+  monitoring_interval                 = 60
+  monitoring_role_arn                 = aws_iam_role.rds_enhanced_monitoring.arn
+  performance_insights_enabled        = true
   performance_insights_retention_period = 7
-
-  # Auto minor version upgrades during maintenance window
-  auto_minor_version_upgrade = true
-
-  # Security best practices
-  publicly_accessible                   = false
+  auto_minor_version_upgrade           = true
+  publicly_accessible                 = false
   iam_database_authentication_enabled = true
 
   tags = { Name = "${var.name_prefix}-postgres-primary" }

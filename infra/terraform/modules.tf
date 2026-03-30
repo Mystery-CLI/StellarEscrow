@@ -1,4 +1,6 @@
-# Secrets Manager — primary DB connection string
+# ── Secrets Manager ─────────────────────────────────────────────────────────
+
+# Primary DB connection string
 resource "aws_secretsmanager_secret" "db_url" {
   name                    = "${local.name_prefix}/db-url"
   recovery_window_in_days = local.cfg.deletion_protection ? 7 : 0
