@@ -67,7 +67,7 @@ export default function Register() {
     setError('');
 
     // Check all fields
-    const fields: AuthFieldName[] = ['address', 'usernameHash', 'contactHash'];
+    const fields: (keyof RegisterFormData)[] = ['address', 'usernameHash', 'contactHash'];
     const hasErrors = fields.some((f) => validateAuthField(f, formData[f]) !== null);
 
     if (hasErrors) {
@@ -100,14 +100,14 @@ export default function Register() {
   };
 
   // -- Helpers ---------------------------------------------------------------
-  const getFieldError = (field: AuthFieldName) => {
+  const getFieldError = (field: keyof RegisterFormData) => {
     if (touched[field] || submitAttempted) {
       return validateAuthField(field, formData[field]);
     }
     return null;
   };
 
-  const isFieldValidState = (field: AuthFieldName) => {
+  const isFieldValidState = (field: keyof RegisterFormData) => {
     return (touched[field] || submitAttempted) && isAuthFieldValid(field, formData[field]);
   };
 

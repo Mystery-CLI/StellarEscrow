@@ -4,7 +4,7 @@ import { isValidStellarAddress, type ValidationRule } from './tradeSchema';
  * Validation schema for Authentication (Login/Register) form fields.
  */
 
-export type AuthFieldName = 'address' | 'usernameHash' | 'contactHash';
+export type AuthFieldName = 'address' | 'usernameHash' | 'contactHash' | 'avatarHash';
 
 export type AuthFieldSchema = ValidationRule[];
 
@@ -42,6 +42,13 @@ export const authSchema: Record<AuthFieldName, AuthFieldSchema> = {
     },
     {
       test: (v) => isValidHash(v),
+      message: 'Must be a valid 64-character SHA-256 hex hash',
+    },
+  ],
+
+  avatarHash: [
+    {
+      test: (v) => v.trim() === '' || isValidHash(v),
       message: 'Must be a valid 64-character SHA-256 hex hash',
     },
   ],
