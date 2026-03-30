@@ -1,0 +1,449 @@
+# Prometheus alert rules for StellarEscrow security monitoring
+# Place in: monitoring/prometheus-rules.yaml
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: stellar-escrow-alerts
+  namespace: monitoring
+spec:
+  groups:
+    # =========================================================================
+    # 1. AUTHENTICATION & AUTHORIZATION ALERTS
+    # =========================================================================
+    - name: authentication.rules
+      interval: 30s
+      rules:
+        - alert: UnauthorizedAPIAccessAttempts
+          expr: |
+            increase(http_requests_total{status="401",service="api"}[5m]) > 10
+          for: 2m
+          labels:
+            severity: critical
+            component: authentication
+          annotations:
+            summary: "High rate of unauthorized API access attempts"
+            description: "{{ $value }} failed authentication attempts in last 5 minutes from {{ $labels.client_ip }}"
+            runbook: "https://wiki.stellar-escrow.dev/runbooks/unauthorized-access"
+            
+        - alert: SuspiciousLoginPattern
+          expr: |
+            increase(auth_failures_total[5m]) > 20 and
+            count(distinct(client_ip)) by (user_id) > 5
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Suspicious login attempts detected"
+            description: "User {{ $labels.user_id }} has {{ $value }} failed attempts from multiple IPs"
+            
+        - alert: TokenRotationOverdue
+          expr: |
+            time() - vault_secret_last_rotated_timestamp_seconds{secret="api-key"} > 15779200
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "API token rotation overdue (>6 months)"
+            description: "Secret {{ $labels.secret }} last rotated {{ $value }}s ago"
+
+    # =========================================================================
+    # 2. NETWORK & FIREWALL ALERTS
+    # =========================================================================
+    - name: network.rules
+      interval: 30s
+      rules:
+        - alert: UnexpectedNetworkTraffic
+          expr: |
+            increase(network_bytes_transmitted_total[5m]) > 1000000000
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Unusually high egress traffic detected"
+            description: "Egress traffic: {{ $value }} bytes in 5 minutes from {{ $labels.pod }}"
+            
+        - alert: SuspiciousPortScan
+          expr: |
+            increase(firewall_rejected_connections_total[1m]) > 100
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Possible port scan detected"
+            description: "{{ $value }} rejected connections in 1 minute from {{ $labels.source_ip }}"
+            
+        - alert: DBConnectionLeakDetected
+          expr: |
+            postgres_stat_activity_count > 0.8 * postgres_max_connections
+          for: 5m
+          labels:
+            severity: critical
+            component: database
+          annotations:
+            summary: "PostgreSQL connection pool near maximum"
+            description: "{{ $value }} / {{ $labels.max_connections }} connections used"
+
+    # =========================================================================
+    # 3. FRAUD & SUSPICIOUS TRANSACTION ALERTS
+    # =========================================================================
+    - name: fraud.rules
+      interval: 30s
+      rules:
+        - alert: HighValueTransactionDetected
+          expr: |
+            trade_amount_usd > 100000
+          for: 1m
+          labels:
+            severity: warning
+            component: fraud-detection
+          annotations:
+            summary: "High-value transaction detected"
+            description: "Trade {{ $labels.trade_id }} for ${{ $value }}"
+            dashboard: "https://grafana.stellar-escrow.dev/d/fraud-dashboard"
+            
+        - alert: RateLimitExceeded
+          expr: |
+            increase(trades_created_total[1m]) > 5
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "User exceeding transaction rate limit"
+            description: "User {{ $labels.user_id }} created {{ $value }} trades in 1 minute"
+            
+        - alert: FraudScoreAnomalyDetected
+          expr: |
+            fraud_risk_score > 0.85
+          for: 30s
+          labels:
+            severity: critical
+            component: fraud-detection
+          annotations:
+            summary: "High fraud risk score detected"
+            description: "Trade {{ $labels.trade_id }}: Risk Score = {{ $value }}"
+            action: "Manual review required - see fraud dashboard"
+
+    # =========================================================================
+    # 4. INFRASTRUCTURE & DEPLOYMENT ALERTS
+    # =========================================================================
+    - name: infrastructure.rules
+      interval: 30s
+      rules:
+        - alert: ContainerImageVulnerabilityDetected
+          expr: |
+            container_image_vulnerability_count{severity="CRITICAL"} > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CRITICAL vulnerability in container image"
+            description: "Image {{ $labels.image }} has {{ $value }} CRITICAL vulnerabilities"
+            action: "Rebuild and redeploy immediately"
+            
+        - alert: OutdatedDependencyDetected
+          expr: |
+            npm_audit_vulnerabilities_count{severity="high"} > 0 or
+            cargo_audit_vulnerabilities_count{severity="high"} > 0
+          for: 24h
+          labels:
+            severity: warning
+          annotations:
+            summary: "High-severity dependency vulnerability"
+            description: "{{ $labels.dependency }} has unpatched vulnerabilities"
+            
+        - alert: CertificateExpirationWarning
+          expr: |
+            (tls_certificate_expiration_timestamp_seconds - time()) / 86400 < 30
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "TLS certificate expiring soon"
+            description: "Certificate {{ $labels.certificate_name }} expires in {{ $value }} days"
+            
+        - alert: APIHighErrorRate
+          expr: |
+            increase(http_requests_total{status=~"5.."}[5m]) / 
+            increase(http_requests_total[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "API error rate exceeds 5%"
+            description: "Service {{ $labels.service }} has {{ $value | humanizePercentage }} error rate"
+            
+        - alert: ServiceDown
+          expr: |
+            up{job=~"api|indexer|client"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Service {{ $labels.job }} is down"
+            description: "{{ $labels.instance }} has been unreachable for 2 minutes"
+
+    # =========================================================================
+    # 5. BLOCKCHAIN & CONTRACT ALERTS
+    # =========================================================================
+    - name: blockchain.rules
+      interval: 30s
+      rules:
+        - alert: StellarRPCLatencyHigh
+          expr: |
+            stellar_rpc_latency_seconds > 5
+          for: 2m
+          labels:
+            severity: warning
+            component: blockchain
+          annotations:
+            summary: "Stellar RPC latency high"
+            description: "RPC {{ $labels.endpoint }} latency: {{ $value }}s"
+            
+        - alert: SmartContractEventBacklog
+          expr: |
+            escrow_contract_events_to_process > 1000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Escrow contract event processing backlog"
+            description: "{{ $value }} events awaiting indexing"
+            
+        - alert: DisputeResolutionDelayed
+          expr: |
+            increase(disputed_trades_total[1h]) > 0 and
+            disputed_trades_unresolved_count > 5
+          for: 24h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Multiple disputes pending arbitration"
+            description: "{{ $value }} unresolved disputes (>1 day old)"
+
+    # =========================================================================
+    # 6. DATA & BACKUP ALERTS
+    # =========================================================================
+    - name: data_protection.rules
+      interval: 30s
+      rules:
+        - alert: BackupJobFailed
+          expr: |
+            increase(backup_job_failed_total[12h]) > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Database backup job failed"
+            description: "Backup failed at {{ $labels.timestamp }}"
+            action: "Verify backup infrastructure immediately"
+            
+        - alert: DatabaseReplicationLag
+          expr: |
+            postgres_xlog_position_lag_bytes > 1073741824
+          for: 5m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            summary: "PostgreSQL replication lag detected"
+            description: "{{ $value | humanize }} bytes behind primary"
+            
+        - alert: EncryptionKeyRotationOverdue
+          expr: |
+            (time() - encryption_key_last_rotated_seconds) / 86400 > 365
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Encryption key rotation overdue"
+            description: "Key {{ $labels.key_id }} last rotated {{ $value }} days ago"
+
+    # =========================================================================
+    # 7. COMPLIANCE & AUDIT ALERTS
+    # =========================================================================
+    - name: compliance.rules
+      interval: 30s
+      rules:
+        - alert: UnauthorizedAdminAccess
+          expr: |
+            increase(admin_action_without_approval_total[5m]) > 0
+          for: 1m
+          labels:
+            severity: critical
+            component: compliance
+          annotations:
+            summary: "Unauthorized admin action detected"
+            description: "Action {{ $labels.action }} by {{ $labels.user_id }} without approval"
+            
+        - alert: AuditLogGapDetected
+          expr: |
+            audit_log_gap_duration_seconds > 300
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Gap detected in audit logging"
+            description: "No audit events for {{ $value }} seconds"
+            
+        - alert: ComplianceViolationDetected
+          expr: |
+            compliance_violation_count > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Compliance violation detected"
+            description: "{{ $labels.violation_type }}: {{ $value }} occurrences"
+
+---
+# Prometheus scrape configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: production
+        environment: prod
+    
+    # Alertmanager configuration
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - alertmanager:9093
+    
+    # Load rules
+    rule_files:
+      - '/etc/prometheus/rules/*.yaml'
+    
+    scrape_configs:
+      # Prometheus self-monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+      
+      # API service metrics
+      - job_name: 'api'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - production
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: api
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            action: keep
+            regex: metrics
+      
+      # Indexer metrics
+      - job_name: 'indexer'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - production
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: indexer
+      
+      # PostgreSQL metrics (via postgres_exporter)
+      - job_name: 'postgres'
+        static_configs:
+          - targets: ['postgres-exporter:9187']
+      
+      # Redis metrics (via redis_exporter)
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['redis-exporter:9121']
+      
+      # Node exporter (infrastructure metrics)
+      - job_name: 'node'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__address__]
+            regex: '([^:]+)(?::\d+)?'
+            replacement: '${1}:9100'
+            target_label: __address__
+
+---
+# Alertmanager configuration (routes alerts to Slack, PagerDuty, etc.)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      slack_api_url: '${SLACK_WEBHOOK_URL}'
+    
+    route:
+      receiver: 'default'
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      routes:
+        # Critical security alerts → PagerDuty
+        - match:
+            severity: critical
+            component: authentication
+          receiver: 'security-oncall'
+          continue: true
+          group_wait: 1s
+          repeat_interval: 1h
+        
+        # Fraud alerts → Slack fraud-team
+        - match:
+            component: fraud-detection
+          receiver: 'fraud-channel'
+        
+        # Blockchain alerts → api-team
+        - match:
+            component: blockchain
+          receiver: 'api-team'
+        
+        # Database alerts → devops
+        - match:
+            component: database
+          receiver: 'devops-oncall'
+    
+    receivers:
+      - name: 'default'
+        slack_configs:
+          - channel: '#alerts'
+            title: 'StellarEscrow Alert'
+            text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}'
+      
+      - name: 'security-oncall'
+        pagerduty_configs:
+          - service_key: '${PAGERDUTY_SECURITY_KEY}'
+        slack_configs:
+          - channel: '#security-critical'
+            title: '🚨 SECURITY ALERT'
+      
+      - name: 'fraud-channel'
+        slack_configs:
+          - channel: '#fraud-alerts'
+            title: '⚠️ Fraud Detection Alert'
+      
+      - name: 'devops-oncall'
+        slack_configs:
+          - channel: '#devops-alerts'
+            title: '🔧 Infrastructure Alert'
+      
+      - name: 'api-team'
+        slack_configs:
+          - channel: '#api-alerts'
