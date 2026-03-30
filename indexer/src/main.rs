@@ -48,13 +48,14 @@ mod test;
 use compliance_service::ComplianceService;
 use monitoring_service::MonitoringService;
 use auth::auth_middleware;
+use handlers::{AppState, *};
 use config::Config;
 use database::Database;
 use event_monitor::EventMonitor;
 use file_handlers::{delete_file, download_file, list_files, upload_file};
 use fraud_service::FraudDetectionService;
 use gateway::{GatewayConfig, GatewayState};
-use handlers::{AppState, *};use health::{liveness, HealthMonitor, HealthState};
+use health::{liveness, HealthMonitor, HealthState};
 use help::{
     get_contact, get_docs, get_faqs, get_tutorial_by_id, get_tutorials, help_index, search_help,
 };
@@ -316,7 +317,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/", get(api_index))
         .route("/health", get(health::env_health))
         .route("/health/live", get(liveness))
-        .route("/status", get(get_status))
+        .route("/health/ready", get(health::readiness))
+        .route("/health/metrics", get(health::metrics))
+        .route("/health/alerts", get(health::alerts))
+        .route("/status", get(health::status_page))
         .route("/stats", get(get_stats))
         .route("/events", get(get_events))
         .route("/events/:id", get(get_event_by_id))

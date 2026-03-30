@@ -353,6 +353,12 @@ impl EventMonitor {
         // Auto-emit audit log for security-relevant events
         self.emit_audit_log(event).await;
 
+        // Update user analytics for trade lifecycle events
+        self.update_user_analytics(event).await;
+
+        // Auto-emit audit log for security-relevant events
+        self.emit_audit_log(event).await;
+
         let mut queue = self.job_queue.lock().await;
         if let Err(e) = queue.enqueue(event_job).await {
             error!("Failed to enqueue event job for event {}: {}", event.id, e);
@@ -423,6 +429,116 @@ impl EventMonitor {
                 upsert(seller, false, false, 0, false, false, true);
             }
             _ => {}
+        }
+    }
+
+    async fn update_user_analytics(&self, event: &Event) {
+        let d = &event.data;
+        let upsert = |address: &str, seller: bool, buyer: bool, amount: i64, completed: bool, disputed: bool, cancelled: bool| {
+            let pool = self.database.pool().clone();
+            let address = address.to_string();
+            tokio::spawn(async move {
+                let _ = sqlx::query(
+                    r#"
+                    INSERT INTO user_analytics
+                        (address, total_trades, trades_as_seller, trades_as_buyer,
+                         total_volume, completed_trades, disputed_trades, cancelled_trades, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                    ON CONFLICT (address) DO UPDATE SET
+                        total_trades     = user_analytics.total_trades     + EXCLUDED.total_trades,
+                        trades_as_seller = user_analytics.trades_as_seller + EXCLUDED.trades_as_seller,
+                        trades_as_buyer  = user_analytics.trades_as_buyer  + EXCLUDED.trades_as_buyer,
+                        total_volume     = user_analytics.total_volume     + EXCLUDED.total_volume,
+                        completed_trades = user_analytics.completed_trades + EXCLUDED.completed_trades,
+                        disputed_trades  = user_analytics.disputed_trades  + EXCLUDED.disputed_trades,
+                        cancelled_trades = user_analytics.cancelled_trades + EXCLUDED.cancelled_trades,
+                        updated_at       = NOW()
+                    "#,
+                )
+                .bind(&address)
+                .bind(if seller || buyer { 1i32 } else { 0 })
+                .bind(if seller { 1i32 } else { 0 })
+                .bind(if buyer { 1i32 } else { 0 })
+                .bind(amount)
+                .bind(if completed { 1i32 } else { 0 })
+                .bind(if disputed { 1i32 } else { 0 })
+                .bind(if cancelled { 1i32 } else { 0 })
+                .execute(&pool)
+                .await;
+            });
+        };
+
+        match event.event_type.as_str() {
+            "trade_created" => {
+                let seller = d.get("seller").and_then(|v| v.as_str()).unwrap_or_default();
+                let buyer  = d.get("buyer").and_then(|v| v.as_str()).unwrap_or_default();
+                let amount = d.get("amount").and_then(|v| v.as_i64()).unwrap_or(0);
+                upsert(seller, true,  false, amount, false, false, false);
+                upsert(buyer,  false, true,  amount, false, false, false);
+            }
+            "trade_confirmed" => {
+                let seller = d.get("seller").and_then(|v| v.as_str()).unwrap_or_default();
+                let buyer  = d.get("buyer").and_then(|v| v.as_str()).unwrap_or_default();
+                upsert(seller, false, false, 0, true, false, false);
+                upsert(buyer,  false, false, 0, true, false, false);
+            }
+            "trade_disputed" => {
+                let seller = d.get("seller").and_then(|v| v.as_str()).unwrap_or_default();
+                let buyer  = d.get("buyer").and_then(|v| v.as_str()).unwrap_or_default();
+                upsert(seller, false, false, 0, false, true, false);
+                upsert(buyer,  false, false, 0, false, true, false);
+            }
+            "trade_cancelled" => {
+                let seller = d.get("seller").and_then(|v| v.as_str()).unwrap_or_default();
+                upsert(seller, false, false, 0, false, false, true);
+            }
+            _ => {}
+        }
+    }
+
+    async fn emit_audit_log(&self, event: &Event) {
+        use crate::models::{AuditCategory, AuditOutcome, AuditSeverity, NewAuditLog};
+
+        let (category, action, severity) = match event.event_type.as_str() {
+            "trade_created"   => (AuditCategory::Trade, "trade.created",   AuditSeverity::Info),
+            "trade_funded"    => (AuditCategory::Trade, "trade.funded",    AuditSeverity::Info),
+            "trade_confirmed" => (AuditCategory::Trade, "trade.confirmed", AuditSeverity::Info),
+            "trade_cancelled" => (AuditCategory::Trade, "trade.cancelled", AuditSeverity::Warn),
+            "dispute_raised"  => (AuditCategory::Trade, "trade.disputed",  AuditSeverity::Warn),
+            "dispute_resolved"=> (AuditCategory::Trade, "trade.resolved",  AuditSeverity::Info),
+            "arb_reg"         => (AuditCategory::Admin, "arbitrator.registered", AuditSeverity::Info),
+            "arb_rem"         => (AuditCategory::Admin, "arbitrator.removed",    AuditSeverity::Warn),
+            "fee_updated"     => (AuditCategory::Admin, "fee.updated",     AuditSeverity::Warn),
+            "paused"          => (AuditCategory::Security, "contract.paused",   AuditSeverity::Error),
+            "unpaused"        => (AuditCategory::Security, "contract.unpaused", AuditSeverity::Warn),
+            "emrg_wd"         => (AuditCategory::Security, "emergency.withdraw", AuditSeverity::Critical),
+            _ => return, // skip non-auditable events
+        };
+
+        let actor = event.data.get("seller")
+            .or_else(|| event.data.get("admin"))
+            .or_else(|| event.data.get("arbitrator"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("contract")
+            .to_string();
+
+        let trade_id = event.data.get("trade_id").and_then(|v| v.as_str()).map(String::from);
+
+        let entry = NewAuditLog {
+            actor,
+            category,
+            action: action.to_string(),
+            resource_type: Some("trade".to_string()),
+            resource_id: trade_id,
+            outcome: AuditOutcome::Success,
+            ledger: Some(event.ledger),
+            tx_hash: Some(event.transaction_hash.clone()),
+            metadata: event.data.clone(),
+            severity,
+        };
+
+        if let Err(e) = self.database.insert_audit_log(&entry).await {
+            error!("Failed to emit audit log for {}: {}", event.event_type, e);
         }
     }
 
