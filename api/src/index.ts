@@ -109,6 +109,19 @@ export type {
   RetryConfig,
 } from './types';
 export type { ApiConfig };
+export {
+  ApiConnector,
+  IntegrationMonitor,
+  IntegrationService,
+} from './integration';
+export type {
+  IntegrationConfig,
+  IntegrationEvent,
+  IntegrationHealth,
+  IntegrationMetrics,
+  IntegrationProvider,
+  IntegrationStatus,
+} from './integration';
 export type {
   OperationPerformanceSummary,
   PerformanceAlert,

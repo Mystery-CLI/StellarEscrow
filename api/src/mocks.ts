@@ -19,6 +19,8 @@ const initialEvents: Event[] = [
   {
     id: '1',
     type: 'trade_created',
+    category: 'trade',
+    schemaVersion: 1,
     tradeId: '1',
     timestamp: '2024-03-25T10:30:00Z',
     data: {},
@@ -27,6 +29,7 @@ const initialEvents: Event[] = [
 import { tradeHandlers } from './mocks/handlers/trades';
 import { eventHandlers } from './mocks/handlers/events';
 import { blockchainHandlers } from './mocks/handlers/blockchain';
+import { integrationHandlers } from './mocks/handlers/integration';
 
 let mockTrades: Trade[] = [];
 let mockEvents: Event[] = [];
@@ -123,4 +126,7 @@ export const handlers = [
   ...tradeHandlers,
   ...eventHandlers,
   ...blockchainHandlers,
+  ...integrationHandlers,
 ];
+
+export const server = setupServer(...handlers);
