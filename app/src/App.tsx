@@ -9,6 +9,7 @@ import CreateTrade from './pages/CreateTrade';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import UserProfile from './pages/UserProfile';
+import ArbitratorRegister from './pages/ArbitratorRegister';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
           <span className="nav-brand">StellarEscrow</span>
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/trades/new">New Trade</NavLink>
+          <NavLink to="/arbitrators/register">Become Arbitrator</NavLink>
           <NavLink to="/login">Login</NavLink>
           <NavLink to="/register">Register</NavLink>
         </nav>
@@ -37,6 +39,9 @@ export default function App() {
             <Button color="inherit" component={NavLink} to="/trades/new">
               New Trade
             </Button>
+            <Button color="inherit" component={NavLink} to="/arbitrators/register">
+              Become Arbitrator
+            </Button>
           </Toolbar>
         </AppBar>
         <Container component="main" sx={{ flex: 1, py: 4 }}>
@@ -48,6 +53,7 @@ export default function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/login" element={<Login />} />
               <Route path="/users/:address" element={<UserProfile />} />
+              <Route path="/arbitrators/register" element={<ArbitratorRegister />} />
             </Routes>
           </ErrorBoundary>
         </Container>
