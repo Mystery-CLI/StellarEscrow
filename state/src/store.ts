@@ -1,4 +1,4 @@
-import { configureStore, ThunkAction, Action } from '@reduxjs/toolkit';
+import { configureStore, combineReducers, ThunkAction, Action, Middleware } from '@reduxjs/toolkit';
 import { persistStore, persistReducer, FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER } from 'redux-persist';
 import storage from 'redux-persist/lib/storage';
 import logger from 'redux-logger';
@@ -12,37 +12,34 @@ const persistConfig = {
   key: 'root',
   storage,
   whitelist: ['trades', 'ui', 'locale'],
-  blacklist: ['events', 'escrowApi'],
+  blacklist: ['events', escrowApi.reducerPath],
 };
 
-const persistedReducer = persistReducer(persistConfig, (state, action) => {
-  if (action.type === 'RESET_STATE') {
-    return undefined;
-  }
-  return {
-    trades: tradesReducer(state?.trades, action),
-    events: eventsReducer(state?.events, action),
-    ui: uiReducer(state?.ui, action),
-    locale: localeReducer(state?.locale, action),
-  };
+const rootReducer = combineReducers({
+  trades: tradesReducer,
+  events: eventsReducer,
+  ui: uiReducer,
+  locale: localeReducer,
+  [escrowApi.reducerPath]: escrowApi.reducer,
 });
 
+const appReducer = (state: ReturnType<typeof rootReducer> | undefined, action: Action<string>) => {
+  if (action.type === 'RESET_STATE') {
+    return rootReducer(undefined, action);
+  }
+  return rootReducer(state, action);
+};
+
+const persistedReducer = persistReducer(persistConfig, appReducer);
+
 export const store = configureStore({
-  reducer: {
-    trades: tradesReducer,
-    events: eventsReducer,
-    ui: uiReducer,
-    locale: localeReducer,
-    [escrowApi.reducerPath]: escrowApi.reducer,
-  },
+  reducer: persistedReducer,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
         ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
       },
-    })
-      .concat(escrowApi.middleware)
-      .concat(logger),
+    }).concat(escrowApi.middleware).concat(logger as Middleware),
   devTools: process.env.NODE_ENV !== 'production',
 });
 

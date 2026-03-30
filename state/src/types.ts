@@ -1,3 +1,4 @@
+import { EntityState } from '@reduxjs/toolkit';
 import { LocaleState } from './slices/localeSlice';
 
 // Trade state types
@@ -11,12 +12,10 @@ export interface Trade {
   timestamp: string;
 }
 
-export interface TradesState {
-  byId: Record<string, Trade>;
-  allIds: string[];
+export type TradesState = EntityState<Trade> & {
   loading: boolean;
   error: string | null;
-}
+};
 
 // Event state types
 export interface Event {
@@ -27,12 +26,10 @@ export interface Event {
   data: Record<string, any>;
 }
 
-export interface EventsState {
-  byId: Record<string, Event>;
-  allIds: string[];
+export type EventsState = EntityState<Event> & {
   loading: boolean;
   error: string | null;
-}
+};
 
 // UI state types
 export interface UIState {
