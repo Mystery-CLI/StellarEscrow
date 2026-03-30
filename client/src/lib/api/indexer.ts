@@ -1,5 +1,5 @@
 import { apiFetch, type ClientConfig } from './client';
-import type { Event, PagedResponse, TradeSearchResult } from './types';
+import type { Event, PagedResponse, TradeSearchResult, UserSearchResult, SearchSuggestion } from './types';
 
 export function createIndexerApi(config: ClientConfig) {
   const get = <T>(path: string) => apiFetch<T>(config, path);
@@ -33,8 +33,19 @@ export function createIndexerApi(config: ClientConfig) {
     },
 
     /** GET /search/trades */
-    searchTrades(query: string): Promise<PagedResponse<TradeSearchResult>> {
-      return get(`/search/trades?q=${encodeURIComponent(query)}`);
+    searchTrades(query: string, filters?: { status?: string; minAmount?: number; maxAmount?: number }): Promise<PagedResponse<TradeSearchResult>> {
+      const qs = new URLSearchParams({ q: query, ...Object.fromEntries(Object.entries(filters ?? {}).filter(([,v]) => v !== undefined).map(([k,v]) => [k, String(v)])) }).toString();
+      return get(`/search/trades?${qs}`);
+    },
+
+    /** GET /search/users */
+    searchUsers(query: string): Promise<PagedResponse<UserSearchResult>> {
+      return get(`/search/users?q=${encodeURIComponent(query)}`);
+    },
+
+    /** GET /search/suggestions */
+    getSearchSuggestions(query: string): Promise<SearchSuggestion[]> {
+      return get(`/search/suggestions?q=${encodeURIComponent(query)}`);
     },
 
     /** POST /events/replay */

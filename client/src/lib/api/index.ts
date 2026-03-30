@@ -26,5 +26,5 @@ const config: ClientConfig = {
 export const indexerApi = USE_MOCK ? mockIndexerApi : createIndexerApi(config);
 
 export { ApiRequestError } from './types';
-export type { Event, PagedResponse, TradeSearchResult } from './types';
+export type { Event, PagedResponse, TradeSearchResult, UserSearchResult, SearchSuggestion } from './types';
 export type { IndexerApi } from './indexer';

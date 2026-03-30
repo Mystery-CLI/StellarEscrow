@@ -3,13 +3,15 @@
   import { onMount } from 'svelte';
   import { themeStore } from '$lib/theme';
   import ThemeToggle from '$lib/ThemeToggle.svelte';
+  import SearchBar from '$lib/SearchBar.svelte';
 
   onMount(() => themeStore.init());
 </script>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
-  <header class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-3 flex items-center justify-between">
-    <a href="/" class="font-bold text-lg text-[var(--accent)]">StellarEscrow</a>
+  <header class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-3 flex items-center gap-4">
+    <a href="/" class="font-bold text-lg text-[var(--accent)] shrink-0">StellarEscrow</a>
+    <div class="flex-1"><SearchBar /></div>
     <ThemeToggle />
   </header>
   <main>
