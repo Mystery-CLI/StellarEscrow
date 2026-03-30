@@ -25,6 +25,18 @@ export interface TradeSearchResult {
   created_at: string;
 }
 
+export interface UserSearchResult {
+  address: string;
+  role: 'buyer' | 'seller' | 'arbitrator';
+  trade_count: number;
+}
+
+export interface SearchSuggestion {
+  label: string;
+  type: 'trade' | 'user' | 'arbitrator';
+  value: string;
+}
+
 export interface ApiError {
   code: string;
   message: string;

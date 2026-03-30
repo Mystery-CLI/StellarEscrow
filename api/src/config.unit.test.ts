@@ -46,6 +46,7 @@ describe('API config unit', () => {
 
   it('normalizes bare origins to the /api base path', async () => {
     const api = createApi('http://localhost:3000');
+    jest.spyOn(api.trades, 'getTrades').mockResolvedValue([{ id: '1' } as any]);
 
     await expect(api.trades.getTrades(1, 0)).resolves.toHaveLength(1);
   });

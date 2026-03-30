@@ -1,4 +1,5 @@
-import { resetMockData, server } from '../mocks';
+import { resetMockData } from '../mocks';
+import { server } from '../mocks/server';
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });

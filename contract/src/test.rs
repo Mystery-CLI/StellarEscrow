@@ -132,7 +132,7 @@ fn test_create_trade_fails_for_jurisdiction_block() {
     };
     client.set_user_compliance(&admin, &seller, &compliant);
     client.set_user_compliance(&admin, &buyer, &compliant);
-    client.set_jurisdiction_rule(&admin, &soroban_sdk::String::from_str(&env, "CN"), false);
+    client.set_jurisdiction_rule(&admin, &soroban_sdk::String::from_str(&env, "CN"), &false);
 
     assert!(client.try_create_trade(&seller, &buyer, &1_000_000u64, &None, &OptionalMetadata::None).is_err());
 }

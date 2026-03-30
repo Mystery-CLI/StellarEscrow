@@ -35,7 +35,7 @@ describe('API load', () => {
         if (context.iteration % 2 === 0) {
           await context.measure('getTrades', () => api.trades.getTrades(1, 0));
         } else {
-          await context.measure('getEvents', () => api.events.getEvents(1));
+          await context.measure('getEvents', () => api.events.getEvents({ limit: 1 }));
         }
       }
     );
@@ -96,7 +96,7 @@ describe('API load', () => {
             );
             break;
           case 2:
-            await context.measure('getEvents', () => api.events.getEvents(10));
+            await context.measure('getEvents', () => api.events.getEvents({ limit: 10 }));
             break;
           default:
             await context.measure('getTransactionStatus', () =>

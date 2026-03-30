@@ -1,19 +1,21 @@
 import { rest } from 'msw';
 
+const API_BASE_URL = 'http://localhost:3000/api';
+
 export const blockchainHandlers = [
-  rest.post('/api/blockchain/fund', (req, res, ctx) => {
+  rest.post(`${API_BASE_URL}/blockchain/fund`, (req, res, ctx) => {
     return res(ctx.json({ txHash: '0x' + Math.random().toString(16).slice(2) }));
   }),
 
-  rest.post('/api/blockchain/complete', (req, res, ctx) => {
+  rest.post(`${API_BASE_URL}/blockchain/complete`, (req, res, ctx) => {
     return res(ctx.json({ txHash: '0x' + Math.random().toString(16).slice(2) }));
   }),
 
-  rest.post('/api/blockchain/resolve', (req, res, ctx) => {
+  rest.post(`${API_BASE_URL}/blockchain/resolve`, (req, res, ctx) => {
     return res(ctx.json({ txHash: '0x' + Math.random().toString(16).slice(2) }));
   }),
 
-  rest.get('/api/blockchain/tx/:txHash', (req, res, ctx) => {
+  rest.get(`${API_BASE_URL}/blockchain/tx/:txHash`, (req, res, ctx) => {
     return res(ctx.json({ status: 'confirmed', confirmed: true }));
   }),
 ];

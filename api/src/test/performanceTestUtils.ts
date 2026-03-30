@@ -20,6 +20,8 @@ export function createEventFixture(overrides: Partial<Event> = {}): Event {
   return {
     id: '1',
     type: 'trade_created',
+    category: 'trade',
+    schemaVersion: 1,
     tradeId: '1',
     timestamp: '2024-03-25T10:30:00Z',
     data: {},

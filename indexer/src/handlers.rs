@@ -16,6 +16,9 @@ use crate::database::Database;
 use crate::error::AppError;
 use crate::fraud_service::FraudDetectionService;
 use crate::health::HealthState;
+use crate::job_queue::types::{Job, JobPriority, JobType};
+use crate::job_queue::worker::JobWorker;
+use crate::job_queue::JobQueue;
 use crate::webhook_service::WebhookService;
 use crate::monitoring_service::{MonitoringService, dashboard};
 use crate::models::{
@@ -58,10 +61,18 @@ pub async fn api_index() -> Json<serde_json::Value> {
             "search_suggestions":"GET /search/suggestions",
             "search_history":  "GET  /search/history",
             "search_analytics":"GET  /search/analytics",
+            "cache_stats":     "GET  /cache/stats",
+            "cache_invalidate":"POST /cache/invalidate",
+            "cache_warm":      "POST /cache/warm",
+            "jobs_stats":      "GET  /jobs/stats",
+            "jobs_enqueue":    "POST /jobs/enqueue",
+            "jobs_schedule":   "POST /jobs/schedule",
             "fraud_review":    "POST /fraud/review",
             "notif_prefs_get": "GET  /notifications/preferences/:address",
             "notif_prefs_put": "PUT  /notifications/preferences/:address",
             "notif_log":       "GET  /notifications/log/:address",
+            "push_register":   "POST /push/register",
+            "push_unregister": "DELETE /push/unregister/:device_token",
             "help":            "GET  /help"
         }
     }))
@@ -96,11 +107,14 @@ pub async fn get_events(
         offset: Some(offset),
         ..params
     };
-
-    let (events, total) = tokio::try_join!(
-        state.database.get_events(&query),
-        state.database.count_events(&query),
-    )?;
+    let cache_key = CacheService::events_query_key(&query);
+    let events = state
+        .cache_service
+        .get_or_load(&cache_key, state.cache_service.ttl_events(), || async {
+            state.database.get_events(&query).await
+        })
+        .await?;
+    let total = state.database.count_events(&query).await?;
 
     Ok(Json(PaginatedResponse {
         has_more: offset + limit < total,
@@ -196,6 +210,16 @@ pub async fn replay_events(
         state.ws_manager.broadcast(ws_message).await;
     }
 
+    state
+        .cache_service
+        .invalidate_pattern("events:list:*")
+        .await;
+    state.cache_service.invalidate(crate::cache_service::KEY_STATS).await;
+    state
+        .cache_service
+        .invalidate(crate::cache_service::KEY_INDEXER_STATUS)
+        .await;
+
     Ok(Json(
         json!({ "replayed": events.len(), "from_ledger": request.from_ledger, "to_ledger": request.to_ledger }),
     ))
@@ -210,41 +234,59 @@ pub async fn ws_handler(
 
 /// GET /status — indexer sync state for loading indicators.
 pub async fn get_status(State(state): State<AppState>) -> Result<Json<IndexerStatus>, AppError> {
-    let (total_events, latest) = tokio::try_join!(
-        state.database.get_event_count(None),
-        state.database.get_latest_ledger_global(),
-    )?;
+    let status = state
+        .cache_service
+        .get_or_load(
+            crate::cache_service::KEY_INDEXER_STATUS,
+            state.cache_service.ttl_default(),
+            || async {
+                let (total_events, latest) = tokio::try_join!(
+                    state.database.get_event_count(None),
+                    state.database.get_latest_ledger_global(),
+                )?;
 
-    let (latest_ledger, latest_ledger_time) = match latest {
-        Some((l, t)) => (Some(l), Some(t)),
-        None => (None, None),
-    };
+                let (latest_ledger, latest_ledger_time) = match latest {
+                    Some((l, t)) => (Some(l), Some(t)),
+                    None => (None, None),
+                };
 
-    Ok(Json(IndexerStatus {
-        syncing: true, // always true while the monitor is running
-        latest_ledger,
-        latest_ledger_time,
-        total_events,
-        server_time: chrono::Utc::now(),
-    }))
+                Ok(IndexerStatus {
+                    syncing: true,
+                    latest_ledger,
+                    latest_ledger_time,
+                    total_events,
+                    server_time: chrono::Utc::now(),
+                })
+            },
+        )
+        .await?;
+
+    Ok(Json(status))
 }
 
 /// GET /stats — per-event-type counts for dashboard skeleton panels.
 pub async fn get_stats(State(state): State<AppState>) -> Result<Json<StatsResponse>, AppError> {
-    let (total_events, type_counts) = tokio::try_join!(
-        state.database.get_event_count(None),
-        state.database.get_event_type_counts(),
-    )?;
+    let stats = state
+        .cache_service
+        .get_or_load(crate::cache_service::KEY_STATS, state.cache_service.ttl_default(), || async {
+            let (total_events, type_counts) = tokio::try_join!(
+                state.database.get_event_count(None),
+                state.database.get_event_type_counts(),
+            )?;
 
-    let by_type = type_counts
-        .into_iter()
-        .map(|(event_type, count)| EventStats { event_type, count })
-        .collect();
+            let by_type = type_counts
+                .into_iter()
+                .map(|(event_type, count)| EventStats { event_type, count })
+                .collect();
 
-    Ok(Json(StatsResponse {
-        total_events,
-        by_type,
-    }))
+            Ok(StatsResponse {
+                total_events,
+                by_type,
+            })
+        })
+        .await?;
+
+    Ok(Json(stats))
 }
 
 pub async fn global_search(
@@ -295,7 +337,13 @@ pub async fn search_trades(
     Query(params): Query<TradeSearchQuery>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<crate::models::TradeSearchResult>>, AppError> {
-    let rows = state.database.search_trades(&params).await?;
+    let cache_key = CacheService::search_trades_key(&params);
+    let rows = state
+        .cache_service
+        .get_or_load(&cache_key, state.cache_service.ttl_default(), || async {
+            state.database.search_trades(&params).await
+        })
+        .await?;
     if let Some(q) = params.q {
         if !q.is_empty() {
             state.database.record_search(&q, "trades").await?;
@@ -384,6 +432,9 @@ pub async fn update_fraud_review(
 #[derive(Clone)]
 pub struct AppState {
     pub database: Arc<Database>,
+    pub stellar_contract_id: String,
+    pub job_queue: Arc<tokio::sync::Mutex<JobQueue>>,
+    pub job_worker: Arc<JobWorker>,
     pub ws_manager: Arc<WebSocketManager>,
     pub health: HealthState,
     pub fraud_service: Arc<FraudDetectionService>,
@@ -475,7 +526,7 @@ pub async fn get_notification_preferences(
         .database
         .get_notification_preferences(&address)
         .await?
-        .ok_or_else(|| AppError::NotFound("preferences not found".into()))?;
+        .unwrap_or_else(|| crate::models::NotificationPreferences::default_for_address(address));
     Ok(Json(prefs))
 }
 
@@ -503,6 +554,61 @@ pub async fn get_notification_log(
         .get_notification_log(&address, params.limit.unwrap_or(50))
         .await?;
     Ok(Json(entries))
+}
+
+/// POST /push/register
+pub async fn register_push_token(
+    State(state): State<AppState>,
+    Json(body): Json<crate::models::PushRegistrationRequest>,
+) -> Result<Json<crate::models::NotificationPreferences>, AppError> {
+    let token = body.device_token.trim();
+    let address = body.address.trim();
+
+    if token.is_empty() || address.is_empty() {
+        return Err(AppError::BadRequest(
+            "address and device_token are required".to_string(),
+        ));
+    }
+
+    let prefs = state
+        .database
+        .upsert_notification_preferences(
+            address,
+            &crate::models::UpdateNotificationPreferences {
+                email_enabled: None,
+                email_address: None,
+                sms_enabled: None,
+                phone_number: None,
+                push_enabled: Some(true),
+                push_token: Some(token.to_string()),
+                on_trade_created: None,
+                on_trade_funded: None,
+                on_trade_completed: None,
+                on_trade_confirmed: None,
+                on_dispute_raised: None,
+                on_dispute_resolved: None,
+                on_trade_cancelled: None,
+            },
+        )
+        .await?;
+
+    Ok(Json(prefs))
+}
+
+/// DELETE /push/unregister/:device_token
+pub async fn unregister_push_token(
+    Path(device_token): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let removed = state
+        .database
+        .unregister_push_token(device_token.trim())
+        .await?;
+
+    Ok(Json(json!({
+        "status": "ok",
+        "removed": removed,
+    })))
 }
 
 // =============================================================================
@@ -549,6 +655,86 @@ pub struct IntegrationLogQuery {
     pub limit: Option<i64>,
 }
 
+#[derive(Deserialize)]
+pub struct EnqueueJobRequest {
+    pub job_type: String,
+    pub event_id: Option<String>,
+    pub trade_id: Option<String>,
+    pub priority: Option<String>,
+    pub payload: Option<serde_json::Value>,
+    pub run_at: Option<i64>,
+    pub max_attempts: Option<u32>,
+}
+
+/// GET /jobs/stats — job queue depths and worker status.
+pub async fn get_job_stats(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let snapshot = state.job_worker.snapshot().await?;
+    Ok(Json(serde_json::to_value(&snapshot).unwrap_or_default()))
+}
+
+/// POST /jobs/enqueue — enqueue an immediate background job.
+pub async fn enqueue_job(
+    State(state): State<AppState>,
+    Json(body): Json<EnqueueJobRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let job_type = parse_job_type(&body.job_type)?;
+    let priority = parse_job_priority(body.priority.as_deref())?;
+    let mut job = Job::new(
+        job_type,
+        body.event_id.unwrap_or_else(|| "manual".to_string()),
+        body.trade_id.unwrap_or_else(|| "manual".to_string()),
+        body.payload.unwrap_or_default(),
+        priority,
+    );
+    if let Some(max_attempts) = body.max_attempts {
+        job = job.with_max_attempts(max_attempts.max(1));
+    }
+
+    let mut queue = state.job_queue.lock().await;
+    queue.enqueue(job.clone()).await?;
+
+    Ok(Json(json!({
+        "status": "queued",
+        "job_id": job.id,
+        "priority": job.priority.as_str(),
+    })))
+}
+
+/// POST /jobs/schedule — enqueue a delayed background job.
+pub async fn schedule_job(
+    State(state): State<AppState>,
+    Json(body): Json<EnqueueJobRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let run_at = body
+        .run_at
+        .ok_or_else(|| AppError::BadRequest("run_at is required".to_string()))?;
+    let job_type = parse_job_type(&body.job_type)?;
+    let priority = parse_job_priority(body.priority.as_deref())?;
+    let mut job = Job::new(
+        job_type,
+        body.event_id.unwrap_or_else(|| "scheduled".to_string()),
+        body.trade_id.unwrap_or_else(|| "scheduled".to_string()),
+        body.payload.unwrap_or_default(),
+        priority,
+    )
+    .scheduled_at(run_at);
+    if let Some(max_attempts) = body.max_attempts {
+        job = job.with_max_attempts(max_attempts.max(1));
+    }
+
+    let mut queue = state.job_queue.lock().await;
+    queue.enqueue_at(job.clone(), run_at).await?;
+
+    Ok(Json(json!({
+        "status": "scheduled",
+        "job_id": job.id,
+        "run_at": run_at,
+        "priority": job.priority.as_str(),
+    })))
+}
+
 // =============================================================================
 // Performance Monitoring Handlers
 // =============================================================================
@@ -569,6 +755,49 @@ pub async fn get_performance_alerts(
         "active": dashboard.active_alerts,
         "total": dashboard.active_alerts.len(),
     }))
+}
+
+#[derive(serde::Deserialize)]
+pub struct PerfRecordBody {
+    pub route: String,
+    pub method: String,
+    pub status: u16,
+    pub duration_ms: u64,
+}
+
+/// POST /performance/record — ingest a single APM sample (used by middleware / external agents).
+pub async fn record_performance_sample(
+    State(state): State<AppState>,
+    Json(body): Json<PerfRecordBody>,
+) -> StatusCode {
+    state
+        .performance_service
+        .record(&body.route, &body.method, body.status, body.duration_ms)
+        .await;
+    StatusCode::NO_CONTENT
+}
+
+/// GET /performance/history — hourly rollup from the materialized view.
+pub async fn get_performance_history(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let rows = state.database.get_perf_hourly_rollup(24).await?;
+    Ok(Json(serde_json::json!({ "hours": rows })))
+}
+
+/// GET /performance/bottlenecks — slow queries + index usage analysis.
+pub async fn get_performance_bottlenecks(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let (slow_queries, index_usage) = tokio::join!(
+        state.database.get_slow_queries(10),
+        state.database.get_index_usage(),
+    );
+    Ok(Json(serde_json::json!({
+        "slow_queries": slow_queries.unwrap_or_default(),
+        "index_usage":  index_usage.unwrap_or_default(),
+        "cache":        state.cache_service.get_stats_snapshot().await,
+    })))
 }
 
 // =============================================================================
@@ -633,8 +862,8 @@ pub async fn export_analytics(
 pub async fn get_cache_stats(
     State(state): State<AppState>,
 ) -> Json<serde_json::Value> {
-    let stats = state.cache_service.get_stats_snapshot().await;
-    Json(serde_json::to_value(&stats).unwrap_or_default())
+    let snapshot = state.cache_service.snapshot().await;
+    Json(serde_json::to_value(&snapshot).unwrap_or_default())
 }
 
 #[derive(Deserialize)]
@@ -657,6 +886,17 @@ pub async fn invalidate_cache(
         return Ok(Json(json!({ "invalidated_pattern": pattern })));
     }
     Err(AppError::NotFound("Provide key or pattern".to_string()))
+}
+
+/// POST /cache/warm - trigger cache warming for core hot keys.
+pub async fn warm_cache(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let report = state
+        .cache_service
+        .warm_core(&state.database, &state.stellar_contract_id)
+        .await?;
+    Ok(Json(serde_json::to_value(&report).unwrap_or_default()))
 }
 
 // =============================================================================
@@ -784,7 +1024,13 @@ pub async fn run_compliance_check(
         .compliance_service
         .check_address(&payload.address, payload.trade_id)
         .await;
-    Ok(Json(serde_json::to_value(&check).unwrap_or_default()))
+    let cache_key = CacheService::compliance_status_key(&payload.address);
+    let value = serde_json::to_value(&check).unwrap_or_default();
+    state
+        .cache_service
+        .set(&cache_key, &value, state.cache_service.ttl_default())
+        .await;
+    Ok(Json(value))
 }
 
 /// GET /compliance/status/:address — get latest compliance status for an address.
@@ -792,10 +1038,19 @@ pub async fn get_compliance_status(
     Path(address): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    match state.compliance_service.get_address_status(&address).await {
-        Some(check) => Ok(Json(serde_json::to_value(&check).unwrap_or_default())),
-        None => Ok(Json(json!({ "status": "not_found", "address": address }))),
-    }
+    let cache_key = CacheService::compliance_status_key(&address);
+    let response = state
+        .cache_service
+        .get_or_load(&cache_key, state.cache_service.ttl_default(), || async {
+            let value = match state.compliance_service.get_address_status(&address).await {
+                Some(check) => serde_json::to_value(&check).unwrap_or_default(),
+                None => json!({ "status": "not_found", "address": address }),
+            };
+            Ok(value)
+        })
+        .await?;
+
+    Ok(Json(response))
 }
 
 /// POST /compliance/review — manually review a compliance check.
@@ -814,6 +1069,10 @@ pub async fn review_compliance_check(
         .review_check(payload.check_id, status, &payload.reviewer, &payload.notes)
         .await
         .map_err(|e| AppError::NotFound(e.to_string()))?;
+    state
+        .cache_service
+        .invalidate_pattern("compliance:*")
+        .await;
     Ok(Json(json!({ "status": "updated", "check_id": payload.check_id })))
 }
 
@@ -856,14 +1115,65 @@ pub async fn get_monitoring_alerts(
     Ok(Json(serde_json::to_value(&alerts).unwrap_or_default()))
 }
 
-/// GET /monitoring/metrics — Prometheus-format metrics.
+/// GET /monitoring/metrics — Prometheus-format metrics (monitoring + APM).
 pub async fn get_prometheus_metrics(
     State(state): State<AppState>,
 ) -> axum::response::Response<String> {
-    let body = state.monitoring_service.prometheus_metrics();
+    let mut body = state.monitoring_service.prometheus_metrics();
+
+    // Append APM metrics from the performance service
+    let dash = state.performance_service.dashboard().await;
+    let apm = format!(
+        "\n# HELP stellar_escrow_api_avg_response_ms Average API response time in ms\n\
+         # TYPE stellar_escrow_api_avg_response_ms gauge\n\
+         stellar_escrow_api_avg_response_ms {avg}\n\
+         # HELP stellar_escrow_api_p95_response_ms P95 API response time in ms\n\
+         # TYPE stellar_escrow_api_p95_response_ms gauge\n\
+         stellar_escrow_api_p95_response_ms {p95}\n\
+         # HELP stellar_escrow_api_p99_response_ms P99 API response time in ms\n\
+         # TYPE stellar_escrow_api_p99_response_ms gauge\n\
+         stellar_escrow_api_p99_response_ms {p99}\n\
+         # HELP stellar_escrow_api_requests_total Total API requests recorded\n\
+         # TYPE stellar_escrow_api_requests_total counter\n\
+         stellar_escrow_api_requests_total {total}\n\
+         # HELP stellar_escrow_api_requests_per_minute API requests per minute\n\
+         # TYPE stellar_escrow_api_requests_per_minute gauge\n\
+         stellar_escrow_api_requests_per_minute {rpm}\n\
+         # HELP stellar_escrow_active_perf_alerts Number of active performance alerts\n\
+         # TYPE stellar_escrow_active_perf_alerts gauge\n\
+         stellar_escrow_active_perf_alerts {alerts}\n",
+        avg = dash.overall.avg_ms,
+        p95 = dash.overall.p95_ms,
+        p99 = dash.overall.p99_ms,
+        total = dash.overall.total_requests,
+        rpm = dash.overall.requests_per_minute,
+        alerts = dash.active_alerts.len(),
+    );
+    body.push_str(&apm);
+
     axum::response::Response::builder()
         .status(200)
         .header("Content-Type", "text/plain; version=0.0.4")
         .body(body)
         .unwrap()
+}
+
+fn parse_job_type(value: &str) -> Result<JobType, AppError> {
+    match value {
+        "event" => Ok(JobType::Event),
+        "notification" => Ok(JobType::Notification),
+        "cache_warm" => Ok(JobType::CacheWarm),
+        "compliance" => Ok(JobType::Compliance),
+        _ => Err(AppError::BadRequest(format!("unsupported job_type '{}'", value))),
+    }
+}
+
+fn parse_job_priority(value: Option<&str>) -> Result<JobPriority, AppError> {
+    match value.unwrap_or("normal") {
+        "critical" => Ok(JobPriority::Critical),
+        "high" => Ok(JobPriority::High),
+        "normal" => Ok(JobPriority::Normal),
+        "low" => Ok(JobPriority::Low),
+        other => Err(AppError::BadRequest(format!("unsupported priority '{}'", other))),
+    }
 }

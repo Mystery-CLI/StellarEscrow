@@ -59,6 +59,96 @@ impl Database {
         &self.pool
     }
 (&self, event: &Event) -> Result<(), AppError> {
+    /// Record a slow query to the slow_query_log table (fire-and-forget).
+    /// Only logs queries exceeding `threshold_ms`.
+    pub fn log_slow_query(
+        pool: PgPool,
+        query_hash: String,
+        query_text: String,
+        duration_ms: f64,
+        rows_returned: Option<i32>,
+    ) {
+        const THRESHOLD_MS: f64 = 100.0;
+        if duration_ms < THRESHOLD_MS {
+            return;
+        }
+        tokio::spawn(async move {
+            let _ = sqlx::query(
+                "INSERT INTO slow_query_log (query_hash, query_text, duration_ms, rows_returned) \
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(&query_hash)
+            .bind(&query_text)
+            .bind(duration_ms)
+            .bind(rows_returned)
+            .execute(&pool)
+            .await;
+        });
+    }
+
+    /// Fetch the top slow queries from pg_stat_statements.
+    pub async fn get_slow_queries(&self, limit: i64) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT query,
+                   calls,
+                   round(mean_exec_time::numeric, 2)  AS mean_ms,
+                   round(total_exec_time::numeric, 2) AS total_ms,
+                   round(stddev_exec_time::numeric, 2) AS stddev_ms
+            FROM pg_stat_statements
+            ORDER BY mean_exec_time DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit.clamp(1, 50))
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "query":    r.get::<String, _>("query"),
+                    "calls":    r.get::<i64, _>("calls"),
+                    "mean_ms":  r.get::<f64, _>("mean_ms"),
+                    "total_ms": r.get::<f64, _>("total_ms"),
+                    "stddev_ms":r.get::<f64, _>("stddev_ms"),
+                })
+            })
+            .collect())
+    }
+
+    /// Fetch tables with low index-scan ratio (candidates for new indexes).
+    pub async fn get_index_usage(&self) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT relname AS table,
+                   seq_scan, idx_scan,
+                   CASE WHEN seq_scan + idx_scan = 0 THEN 0
+                        ELSE round(100.0 * idx_scan / (seq_scan + idx_scan), 1)
+                   END AS idx_pct
+            FROM pg_stat_user_tables
+            ORDER BY idx_pct ASC
+            LIMIT 20
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "table":    r.get::<String, _>("table"),
+                    "seq_scan": r.get::<i64, _>("seq_scan"),
+                    "idx_scan": r.get::<i64, _>("idx_scan"),
+                    "idx_pct":  r.get::<f64, _>("idx_pct"),
+                })
+            })
+            .collect())
+    }
+
+    pub async fn insert_event(&self, event: &Event) -> Result<(), AppError> {
         sqlx::query(
             r#"
             INSERT INTO events (id, event_type, category, schema_version, contract_id, ledger, transaction_hash, timestamp, data, created_at)
@@ -999,22 +1089,8 @@ impl Database {
     ) -> Result<crate::models::NotificationPreferences, AppError> {
         // Fetch existing or use defaults, then apply partial update
         let existing = self.get_notification_preferences(address).await?;
-        let base = existing.unwrap_or_else(|| crate::models::NotificationPreferences {
-            address: address.to_string(),
-            email_enabled: false,
-            email_address: None,
-            sms_enabled: false,
-            phone_number: None,
-            push_enabled: false,
-            push_token: None,
-            on_trade_created: true,
-            on_trade_funded: true,
-            on_trade_completed: true,
-            on_trade_confirmed: true,
-            on_dispute_raised: true,
-            on_dispute_resolved: true,
-            on_trade_cancelled: true,
-            updated_at: chrono::Utc::now(),
+        let base = existing.unwrap_or_else(|| {
+            crate::models::NotificationPreferences::default_for_address(address.to_string())
         });
 
         let row = sqlx::query_as::<_, crate::models::NotificationPreferences>(
@@ -1061,6 +1137,23 @@ impl Database {
         .await?;
 
         Ok(row)
+    }
+
+    pub async fn unregister_push_token(&self, token: &str) -> Result<u64, AppError> {
+        let result = sqlx::query(
+            r#"
+            UPDATE notification_preferences
+            SET push_enabled = FALSE,
+                push_token = NULL,
+                updated_at = NOW()
+            WHERE push_token = $1
+            "#,
+        )
+        .bind(token)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
     }
 
     pub async fn log_notification(
@@ -1186,7 +1279,43 @@ impl Database {
         .execute(&self.pool)
         .await?;
         Ok(())
-    pub async fn get_integration_deliveries(
+    }
+
+    /// Query the hourly APM rollup materialized view for the last `hours` hours.
+    pub async fn get_perf_hourly_rollup(
+        &self,
+        hours: i64,
+    ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT hour, route, method, requests, errors, avg_ms, p95_ms, p99_ms
+            FROM perf_metrics_hourly
+            WHERE hour >= NOW() - ($1 || ' hours')::INTERVAL
+            ORDER BY hour DESC
+            LIMIT 500
+            "#,
+        )
+        .bind(hours)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                use sqlx::Row;
+                serde_json::json!({
+                    "hour": r.get::<chrono::DateTime<chrono::Utc>, _>("hour"),
+                    "route": r.get::<String, _>("route"),
+                    "method": r.get::<String, _>("method"),
+                    "requests": r.get::<i64, _>("requests"),
+                    "errors": r.get::<i64, _>("errors"),
+                    "avg_ms": r.get::<f64, _>("avg_ms"),
+                    "p95_ms": r.get::<f64, _>("p95_ms"),
+                    "p99_ms": r.get::<f64, _>("p99_ms"),
+                })
+            })
+            .collect())
+    }
         &self,
         connector_id: Option<&str>,
         limit: i64,

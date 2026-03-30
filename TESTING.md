@@ -15,6 +15,7 @@ This project uses a three-tier testing strategy:
 | Scalability | Jest + performance harness | `api/src/**/*.scalability.test.ts` | Throughput and latency trends across concurrency levels |
 | Monitoring | Jest + performance harness | `api/src/**/*.monitoring.test.ts` | Threshold alerts, error-rate visibility, and per-operation telemetry |
 | Security | Jest + scenario harness | `security/src/security.assessment.test.ts` | Penetration tests, vulnerability scans, compliance, monitoring |
+| Smart Contract | Soroban test harness | `contract/tests/*.rs`, `contract/tests/stress.rs` | Contract edge cases, security, integration, stress, benchmarks, coverage |
 | E2E | Cypress | `components/cypress/e2e/` | Full user flows |
 
 ## Running Tests
@@ -41,6 +42,15 @@ npm run test:docs --workspace=api
 npm run test:security
 npm run test:security --workspace=security
 
+# Smart contract suites
+npm run test:contract
+npm run test:contract:edge
+npm run test:contract:security
+npm run test:contract:integration
+npm run test:contract:performance
+npm run test:contract:stress
+npm run test:contract:coverage
+
 # E2E tests (requires app running on localhost:3000)
 npm run test:e2e
 
@@ -52,6 +62,7 @@ cd components && npm run test:watch
 
 All packages enforce **70% minimum** on branches, functions, lines, and statements.
 Coverage reports are written to `coverage/` in each package directory.
+For the contract crate, coverage artifacts are written to `contract/coverage/`.
 
 ## Unit Tests
 

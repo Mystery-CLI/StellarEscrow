@@ -1,0 +1,54 @@
+name: Smart Contract Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: smart-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-tests:
+    name: Contract Test Matrix
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Edge cases
+        run: cargo test --manifest-path contract/Cargo.toml --test edge_cases
+
+      - name: Security scenarios
+        run: cargo test --manifest-path contract/Cargo.toml --test security
+
+      - name: Integration scenarios
+        run: cargo test --manifest-path contract/Cargo.toml --test integration
+
+      - name: Performance benchmarks
+        run: cargo test --manifest-path contract/Cargo.toml --test performance -- --nocapture
+
+      - name: Stress benchmarks
+        run: cargo test --manifest-path contract/Cargo.toml --test stress -- --nocapture
+
+      - name: Coverage report
+        run: cargo llvm-cov --manifest-path contract/Cargo.toml --workspace --lcov --output-path contract/coverage/lcov.info --html --output-dir contract/coverage/html
+
+      - name: Upload contract coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smart-contract-coverage-${{ github.run_number }}
+          path: contract/coverage/
+          retention-days: 30

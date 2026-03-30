@@ -11,6 +11,7 @@
 use soroban_sdk::{contractclient, contracttype, symbol_short, Address, Env, Vec};
 
 use crate::errors::ContractError;
+use crate::types::{PriceTrigger, TriggerAction};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -209,4 +210,14 @@ pub fn validate_trade_price(
         decimals: pd.decimals,
         usd_value,
     })
+}
+
+/// Check if a price trigger's condition is currently met.
+pub fn check_trigger(env: &Env, trigger: &PriceTrigger) -> Result<bool, ContractError> {
+    let pd = get_price(env, &trigger.base, &trigger.quote)?;
+    if trigger.trigger_above {
+        Ok(pd.price >= trigger.target_price)
+    } else {
+        Ok(pd.price <= trigger.target_price)
+    }
 }

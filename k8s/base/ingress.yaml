@@ -26,6 +26,16 @@ spec:
                 name: client
                 port:
                   number: 3001
+    - host: app.stellarescrow.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 8080
     - host: api.stellarescrow.app
       http:
         paths:

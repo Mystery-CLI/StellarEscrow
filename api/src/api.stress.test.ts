@@ -55,7 +55,7 @@ describe('API stress', () => {
             await context.measure('getTrades', () => api.trades.getTrades(10, 0));
             break;
           case 1:
-            await context.measure('getEvents', () => api.events.getEvents(10));
+            await context.measure('getEvents', () => api.events.getEvents({ limit: 10 }));
             break;
           default:
             await context.measure('getTransactionStatus', () =>

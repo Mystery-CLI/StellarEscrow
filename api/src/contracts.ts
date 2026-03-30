@@ -122,7 +122,7 @@ export const API_ENDPOINT_CONTRACTS: EndpointContract[] = [
     path: '/api/trades/:id',
     clientMethod: 'trades.deleteTrade(id)',
     readmeSection: 'Endpoint Matrix',
-    validateResponse: (value: unknown): value is void => value === undefined,
+    validateResponse: (value: unknown): value is void => value === undefined || value === '',
   },
   {
     id: 'listEvents',

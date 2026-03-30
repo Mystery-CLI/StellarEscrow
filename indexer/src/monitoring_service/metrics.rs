@@ -98,3 +98,11 @@ pub const METRIC_API_REQUEST_DURATION_MS: &str = "stellar_escrow_api_request_dur
 pub const METRIC_WEBSOCKET_CONNECTIONS: &str = "stellar_escrow_websocket_connections";
 pub const METRIC_FRAUD_ALERTS: &str = "stellar_escrow_fraud_alerts_total";
 pub const METRIC_ERROR_RATE: &str = "stellar_escrow_error_rate";
+
+// APM-specific metrics exposed to Prometheus
+pub const METRIC_API_AVG_RESPONSE_MS: &str = "stellar_escrow_api_avg_response_ms";
+pub const METRIC_API_P95_RESPONSE_MS: &str = "stellar_escrow_api_p95_response_ms";
+pub const METRIC_API_P99_RESPONSE_MS: &str = "stellar_escrow_api_p99_response_ms";
+pub const METRIC_API_REQUESTS_TOTAL: &str = "stellar_escrow_api_requests_total";
+pub const METRIC_API_REQUESTS_PER_MINUTE: &str = "stellar_escrow_api_requests_per_minute";
+pub const METRIC_ACTIVE_PERF_ALERTS: &str = "stellar_escrow_active_perf_alerts";
