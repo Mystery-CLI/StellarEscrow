@@ -1,29 +1,25 @@
 import { RootState } from './store';
-import { Trade } from './types';
+import { Trade, Event } from './types';
+import { tradesAdapter } from './slices/tradesSlice';
+import { eventsAdapter } from './slices/eventsSlice';
+
+const tradeSelectors = tradesAdapter.getSelectors<RootState>((state) => state.trades);
+const eventSelectors = eventsAdapter.getSelectors<RootState>((state) => state.events);
 
 // Trades selectors
-export const selectAllTrades = (state: RootState): Trade[] =>
-  state.trades.allIds.map((id) => state.trades.byId[id]);
-
-export const selectTradeById = (state: RootState, id: string): Trade | undefined =>
-  state.trades.byId[id];
+export const selectAllTrades = tradeSelectors.selectAll;
+export const selectTradeById = tradeSelectors.selectById;
 
 export const selectTradesByStatus = (state: RootState, status: string): Trade[] =>
-  state.trades.allIds
-    .map((id) => state.trades.byId[id])
-    .filter((trade) => trade.status === status);
+  tradeSelectors.selectAll(state).filter((trade) => trade.status === status);
 
 export const selectTradesLoading = (state: RootState): boolean => state.trades.loading;
 export const selectTradesError = (state: RootState): string | null => state.trades.error;
 
 // Events selectors
-export const selectAllEvents = (state: RootState) =>
-  state.events.allIds.map((id) => state.events.byId[id]);
-
-export const selectEventsByTradeId = (state: RootState, tradeId: string) =>
-  state.events.allIds
-    .map((id) => state.events.byId[id])
-    .filter((event) => event.tradeId === tradeId);
+export const selectAllEvents = eventSelectors.selectAll;
+export const selectEventsByTradeId = (state: RootState, tradeId: string): Event[] =>
+  eventSelectors.selectAll(state).filter((event) => event.tradeId === tradeId);
 
 export const selectEventsLoading = (state: RootState): boolean => state.events.loading;
 export const selectEventsError = (state: RootState): string | null => state.events.error;

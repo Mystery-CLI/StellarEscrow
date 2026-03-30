@@ -1,12 +1,15 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createEntityAdapter, PayloadAction } from '@reduxjs/toolkit';
 import { Event, EventsState } from '../types';
 
-const initialState: EventsState = {
-  byId: {},
-  allIds: [],
+export const eventsAdapter = createEntityAdapter<Event>({
+  selectId: (event) => event.id,
+  sortComparer: (a, b) => b.timestamp.localeCompare(a.timestamp),
+});
+
+const initialState: EventsState = eventsAdapter.getInitialState({
   loading: false,
   error: null,
-};
+});
 
 const eventsSlice = createSlice({
   name: 'events',
@@ -18,24 +21,10 @@ const eventsSlice = createSlice({
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
     },
-    addEvent: (state, action: PayloadAction<Event>) => {
-      const event = action.payload;
-      state.byId[event.id] = event;
-      if (!state.allIds.includes(event.id)) {
-        state.allIds.unshift(event.id);
-      }
-    },
-    setEvents: (state, action: PayloadAction<Event[]>) => {
-      state.byId = {};
-      state.allIds = [];
-      action.payload.forEach((event) => {
-        state.byId[event.id] = event;
-        state.allIds.push(event.id);
-      });
-    },
+    addEvent: eventsAdapter.upsertOne,
+    setEvents: eventsAdapter.setAll,
     clearEvents: (state) => {
-      state.byId = {};
-      state.allIds = [];
+      eventsAdapter.removeAll(state);
     },
   },
 });

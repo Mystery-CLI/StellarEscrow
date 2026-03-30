@@ -8,47 +8,64 @@ variable "environment" {
 }
 
 variable "aws_region" {
-  type    = string
-  default = "us-east-1"
+  description = "AWS region for all resources"
+  type        = string
+  default     = "us-east-1"
 }
 
 variable "app_version" {
-  type    = string
-  default = "latest"
+  description = "Application version tag for resources"
+  type        = string
+  default     = "latest"
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────
+
 variable "vpc_cidr" {
-  type    = string
-  default = "10.0.0.0/16"
+  description = "CIDR block for the VPC"
+  type        = string
+  default     = "10.0.0.0/16"
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr))
+    error_message = "vpc_cidr must be a valid CIDR block."
+  }
 }
 
 variable "availability_zones" {
-  type    = list(string)
-  default = ["us-east-1a", "us-east-1b"]
+  description = "List of availability zones for the VPC"
+  type        = list(string)
+  default     = ["us-east-1a", "us-east-1b"]
 }
 
 # ── Database ──────────────────────────────────────────────────────────────────
+
 variable "db_instance_class" {
   description = "RDS primary instance class"
   type        = string
   default     = "db.t3.micro"
+  validation {
+    condition     = can(regex("^db\\.", var.db_instance_class))
+    error_message = "db_instance_class must start with 'db.'."
+  }
 }
 
 variable "db_name" {
-  type    = string
-  default = "stellar_escrow"
+  description = "Initial database name"
+  type        = string
+  default     = "stellar_escrow"
 }
 
 variable "db_username" {
-  type      = string
-  default   = "indexer"
-  sensitive = true
+  description = "Database master username"
+  type        = string
+  default     = "indexer"
+  sensitive   = true
 }
 
 variable "db_password" {
-  type      = string
-  sensitive = true
+  description = "Database master password"
+  type        = string
+  sensitive   = true
 }
 
 variable "db_allocated_storage_gb" {
@@ -70,59 +87,77 @@ variable "db_engine_version" {
 }
 
 variable "db_backup_window" {
-  type    = string
-  default = "03:00-04:00"
+  description = "Daily backup window (HH:MM-HH:MM)"
+  type        = string
+  default     = "03:00-04:00"
 }
 
 variable "db_maintenance_window" {
-  type    = string
-  default = "Mon:04:00-Mon:05:00"
+  description = "Weekly maintenance window"
+  type        = string
+  default     = "Mon:04:00-Mon:05:00"
 }
 
 # ── API ───────────────────────────────────────────────────────────────────────
+
 variable "api_image" {
-  type    = string
-  default = "stellarescrow/api:latest"
+  description = "Docker image for the API service"
+  type        = string
+  default     = "stellarescrow/api:latest"
 }
 
 variable "api_cpu" {
-  type    = number
-  default = 256
+  description = "Fargate task CPU units"
+  type        = number
+  default     = 256
+  validation {
+    condition     = contains([256, 512, 1024, 2048, 4096], var.api_cpu)
+    error_message = "api_cpu must be one of 256, 512, 1024, 2048, or 4096."
+  }
 }
 
 variable "api_memory" {
-  type    = number
-  default = 512
+  description = "Fargate task memory (MB)"
+  type        = number
+  default     = 512
 }
 
 variable "api_container_port" {
-  type    = number
-  default = 3000
+  description = "Internal port the API container listens on"
+  type        = number
+  default     = 3000
 }
 
 # ── Load Balancer ─────────────────────────────────────────────────────────────
+
 variable "certificate_arn" {
-  type    = string
-  default = ""
+  description = "ACM certificate ARN for HTTPS"
+  type        = string
+  default     = ""
 }
 
 variable "alarm_sns_arn" {
-  type    = string
-  default = ""
+  description = "SNS topic ARN for infrastructure alerts"
+  type        = string
+  default     = ""
 }
 
 # ── Stellar ───────────────────────────────────────────────────────────────────
+
 variable "stellar_network" {
-  type    = string
-  default = "testnet"
+  description = "Stellar network to connect to (testnet | public)"
+  type        = string
+  default     = "testnet"
 }
 
 variable "stellar_contract_id" {
-  type    = string
-  default = ""
+  description = "Stellar Escrow contract ID"
+  type        = string
+  default     = ""
 }
 
 variable "stellar_horizon_url" {
-  type    = string
-  default = "https://horizon-testnet.stellar.org"
+  description = "URL for the Stellar Horizon server"
+  type        = string
+  default     = "https://horizon-testnet.stellar.org"
 }

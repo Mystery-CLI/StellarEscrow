@@ -1,15 +1,15 @@
-import { store } from '../store';
-import { addTrade, updateTrade, setTrades } from '../slices/tradesSlice';
-import { addEvent, setEvents } from '../slices/eventsSlice';
-import { Trade, Event } from '../types';
+import { store } from './store';
+import { addTrade, updateTrade, setTrades } from './slices/tradesSlice';
+import { addEvent, setEvents } from './slices/eventsSlice';
+import { Trade, Event } from './types';
 
 describe('Redux Store', () => {
   it('should initialize with empty state', () => {
     const state = store.getState();
-    expect(state.trades.byId).toEqual({});
-    expect(state.trades.allIds).toEqual([]);
-    expect(state.events.byId).toEqual({});
-    expect(state.events.allIds).toEqual([]);
+    expect(state.trades.entities).toEqual({});
+    expect(state.trades.ids).toEqual([]);
+    expect(state.events.entities).toEqual({});
+    expect(state.events.ids).toEqual([]);
   });
 
   it('should add a trade', () => {
@@ -23,8 +23,8 @@ describe('Redux Store', () => {
     };
     store.dispatch(addTrade(trade));
     const state = store.getState();
-    expect(state.trades.byId['1']).toEqual(trade);
-    expect(state.trades.allIds).toContain('1');
+    expect(state.trades.entities['1']).toEqual(trade);
+    expect(state.trades.ids).toContain('1');
   });
 
   it('should update a trade', () => {
@@ -39,7 +39,7 @@ describe('Redux Store', () => {
     store.dispatch(addTrade(trade));
     store.dispatch(updateTrade({ id: '2', status: 'funded' }));
     const state = store.getState();
-    expect(state.trades.byId['2'].status).toBe('funded');
+    expect(state.trades.entities['2']?.status).toBe('funded');
   });
 
   it('should add an event', () => {
@@ -52,7 +52,7 @@ describe('Redux Store', () => {
     };
     store.dispatch(addEvent(event));
     const state = store.getState();
-    expect(state.events.byId['1']).toEqual(event);
+    expect(state.events.entities['1']).toEqual(event);
   });
 
   it('should normalize trades state', () => {
@@ -62,7 +62,7 @@ describe('Redux Store', () => {
     ];
     store.dispatch(setTrades(trades));
     const state = store.getState();
-    expect(Object.keys(state.trades.byId).length).toBe(2);
-    expect(state.trades.allIds.length).toBe(2);
+    expect(Object.keys(state.trades.entities).length).toBe(2);
+    expect(state.trades.ids.length).toBe(2);
   });
 });

@@ -17,6 +17,16 @@ pub const KEY_SEARCH_TRADES_PREFIX: &str = "search:trades:";
 pub const KEY_COMPLIANCE_PREFIX: &str = "compliance:";
 pub const KEY_TRADE_PREFIX: &str = "trade:";
 
+// Soroban RPC read-only call cache keys
+/// Prefix for `get_funding_preview` results: `rpc:funding_preview:<trade_id>:<buyer>`
+pub const KEY_RPC_FUNDING_PREVIEW_PREFIX: &str = "rpc:funding_preview:";
+/// Prefix for `get_trade_detail` results: `rpc:trade_detail:<trade_id>`
+pub const KEY_RPC_TRADE_DETAIL_PREFIX: &str = "rpc:trade_detail:";
+/// Prefix for `get_platform_stats` results: `rpc:platform_stats`
+pub const KEY_RPC_PLATFORM_STATS: &str = "rpc:platform_stats";
+/// Prefix for `get_fee_info` results: `rpc:fee_info`
+pub const KEY_RPC_FEE_INFO: &str = "rpc:fee_info";
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CacheStrategy {
@@ -144,6 +154,31 @@ impl CacheService {
                 strategy: CacheStrategy::WriteAround,
                 ttl_secs: self.config.default_ttl_secs,
                 description: "Trade-specific entries invalidated on lifecycle changes".to_string(),
+            },
+            // Soroban RPC read-only call caching
+            CacheStrategyRule {
+                key_pattern: format!("{}*", KEY_RPC_FUNDING_PREVIEW_PREFIX),
+                strategy: CacheStrategy::ReadThrough,
+                ttl_secs: self.config.default_ttl_secs,
+                description: "get_funding_preview RPC results; invalidated on trade lifecycle events".to_string(),
+            },
+            CacheStrategyRule {
+                key_pattern: format!("{}*", KEY_RPC_TRADE_DETAIL_PREFIX),
+                strategy: CacheStrategy::ReadThrough,
+                ttl_secs: self.config.default_ttl_secs,
+                description: "get_trade_detail RPC results; invalidated on trade lifecycle events".to_string(),
+            },
+            CacheStrategyRule {
+                key_pattern: KEY_RPC_PLATFORM_STATS.to_string(),
+                strategy: CacheStrategy::ReadThrough,
+                ttl_secs: self.config.default_ttl_secs,
+                description: "get_platform_stats RPC results; invalidated on fee/trade events".to_string(),
+            },
+            CacheStrategyRule {
+                key_pattern: KEY_RPC_FEE_INFO.to_string(),
+                strategy: CacheStrategy::ReadThrough,
+                ttl_secs: self.config.default_ttl_secs,
+                description: "get_fee_info RPC results; invalidated on fee_updated events".to_string(),
             },
         ]
     }
@@ -347,6 +382,45 @@ impl CacheService {
 
     pub fn compliance_status_key(address: &str) -> String {
         format!("{}{}", KEY_COMPLIANCE_PREFIX, address.trim())
+    }
+
+    // -----------------------------------------------------------------------
+    // Soroban RPC read-only call cache helpers
+    // -----------------------------------------------------------------------
+
+    /// Cache key for `get_funding_preview(trade_id, buyer)`.
+    /// TTL: 30 s — preview data changes only when the trade is funded or cancelled.
+    pub fn rpc_funding_preview_key(trade_id: u64, buyer: &str) -> String {
+        format!("{}{}:{}", KEY_RPC_FUNDING_PREVIEW_PREFIX, trade_id, buyer.trim())
+    }
+
+    /// Cache key for `get_trade_detail(trade_id)`.
+    /// TTL: 30 s — invalidated on any trade lifecycle event.
+    pub fn rpc_trade_detail_key(trade_id: u64) -> String {
+        format!("{}{}", KEY_RPC_TRADE_DETAIL_PREFIX, trade_id)
+    }
+
+    /// TTL for Soroban RPC read-only responses (funding preview, trade detail).
+    pub fn ttl_rpc(&self) -> Duration {
+        Duration::from_secs(self.config.rpc_ttl_secs)
+    }
+
+    /// Invalidate all RPC cache entries related to a specific trade.
+    /// Called whenever a trade lifecycle event is observed (funded, completed, cancelled, etc.).
+    pub async fn invalidate_rpc_trade(&self, trade_id: u64) {
+        // Invalidate trade detail
+        self.invalidate(&Self::rpc_trade_detail_key(trade_id)).await;
+        // Invalidate all funding previews for this trade (any buyer)
+        self.invalidate_pattern(&format!("{}{}:*", KEY_RPC_FUNDING_PREVIEW_PREFIX, trade_id)).await;
+        // Platform stats may have changed
+        self.invalidate(KEY_RPC_PLATFORM_STATS).await;
+    }
+
+    /// Invalidate global RPC stats (fee info, platform stats).
+    /// Called on fee_updated or fees_withdrawn events.
+    pub async fn invalidate_rpc_global(&self) {
+        self.invalidate(KEY_RPC_FEE_INFO).await;
+        self.invalidate(KEY_RPC_PLATFORM_STATS).await;
     }
 
     async fn track_key(&self, key: &str) {

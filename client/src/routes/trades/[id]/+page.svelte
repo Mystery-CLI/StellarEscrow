@@ -2,6 +2,10 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { FundingPreview, escrowClient } from '$lib/contract';
+  import { t, locale, formatUsdc, type SupportedLocale } from '$lib/i18n';
+
+  $: currentLocale = ($locale ?? 'en') as SupportedLocale;
+  $: translatedStatus = $t(`trade.statuses.${tradeStatus}`) || tradeStatus;
 
   let tradeId = $page.params.id;
   let loading = true;
@@ -31,7 +35,7 @@
         allowance_sufficient: false
       };
     } catch (e) {
-      error = 'Failed to load preview';
+      error = $t('errors.loadPreviewFailed');
       loading = false;
     }
   }
@@ -43,7 +47,7 @@
       approving = false;
       preview!.allowance_sufficient = true;
     } catch (e) {
-      error = 'Approval failed';
+      error = $t('errors.approvalFailed');
       approving = false;
     }
   }
@@ -57,7 +61,7 @@
       tradeStatus = 'Funded';
       modalOpen = false;
     } catch (e) {
-      error = 'Funding failed';
+      error = $t('errors.fundingFailed');
     }
     funding = false;
   }
@@ -68,26 +72,26 @@
 </script>
 
 <svelte:head>
-  <title>Trade #{tradeId} - StellarEscrow</title>
+  <title>{$t('trade.title', { values: { id: tradeId } })} - {$t('nav.brand')}</title>
 </svelte:head>
 
 <div class="container mx-auto px-6 py-12">
   <a href="/" class="mb-8 inline-flex items-center text-blue-600 hover:text-blue-800">
-    ← Back to trades
+    {$t('trade.backToTrades')}
   </a>
 
   {#if loading}
-    <div class="text-center py-12">Loading trade details...</div>
+    <div class="text-center py-12">{$t('trade.loading')}</div>
   {:else}
     <div class="max-w-4xl mx-auto">
       <!-- Trade Header -->
       <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
         <div class="flex justify-between items-start mb-6">
           <div>
-            <h1 class="text-3xl font-bold">Trade #{tradeId}</h1>
+            <h1 class="text-3xl font-bold">{$t('trade.title', { values: { id: tradeId } })}</h1>
             <div class="flex gap-4 mt-2 text-sm text-gray-500">
-              <span class="px-3 py-1 bg-blue-100 rounded-full">Status: {tradeStatus}</span>
-              <span>Created: 2 hours ago</span>
+              <span class="px-3 py-1 bg-blue-100 rounded-full">{$t('trade.status', { values: { status: translatedStatus } })}</span>
+              <span>{$t('trade.created', { values: { time: $t('trade.hoursAgo', { values: { count: 2 } }) } })}</span>
             </div>
           </div>
           {#if isBuyer && tradeStatus === 'Created'}
@@ -95,47 +99,51 @@
               on:click={() => { modalOpen = true; loadPreview(); }}
               class="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
             >
-              Fund Trade
+              {$t('trade.fundTrade')}
             </button>
           {/if}
         </div>
 
         <div class="grid md:grid-cols-2 gap-8">
           <div>
-            <h3 class="font-semibold mb-3">Seller</h3>
+            <h3 class="font-semibold mb-3">{$t('trade.seller')}</h3>
             <p class="text-sm text-gray-600">GSELLER123...</p>
           </div>
           <div>
-            <h3 class="font-semibold mb-3">Buyer</h3>
-            <p class="text-sm text-gray-600 bg-yellow-50 px-3 py-1 rounded">GBUYER456... (you)</p>
+            <h3 class="font-semibold mb-3">{$t('trade.buyer')}</h3>
+            <p class="text-sm text-gray-600 bg-yellow-50 px-3 py-1 rounded">GBUYER456... {$t('trade.you')}</p>
           </div>
           <div>
-            <h3 class="font-semibold mb-3">Amount</h3>
-            <p class="text-2xl font-bold text-gray-900">${preview ? Number(preview.amount / 1000000n) : 0}.00 USDC</p>
+            <h3 class="font-semibold mb-3">{$t('trade.amount')}</h3>
+            <p class="text-2xl font-bold text-gray-900">
+              {preview ? formatUsdc(preview.amount, currentLocale) : '—'} {$t('currency.suffix')}
+            </p>
           </div>
           <div>
-            <h3 class="font-semibold mb-3">Platform Fee</h3>
-            <p class="text-xl font-semibold text-red-600">${preview ? Number(preview.fee / 1000000n) : 0}.00 USDC</p>
+            <h3 class="font-semibold mb-3">{$t('trade.platformFee')}</h3>
+            <p class="text-xl font-semibold text-red-600">
+              {preview ? formatUsdc(preview.fee, currentLocale) : '—'} {$t('currency.suffix')}
+            </p>
           </div>
         </div>
       </div>
 
       <!-- Timeline -->
       <div class="bg-white rounded-2xl shadow-xl p-8">
-        <h2 class="text-2xl font-bold mb-6">Status Timeline</h2>
+        <h2 class="text-2xl font-bold mb-6">{$t('trade.statusTimeline')}</h2>
         <div class="space-y-4">
-          <div class="flex items-center">
-            <div class="w-6 h-6 bg-green-500 rounded-full"></div>
-            <div class="ml-4 flex-1">
-              <p class="font-semibold">Trade Created</p>
-              <p class="text-sm text-gray-500">2 hours ago</p>
+          <div class="flex items-center gap-4">
+            <div class="w-6 h-6 bg-green-500 rounded-full shrink-0"></div>
+            <div class="flex-1">
+              <p class="font-semibold">{$t('trade.tradeCreated')}</p>
+              <p class="text-sm text-gray-500">{$t('trade.hoursAgo', { values: { count: 2 } })}</p>
             </div>
           </div>
           {#if tradeStatus === 'Funded'}
-            <div class="flex items-center">
-              <div class="w-6 h-6 bg-blue-500 rounded-full"></div>
-              <div class="ml-4 flex-1">
-                <p class="font-semibold">Trade Funded</p>
+            <div class="flex items-center gap-4">
+              <div class="w-6 h-6 bg-blue-500 rounded-full shrink-0"></div>
+              <div class="flex-1">
+                <p class="font-semibold">{$t('trade.tradeFunded')}</p>
                 <p class="text-sm text-gray-500">{txHash || 'Tx Hash'}</p>
               </div>
             </div>
@@ -151,27 +159,27 @@
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
     <div class="bg-white rounded-3xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold">Fund Trade #{tradeId}</h2>
+        <h2 class="text-2xl font-bold">{$t('funding.modalTitle', { values: { id: tradeId } })}</h2>
         <button on:click={() => modalOpen = false} class="text-gray-500 hover:text-gray-700">
           ✕
         </button>
       </div>
 
       {#if !preview}
-        <div class="text-center py-8">Loading preview...</div>
+        <div class="text-center py-8">{$t('funding.loadingPreview')}</div>
       {:else}
         <div class="space-y-6">
           <!-- Summary -->
           <div class="bg-gray-50 p-6 rounded-2xl">
-            <h3 class="font-semibold mb-4">You'll pay:</h3>
+            <h3 class="font-semibold mb-4">{$t('funding.youllPay')}</h3>
             <div class="space-y-2">
               <div class="flex justify-between">
-                <span>Amount:</span>
-                <span class="font-semibold">${Number(preview.amount / 1000000n)}.00 USDC</span>
+                <span>{$t('trade.amount')}:</span>
+                <span class="font-semibold">{formatUsdc(preview.amount, currentLocale)} {$t('currency.suffix')}</span>
               </div>
               <div class="flex justify-between pt-2 border-t">
-                <span>Platform fee:</span>
-                <span class="text-red-600 font-semibold">${Number(preview.fee / 1000000n)}.00 USDC</span>
+                <span>{$t('funding.platformFee')}</span>
+                <span class="text-red-600 font-semibold">{formatUsdc(preview.fee, currentLocale)} {$t('currency.suffix')}</span>
               </div>
             </div>
           </div>
@@ -179,26 +187,27 @@
           <!-- Balance & Allowance -->
           <div class="space-y-3">
             <div class="flex justify-between">
-              <span>Balance:</span>
-              <span class="font-semibold">${Number(preview.buyer_balance / 1000000n)}.00 USDC ✓</span>
+              <span>{$t('funding.balance')}</span>
+              <span class="font-semibold">{formatUsdc(preview.buyer_balance, currentLocale)} {$t('currency.suffix')} ✓</span>
             </div>
             {#if !preview.allowance_sufficient}
               <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                 <p class="text-yellow-800 text-sm">
-                  <strong>Allowance needed:</strong> ${Number(preview.amount / 1000000n)}.00 USDC to escrow contract
+                  <strong>{$t('funding.allowanceNeeded')}</strong>
+                  {$t('funding.allowanceDesc', { values: { amount: formatUsdc(preview.amount, currentLocale) } })}
                 </p>
-                <button 
+                <button
                   on:click={handleApprove}
                   disabled={approving}
                   class="mt-3 w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2 px-4 rounded-xl font-medium transition-colors {approving ? 'opacity-50 cursor-not-allowed' : ''}"
                 >
-                  {#if approving} Approving... {:else} Approve USDC {/if}
+                  {approving ? $t('funding.approving') : $t('funding.approveUsdc')}
                 </button>
               </div>
             {:else}
               <div class="flex justify-between text-green-600 font-semibold">
-                <span>USDC Approved ✓</span>
-                <span class="text-sm">Ready to fund</span>
+                <span>{$t('funding.usdcApproved')}</span>
+                <span class="text-sm">{$t('funding.readyToFund')}</span>
               </div>
             {/if}
           </div>
@@ -209,7 +218,7 @@
               on:click={() => modalOpen = false}
               class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-6 rounded-xl font-medium transition-colors"
             >
-              Cancel
+              {$t('funding.cancel')}
             </button>
             {#if preview.allowance_sufficient}
               <button 
@@ -218,9 +227,9 @@
                 class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white py-3 px-6 rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl {funding ? 'opacity-50 cursor-not-allowed' : ''}"
               >
                 {#if funding}
-                  <span>Funding... </span><span class="animate-spin">⏳</span>
+                  <span>{$t('funding.funding')} </span><span class="animate-spin inline-block">⏳</span>
                 {:else}
-                  Confirm & Fund
+                  {$t('funding.confirmFund')}
                 {/if}
               </button>
             {/if}
@@ -234,8 +243,8 @@
 
           {#if success}
             <div class="bg-green-50 border border-green-200 rounded-xl p-4 mt-4">
-              <p class="text-green-800 font-semibold">Trade funded successfully!</p>
-              <p class="text-sm text-green-700 mt-1">Tx: {txHash}</p>
+              <p class="text-green-800 font-semibold">{$t('funding.successTitle')}</p>
+              <p class="text-sm text-green-700 mt-1">{$t('funding.successTx', { values: { hash: txHash } })}</p>
             </div>
           {/if}
         </div>

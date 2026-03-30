@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 type StepStatus = 'pending' | 'completed' | 'skipped';
@@ -103,7 +103,7 @@ function saveStatuses(statuses: StepStatus[]): void {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(statuses));
   } catch {
-    // Ignore storage failures in restricted browser modes.
+    // ignore
   }
 }
 
@@ -112,14 +112,8 @@ function findNextPending(statuses: StepStatus[]): number {
 }
 
 function formatStatus(status: StepStatus): string {
-  if (status === 'completed') {
-    return 'Completed';
-  }
-
-  if (status === 'skipped') {
-    return 'Skipped';
-  }
-
+  if (status === 'completed') return 'Completed';
+  if (status === 'skipped') return 'Skipped';
   return 'Pending';
 }
 
@@ -127,20 +121,25 @@ export default function OnboardingFlow() {
   const [stepStatuses, setStepStatuses] = useState<StepStatus[]>(() => loadStatuses());
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
 
+  const stepRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
   useEffect(() => {
     saveStatuses(stepStatuses);
   }, [stepStatuses]);
 
   useEffect(() => {
-    if (stepStatuses[activeStepIndex] === 'pending') {
-      return;
-    }
+    if (stepStatuses[activeStepIndex] === 'pending') return;
 
     const nextPending = findNextPending(stepStatuses);
     if (nextPending >= 0) {
       setActiveStepIndex(nextPending);
     }
   }, [activeStepIndex, stepStatuses]);
+
+  useEffect(() => {
+    const currentRef = stepRefs.current[activeStepIndex];
+    currentRef?.focus();
+  }, [activeStepIndex]);
 
   const pendingCount = useMemo(
     () => stepStatuses.filter((status) => status === 'pending').length,
@@ -163,19 +162,16 @@ export default function OnboardingFlow() {
   const currentStatus = stepStatuses[activeStepIndex];
 
   const markCurrentStep = (status: Extract<StepStatus, 'completed' | 'skipped'>) => {
-    setStepStatuses((previous) => {
-      if (previous[activeStepIndex] !== 'pending') {
-        return previous;
-      }
-
-      const next = [...previous];
+    setStepStatuses((prev) => {
+      if (prev[activeStepIndex] !== 'pending') return prev;
+      const next = [...prev];
       next[activeStepIndex] = status;
       return next;
     });
   };
 
   const skipAll = () => {
-    setStepStatuses((previous) => previous.map((status) => (status === 'pending' ? 'skipped' : status)));
+    setStepStatuses((prev) => prev.map((s) => (s === 'pending' ? 'skipped' : s)));
   };
 
   const restartOnboarding = () => {
@@ -183,18 +179,47 @@ export default function OnboardingFlow() {
     setActiveStepIndex(0);
   };
 
+  const handleKeyNav = (e: React.KeyboardEvent, index: number) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      setActiveStepIndex((i) => Math.min(i + 1, ONBOARDING_STEPS.length - 1));
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setActiveStepIndex((i) => Math.max(i - 1, 0));
+    }
+    if (e.key === 'Home') {
+      e.preventDefault();
+      setActiveStepIndex(0);
+    }
+    if (e.key === 'End') {
+      e.preventDefault();
+      setActiveStepIndex(ONBOARDING_STEPS.length - 1);
+    }
+  };
+
   if (!hasPendingSteps) {
     return (
-      <section className="onboarding" aria-labelledby="onboarding-title">
+      <section
+        className="onboarding"
+        aria-labelledby="onboarding-title"
+        role="region"
+      >
         <div className="onboarding-header">
           <h2 id="onboarding-title">Onboarding Complete</h2>
-          <p>
+          <p aria-live="polite">
             Completed {completedCount} of {ONBOARDING_STEPS.length} steps.
             {skippedCount > 0 ? ` Skipped ${skippedCount} step(s).` : ''}
           </p>
         </div>
+
         <div className="onboarding-summary-actions">
-          <button type="button" className="onboarding-btn secondary" onClick={restartOnboarding}>
+          <button
+            type="button"
+            className="onboarding-btn secondary"
+            onClick={restartOnboarding}
+            aria-label="Restart onboarding process"
+          >
             Restart Onboarding
           </button>
         </div>
@@ -203,96 +228,153 @@ export default function OnboardingFlow() {
   }
 
   return (
-    <section className="onboarding" aria-labelledby="onboarding-title">
+    <section
+      className="onboarding"
+      aria-labelledby="onboarding-title"
+      role="region"
+    >
       <div className="onboarding-header">
         <h2 id="onboarding-title">Getting Started</h2>
-        <p>
+        <p aria-live="polite">
           {resolvedCount} of {ONBOARDING_STEPS.length} steps complete ({progressPercent}%).
         </p>
-        <div className="onboarding-progress" aria-label="Onboarding progress">
-          <div className="onboarding-progress-bar" style={{ width: `${progressPercent}%` }} />
+
+        <div
+          className="onboarding-progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progressPercent}
+          aria-label="Onboarding progress"
+        >
+          <div
+            className="onboarding-progress-bar"
+            style={{ width: `${progressPercent}%` }}
+          />
         </div>
       </div>
 
-      <ol className="onboarding-steps" aria-label="Onboarding sequence">
+      <ol
+        className="onboarding-steps"
+        role="listbox"
+        aria-label="Onboarding steps"
+      >
         {ONBOARDING_STEPS.map((step, index) => {
           const status = stepStatuses[index];
           const active = activeStepIndex === index;
 
           return (
-            <li key={step.id}>
+            <li key={step.id} role="option" aria-selected={active}>
               <button
+                ref={(el) => (stepRefs.current[index] = el)}
                 type="button"
                 className={`onboarding-step ${active ? 'active' : ''}`}
                 onClick={() => setActiveStepIndex(index)}
+                onKeyDown={(e) => handleKeyNav(e, index)}
                 aria-current={active ? 'step' : undefined}
+                aria-describedby={`step-desc-${index}`}
+                tabIndex={active ? 0 : -1}
               >
-                <span className="onboarding-step-index">{index + 1}</span>
+                <span className="onboarding-step-index" aria-hidden="true">
+                  {index + 1}
+                </span>
+
                 <span className="onboarding-step-content">
                   <span className="onboarding-step-title">{step.title}</span>
-                  <span className={`onboarding-step-status ${status}`}>{formatStatus(status)}</span>
+                  <span
+                    className={`onboarding-step-status ${status}`}
+                    aria-label={`Status: ${formatStatus(status)}`}
+                  >
+                    {formatStatus(status)}
+                  </span>
                 </span>
               </button>
+
+              <span id={`step-desc-${index}`} className="sr-only">
+                {step.description}
+              </span>
             </li>
           );
         })}
       </ol>
 
-      <article className="onboarding-card" aria-live="polite">
-        <h3>{currentStep.title}</h3>
+      <article
+        className="onboarding-card"
+        role="region"
+        aria-live="polite"
+        aria-labelledby="current-step-title"
+      >
+        <h3 id="current-step-title">{currentStep.title}</h3>
         <p>{currentStep.description}</p>
 
         <div className="onboarding-tutorial">
-          <h4>Tutorial</h4>
-          <ul>
+          <h4 id="tutorial-heading">Tutorial</h4>
+          <ul aria-labelledby="tutorial-heading">
             {currentStep.tutorial.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
-          <Link to={currentStep.actionTo} className="onboarding-link">
+
+          <Link
+            to={currentStep.actionTo}
+            className="onboarding-link"
+            aria-label={`${currentStep.actionLabel} for ${currentStep.title}`}
+          >
             {currentStep.actionLabel}
           </Link>
         </div>
 
-        <div className="onboarding-controls">
+        <div className="onboarding-controls" role="group" aria-label="Step navigation">
           <button
             type="button"
             className="onboarding-btn secondary"
-            onClick={() => setActiveStepIndex((current) => Math.max(0, current - 1))}
+            onClick={() => setActiveStepIndex((i) => Math.max(0, i - 1))}
             disabled={activeStepIndex === 0}
+            aria-disabled={activeStepIndex === 0}
           >
             Previous Step
           </button>
+
           <button
             type="button"
             className="onboarding-btn secondary"
             onClick={() =>
-              setActiveStepIndex((current) => Math.min(ONBOARDING_STEPS.length - 1, current + 1))
+              setActiveStepIndex((i) => Math.min(ONBOARDING_STEPS.length - 1, i + 1))
             }
             disabled={activeStepIndex === ONBOARDING_STEPS.length - 1}
+            aria-disabled={activeStepIndex === ONBOARDING_STEPS.length - 1}
           >
             Next Step
           </button>
         </div>
 
-        <div className="onboarding-actions">
+        <div className="onboarding-actions" role="group" aria-label="Step actions">
           <button
             type="button"
             className="onboarding-btn primary"
             onClick={() => markCurrentStep('completed')}
             disabled={currentStatus !== 'pending'}
+            aria-disabled={currentStatus !== 'pending'}
           >
             Mark Complete
           </button>
+
           <button
             type="button"
             className="onboarding-btn secondary"
             onClick={() => markCurrentStep('skipped')}
             disabled={currentStatus !== 'pending'}
+            aria-disabled={currentStatus !== 'pending'}
           >
             Skip Step
           </button>
-          <button type="button" className="onboarding-btn danger" onClick={skipAll}>
+
+          <button
+            type="button"
+            className="onboarding-btn danger"
+            onClick={skipAll}
+            aria-label="Skip all onboarding steps"
+          >
             Skip Onboarding
           </button>
         </div>

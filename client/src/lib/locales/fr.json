@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "brand": "StellarEscrow",
+    "home": "Accueil"
+  },
+  "home": {
+    "title": "StellarEscrow",
+    "subtitle": "Séquestre décentralisé sur Stellar/Soroban",
+    "viewTrade": "Voir l'échange #1",
+    "viewTradeDesc": "Interface de financement test",
+    "comingSoon": "Bientôt disponible",
+    "comingSoonDesc": "Créer des échanges, tableau de bord acheteur"
+  },
+  "trade": {
+    "title": "Échange #{id}",
+    "backToTrades": "← Retour aux échanges",
+    "loading": "Chargement des détails de l'échange...",
+    "status": "Statut: {status}",
+    "created": "Créé: {time}",
+    "fundTrade": "Financer l'échange",
+    "seller": "Vendeur",
+    "buyer": "Acheteur",
+    "amount": "Montant",
+    "platformFee": "Frais de plateforme",
+    "you": "(vous)",
+    "statusTimeline": "Chronologie",
+    "tradeCreated": "Échange créé",
+    "tradeFunded": "Échange financé",
+    "hoursAgo": "il y a {count} heures",
+    "statuses": {
+      "Created": "Créé",
+      "Funded": "Financé",
+      "Completed": "Terminé",
+      "Disputed": "En litige",
+      "Cancelled": "Annulé"
+    }
+  },
+  "funding": {
+    "modalTitle": "Financer l'échange #{id}",
+    "loadingPreview": "Chargement de l'aperçu...",
+    "youllPay": "Vous paierez:",
+    "platformFee": "Frais:",
+    "balance": "Solde:",
+    "allowanceNeeded": "Autorisation requise:",
+    "allowanceDesc": "{amount} USDC au contrat de séquestre",
+    "approveUsdc": "Approuver USDC",
+    "approving": "Approbation...",
+    "usdcApproved": "USDC approuvé ✓",
+    "readyToFund": "Prêt à financer",
+    "cancel": "Annuler",
+    "confirmFund": "Confirmer et financer",
+    "funding": "Financement...",
+    "successTitle": "Échange financé avec succès!",
+    "successTx": "Tx: {hash}",
+    "errorGeneric": "Une erreur s'est produite"
+  },
+  "offline": {
+    "banner": "Vous êtes hors ligne. Certaines fonctionnalités peuvent ne pas fonctionner.",
+    "backOnline": "De retour en ligne!"
+  },
+  "search": {
+    "placeholder": "Rechercher des échanges..."
+  },
+  "errors": {
+    "loadPreviewFailed": "Échec du chargement de l'aperçu",
+    "approvalFailed": "Échec de l'approbation",
+    "fundingFailed": "Échec du financement"
+  },
+  "currency": {
+    "usdc": "USDC",
+    "suffix": "USDC"
+  },
+  "language": {
+    "select": "Langue",
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "pt": "Português",
+    "ar": "العربية",
+    "zh": "中文"
+  }
+}
