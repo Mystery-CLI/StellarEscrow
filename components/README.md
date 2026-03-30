@@ -97,6 +97,28 @@ import { Alert } from '@stellar-escrow/components';
 - `title`: string (optional)
 - `onClose`: () => void (optional)
 
+#### Avatar
+User profile picture or placeholder with initials.
+
+```tsx
+import { Avatar } from '@stellar-escrow/components';
+
+<Avatar
+  src="https://example.com/user.jpg"
+  alt="User Name"
+  size="md"
+  variant="circle"
+  fallback="User Name"
+/>
+```
+
+**Props:**
+- `src`: string (optional)
+- `alt`: string (optional)
+- `size`: 'sm' | 'md' | 'lg' | 'xl' (default: 'md')
+- `variant`: 'circle' | 'square' (default: 'circle')
+- `fallback`: string (initials will be derived from this if src fails or is missing)
+
 ### Escrow Components
 
 #### TradeStatus
