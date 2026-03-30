@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: db-prod
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pg-password
+  namespace: db-prod
+stringData:
+  postgresql-password: "postgres@@Pass"
+  postgresql-replication-password: "repl@@Pass"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: db-prod
+data:
+  postgresql.conf: |-
+    listen_addresses = '*'
+    max_connections = 500
+    shared_buffers = 4GB
+    work_mem = 64MB
+    maintenance_work_mem = 512MB
+    effective_cache_size = 12GB
+    wal_level = replica
+    max_wal_senders = 10
+    wal_keep_size = 2GB
+    archive_mode = on
+    archive_timeout = 60s
+    archive_command = 'test ! -f /pg_archive/%f && cp %p /pg_archive/%f'
+  pg_hba.conf: |-
+    host replication all 0.0.0.0/0 md5
+    host all all 0.0.0.0/0 md5
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql
+  namespace: db-prod
+spec:
+  serviceName: postgresql
+  replicas: 3
+  selector:
+    matchLabels:
+      app: postgresql
+  template:
+    metadata:
+      labels:
+        app: postgresql
+    spec:
+      containers:
+      - name: postgresql
+        image: bitnami/postgresql:16
+        env:
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: pg-password
+                key: postgresql-password
+          - name: POSTGRESQL_REPLICATION_MODE
+            value: "master"
+          - name: POSTGRESQL_REPLICATION_USER
+            value: "replicator"
+          - name: POSTGRESQL_REPLICATION_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: pg-password
+                key: postgresql-replication-password
+        volumeMounts:
+          - name: data
+            mountPath: /var/lib/postgresql/data
+          - name: pg-config
+            mountPath: /bitnami/postgresql/conf
+      - name: postgres-exporter
+        image: wrouesnel/postgres_exporter:latest
+        env:
+          - name: DATA_SOURCE_NAME
+            value: "postgresql://postgres:@localhost:5432/postgres?sslmode=disable"
+        ports:
+          - containerPort: 9187
+            name: metrics
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 100Gi
+      storageClassName: gp3
+  volumeClaimTemplates: []
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  namespace: db-prod
+spec:
+  clusterIP: None
+  selector:
+    app: postgresql
+  ports:
+  - port: 5432
+    name: postgresql
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-daily-backup
+  namespace: db-prod
+spec:
+  schedule: "0 1 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: amazon/aws-cli:latest
+            env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pg-password
+                  key: postgresql-password
+            command:
+            - /bin/sh
+            - -c
+            - |
+              TIMESTAMP=$(date +%F_%H%M)
+              mkdir -p /backup
+              pg_dumpall -U postgres > /backup/pg_dump_${TIMESTAMP}.sql
+              aws s3 cp /backup/pg_dump_${TIMESTAMP}.sql s3://my-prod-db-backups/postgres/
+              find /backup -type f -mtime +30 -delete
+            volumeMounts:
+            - name: backup-volume
+              mountPath: /backup
+          volumes:
+          - name: backup-volume
+            emptyDir: {}

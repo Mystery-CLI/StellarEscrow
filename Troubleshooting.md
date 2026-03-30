@@ -525,4 +525,61 @@ See [Deployment Guide — Section 8](02-DEPLOYMENT.md#8-post-deployment-verifica
 
 ---
 
+## 8. Infrastructure Alert Runbooks
+
+### RB-010: High CPU / Memory Usage
+
+**Alert:** `HighCPUUsage` / `CriticalCPUUsage` / `HighMemoryUsage` / `CriticalMemoryUsage`
+
+```bash
+# Identify top processes
+docker stats --no-stream
+top -b -n1 | head -20
+
+# Check indexer memory
+docker compose exec indexer cat /proc/self/status | grep VmRSS
+
+# Restart the offending service if memory-leaking
+docker compose restart indexer
+```
+
+### RB-011: Disk Space Warning
+
+**Alert:** `DiskSpaceWarning` / `DiskSpaceCritical`
+
+```bash
+# Find large files
+du -sh /var/lib/docker/volumes/* | sort -rh | head -10
+
+# Prune unused Docker data
+docker system prune -f
+
+# Truncate old Prometheus data if needed (adjust retention in docker-compose.yml)
+# Reduce --storage.tsdb.retention.time=15d and restart prometheus
+docker compose restart prometheus
+```
+
+### RB-012: PostgreSQL Connection Exhaustion
+
+**Alert:** `PostgresHighConnections`
+
+```bash
+# Check active connections
+docker compose exec postgres psql -U indexer -d stellar_escrow \
+  -c "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
+
+# Kill idle connections older than 10 minutes
+docker compose exec postgres psql -U indexer -d stellar_escrow \
+  -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+      WHERE state = 'idle' AND query_start < NOW() - INTERVAL '10 minutes';"
+```
+
+### RB-013: Redis Down / Low Hit Rate
+
+**Alert:** `RedisDown` / `RedisLowHitRate`
+
+See [RB-005](#rb-005-redis-cache-failure). For low hit rate, check TTL configuration in `indexer/src/cache.rs` and consider increasing cache TTLs for read-heavy endpoints.
+
+---
+
 *© 2026 StellarEscrow*

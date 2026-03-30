@@ -17,7 +17,7 @@ describe('API contract', () => {
       }),
     updateTrade: () => api.trades.updateTrade('1', { status: 'funded' }),
     deleteTrade: () => api.trades.deleteTrade('1'),
-    listEvents: () => api.events.getEvents(100),
+    listEvents: () => api.events.getEvents({ limit: 100 }),
     getEventsByTrade: () => api.events.getEventsByTrade('1'),
     getEvent: () => api.events.getEvent('1'),
     fundTrade: () => api.blockchain.fundTrade('1', '100'),

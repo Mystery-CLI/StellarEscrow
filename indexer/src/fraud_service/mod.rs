@@ -64,9 +64,13 @@ impl FraudDetectionService {
                 limit: Some(100),
                 offset: None,
                 event_type: Some("trade_created".to_string()),
+                category: None,
                 trade_id: None,
                 from_ledger: None,
                 to_ledger: None,
+                from_time: None,
+                to_time: None,
+                contract_id: None,
             })
             .await
             .unwrap_or_default();

@@ -55,6 +55,99 @@ impl Database {
         Self { pool }
     }
 
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+(&self, event: &Event) -> Result<(), AppError> {
+    /// Record a slow query to the slow_query_log table (fire-and-forget).
+    /// Only logs queries exceeding `threshold_ms`.
+    pub fn log_slow_query(
+        pool: PgPool,
+        query_hash: String,
+        query_text: String,
+        duration_ms: f64,
+        rows_returned: Option<i32>,
+    ) {
+        const THRESHOLD_MS: f64 = 100.0;
+        if duration_ms < THRESHOLD_MS {
+            return;
+        }
+        tokio::spawn(async move {
+            let _ = sqlx::query(
+                "INSERT INTO slow_query_log (query_hash, query_text, duration_ms, rows_returned) \
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(&query_hash)
+            .bind(&query_text)
+            .bind(duration_ms)
+            .bind(rows_returned)
+            .execute(&pool)
+            .await;
+        });
+    }
+
+    /// Fetch the top slow queries from pg_stat_statements.
+    pub async fn get_slow_queries(&self, limit: i64) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT query,
+                   calls,
+                   round(mean_exec_time::numeric, 2)  AS mean_ms,
+                   round(total_exec_time::numeric, 2) AS total_ms,
+                   round(stddev_exec_time::numeric, 2) AS stddev_ms
+            FROM pg_stat_statements
+            ORDER BY mean_exec_time DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit.clamp(1, 50))
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "query":    r.get::<String, _>("query"),
+                    "calls":    r.get::<i64, _>("calls"),
+                    "mean_ms":  r.get::<f64, _>("mean_ms"),
+                    "total_ms": r.get::<f64, _>("total_ms"),
+                    "stddev_ms":r.get::<f64, _>("stddev_ms"),
+                })
+            })
+            .collect())
+    }
+
+    /// Fetch tables with low index-scan ratio (candidates for new indexes).
+    pub async fn get_index_usage(&self) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT relname AS table,
+                   seq_scan, idx_scan,
+                   CASE WHEN seq_scan + idx_scan = 0 THEN 0
+                        ELSE round(100.0 * idx_scan / (seq_scan + idx_scan), 1)
+                   END AS idx_pct
+            FROM pg_stat_user_tables
+            ORDER BY idx_pct ASC
+            LIMIT 20
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "table":    r.get::<String, _>("table"),
+                    "seq_scan": r.get::<i64, _>("seq_scan"),
+                    "idx_scan": r.get::<i64, _>("idx_scan"),
+                    "idx_pct":  r.get::<f64, _>("idx_pct"),
+                })
+            })
+            .collect())
+    }
+
     pub async fn insert_event(&self, event: &Event) -> Result<(), AppError> {
         sqlx::query(
             r#"
@@ -244,50 +337,41 @@ impl Database {
     }
 
     pub async fn count_events(&self, query: &EventQuery) -> Result<i64, AppError> {
-        let mut sql = "SELECT COUNT(*) FROM events WHERE 1=1".to_string();
-        let mut bindings: Vec<String> = vec![];
-
-        if let Some(event_type) = &query.event_type {
-            sql.push_str(&format!(" AND event_type = ${}", bindings.len() + 1));
-            bindings.push(event_type.clone());
+        let mut b = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM events WHERE 1=1");
+        if let Some(ref event_type) = query.event_type {
+            b.push(" AND event_type = ");
+            b.push_bind(event_type);
         }
-        if let Some(category) = &query.category {
-            sql.push_str(&format!(" AND category = ${}", bindings.len() + 1));
-            bindings.push(category.clone());
+        if let Some(ref category) = query.category {
+            b.push(" AND category = ");
+            b.push_bind(category);
         }
-        if let Some(contract_id) = &query.contract_id {
-            sql.push_str(&format!(" AND contract_id = ${}", bindings.len() + 1));
-            bindings.push(contract_id.clone());
+        if let Some(ref contract_id) = query.contract_id {
+            b.push(" AND contract_id = ");
+            b.push_bind(contract_id);
         }
         if let Some(trade_id) = query.trade_id {
-            sql.push_str(&format!(" AND data->>'trade_id' = ${}", bindings.len() + 1));
-            bindings.push(trade_id.to_string());
+            b.push(" AND data->>'trade_id' = ");
+            b.push_bind(trade_id.to_string());
         }
         if let Some(from_ledger) = query.from_ledger {
-            sql.push_str(&format!(" AND ledger >= ${}", bindings.len() + 1));
-            bindings.push(from_ledger.to_string());
+            b.push(" AND ledger >= ");
+            b.push_bind(from_ledger);
         }
         if let Some(to_ledger) = query.to_ledger {
-            sql.push_str(&format!(" AND ledger <= ${}", bindings.len() + 1));
-            bindings.push(to_ledger.to_string());
+            b.push(" AND ledger <= ");
+            b.push_bind(to_ledger);
         }
-
-        let mut q = sqlx::query(&sql);
-        for b in &bindings {
-            q = q.bind(b);
-        }
-        // Timestamp filters bound separately (DateTime type)
         if let Some(from_time) = query.from_time {
-            sql.push_str(&format!(" AND timestamp >= ${}", bindings.len() + 1));
-            q = q.bind(from_time);
+            b.push(" AND timestamp >= ");
+            b.push_bind(from_time);
         }
         if let Some(to_time) = query.to_time {
-            sql.push_str(&format!(" AND timestamp <= ${}", bindings.len() + 1));
-            q = q.bind(to_time);
+            b.push(" AND timestamp <= ");
+            b.push_bind(to_time);
         }
-
-        let row = q.fetch_one(&self.pool).await?;
-        Ok(row.get::<i64, _>(0))
+        let total: i64 = b.build_query_scalar().fetch_one(&self.pool).await?;
+        Ok(total)
     }
 
     pub async fn get_events_in_range(
@@ -466,8 +550,8 @@ impl Database {
         let limit = query.limit.unwrap_or(25).clamp(1, 100);
         let offset = query.offset.unwrap_or(0).max(0);
         let q = query.q.clone().unwrap_or_default();
-        let q_pattern = format!("%{}%", q);
 
+        // Use full-text search when a query term is provided, fall back to no filter
         let rows = sqlx::query_as::<_, TradeSearchResult>(
             r#"
             WITH latest_trade_events AS (
@@ -481,10 +565,11 @@ impl Database {
             trade_base AS (
                 SELECT
                     (e.data->>'trade_id')::BIGINT AS trade_id,
-                    e.data->>'seller' AS seller,
-                    e.data->>'buyer' AS buyer,
-                    (e.data->>'amount')::BIGINT AS amount,
-                    e.timestamp AS created_at
+                    e.data->>'seller'             AS seller,
+                    e.data->>'buyer'              AS buyer,
+                    (e.data->>'amount')::BIGINT   AS amount,
+                    e.timestamp                   AS created_at,
+                    e.search_vec
                 FROM events e
                 WHERE e.event_type = 'trade_created'
             )
@@ -498,18 +583,19 @@ impl Database {
             FROM trade_base tb
             JOIN latest_trade_events lte ON lte.trade_id = tb.trade_id
             WHERE
-                ($1 = '' OR tb.trade_id::TEXT ILIKE $2 OR tb.seller ILIKE $2 OR tb.buyer ILIKE $2)
-                AND ($3::TEXT IS NULL OR lte.event_type = $3)
-                AND ($4::TEXT IS NULL OR tb.seller = $4)
-                AND ($5::TEXT IS NULL OR tb.buyer = $5)
-                AND ($6::BIGINT IS NULL OR tb.amount >= $6)
-                AND ($7::BIGINT IS NULL OR tb.amount <= $7)
-            ORDER BY tb.created_at DESC
-            LIMIT $8 OFFSET $9
+                ($1 = '' OR tb.search_vec @@ plainto_tsquery('english', $1))
+                AND ($2::TEXT IS NULL OR lte.event_type = $2)
+                AND ($3::TEXT IS NULL OR tb.seller = $3)
+                AND ($4::TEXT IS NULL OR tb.buyer = $4)
+                AND ($5::BIGINT IS NULL OR tb.amount >= $5)
+                AND ($6::BIGINT IS NULL OR tb.amount <= $6)
+            ORDER BY
+                CASE WHEN $1 = '' THEN 0 ELSE ts_rank(tb.search_vec, plainto_tsquery('english', $1)) END DESC,
+                tb.created_at DESC
+            LIMIT $7 OFFSET $8
             "#,
         )
         .bind(q.as_str())
-        .bind(q_pattern.as_str())
         .bind(query.status.as_deref())
         .bind(query.seller.as_deref())
         .bind(query.buyer.as_deref())
@@ -529,20 +615,19 @@ impl Database {
     ) -> Result<Vec<DiscoveryResult>, AppError> {
         let limit = query.limit.unwrap_or(25).clamp(1, 100);
         let q = query.q.clone().unwrap_or_default();
-        let q_pattern = format!("%{}%", q);
 
         let rows = sqlx::query_as::<_, DiscoveryResult>(
             r#"
             WITH entities AS (
-                SELECT data->>'seller' AS address, 'user' AS role, timestamp
+                SELECT data->>'seller' AS address, 'user' AS role, timestamp, search_vec
                 FROM events
                 WHERE event_type = 'trade_created' AND data->>'seller' IS NOT NULL
                 UNION ALL
-                SELECT data->>'buyer' AS address, 'user' AS role, timestamp
+                SELECT data->>'buyer' AS address, 'user' AS role, timestamp, search_vec
                 FROM events
                 WHERE event_type = 'trade_created' AND data->>'buyer' IS NOT NULL
                 UNION ALL
-                SELECT data->>'arbitrator' AS address, 'arbitrator' AS role, timestamp
+                SELECT data->>'arbitrator' AS address, 'arbitrator' AS role, timestamp, search_vec
                 FROM events
                 WHERE event_type = 'arb_reg' AND data->>'arbitrator' IS NOT NULL
             )
@@ -553,20 +638,47 @@ impl Database {
                 MAX(timestamp) AS last_seen
             FROM entities
             WHERE
-                ($1 = '' OR address ILIKE $2)
-                AND ($3::TEXT IS NULL OR role = $3)
+                ($1 = '' OR search_vec @@ plainto_tsquery('english', $1))
+                AND ($2::TEXT IS NULL OR role = $2)
             GROUP BY address, role
             ORDER BY seen_count DESC, last_seen DESC
-            LIMIT $4
+            LIMIT $3
             "#,
         )
         .bind(q.as_str())
-        .bind(q_pattern.as_str())
         .bind(query.role.as_deref())
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
 
+        Ok(rows)
+    }
+
+    /// Full-text search over registered user profiles.
+    pub async fn search_users(
+        &self,
+        q: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<crate::models::UserProfile>, AppError> {
+        let rows = sqlx::query_as::<_, crate::models::UserProfile>(
+            r#"
+            SELECT *
+            FROM user_profiles
+            WHERE $1 = '' OR search_vec @@ plainto_tsquery('english', $1)
+            ORDER BY
+                CASE WHEN $1 = '' THEN 0
+                     ELSE ts_rank(search_vec, plainto_tsquery('english', $1))
+                END DESC,
+                registered_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(q)
+        .bind(limit.clamp(1, 100))
+        .bind(offset.max(0))
+        .fetch_all(&self.pool)
+        .await?;
         Ok(rows)
     }
 
@@ -968,22 +1080,8 @@ impl Database {
     ) -> Result<crate::models::NotificationPreferences, AppError> {
         // Fetch existing or use defaults, then apply partial update
         let existing = self.get_notification_preferences(address).await?;
-        let base = existing.unwrap_or_else(|| crate::models::NotificationPreferences {
-            address: address.to_string(),
-            email_enabled: false,
-            email_address: None,
-            sms_enabled: false,
-            phone_number: None,
-            push_enabled: false,
-            push_token: None,
-            on_trade_created: true,
-            on_trade_funded: true,
-            on_trade_completed: true,
-            on_trade_confirmed: true,
-            on_dispute_raised: true,
-            on_dispute_resolved: true,
-            on_trade_cancelled: true,
-            updated_at: chrono::Utc::now(),
+        let base = existing.unwrap_or_else(|| {
+            crate::models::NotificationPreferences::default_for_address(address.to_string())
         });
 
         let row = sqlx::query_as::<_, crate::models::NotificationPreferences>(
@@ -1030,6 +1128,23 @@ impl Database {
         .await?;
 
         Ok(row)
+    }
+
+    pub async fn unregister_push_token(&self, token: &str) -> Result<u64, AppError> {
+        let result = sqlx::query(
+            r#"
+            UPDATE notification_preferences
+            SET push_enabled = FALSE,
+                push_token = NULL,
+                updated_at = NOW()
+            WHERE push_token = $1
+            "#,
+        )
+        .bind(token)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
     }
 
     pub async fn log_notification(
@@ -1106,6 +1221,12 @@ impl Database {
         .bind(status_code as i16)
         .bind(duration_ms as i64)
         .bind(is_error)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
     // Integration service
     // -----------------------------------------------------------------------
 
@@ -1155,7 +1276,44 @@ impl Database {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
     pub async fn get_integration_deliveries(
+    /// Query the hourly APM rollup materialized view for the last `hours` hours.
+    pub async fn get_perf_hourly_rollup(
+        &self,
+        hours: i64,
+    ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+            SELECT hour, route, method, requests, errors, avg_ms, p95_ms, p99_ms
+            FROM perf_metrics_hourly
+            WHERE hour >= NOW() - ($1 || ' hours')::INTERVAL
+            ORDER BY hour DESC
+            LIMIT 500
+            "#,
+        )
+        .bind(hours)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                use sqlx::Row;
+                serde_json::json!({
+                    "hour": r.get::<chrono::DateTime<chrono::Utc>, _>("hour"),
+                    "route": r.get::<String, _>("route"),
+                    "method": r.get::<String, _>("method"),
+                    "requests": r.get::<i64, _>("requests"),
+                    "errors": r.get::<i64, _>("errors"),
+                    "avg_ms": r.get::<f64, _>("avg_ms"),
+                    "p95_ms": r.get::<f64, _>("p95_ms"),
+                    "p99_ms": r.get::<f64, _>("p99_ms"),
+                })
+            })
+            .collect())
+    }
         &self,
         connector_id: Option<&str>,
         limit: i64,
@@ -1406,6 +1564,42 @@ impl Database {
         .bind(ep.active)
         .bind(ep.created_at)
         .bind(ep.failure_count as i32)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn deactivate_webhook_endpoint(&self, id: Uuid) -> Result<(), anyhow::Error> {
+        sqlx::query("UPDATE webhook_endpoints SET active = false WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn insert_webhook_delivery(
+        &self,
+        record: &crate::webhook_service::WebhookDeliveryRecord,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "INSERT INTO webhook_deliveries (id, endpoint_id, event_type, payload, status_code, success, attempt, error, delivered_at, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
+        )
+        .bind(record.id)
+        .bind(record.endpoint_id)
+        .bind(&record.event_type)
+        .bind(&record.payload)
+        .bind(record.status_code.map(|c| c as i32))
+        .bind(record.success)
+        .bind(record.attempt as i32)
+        .bind(&record.error)
+        .bind(record.delivered_at)
+        .bind(record.duration_ms as i64)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+}
+
 // Compliance Operations
 // =============================================================================
 
@@ -1508,34 +1702,6 @@ impl Database {
         Ok(())
     }
 
-    pub async fn deactivate_webhook_endpoint(&self, id: Uuid) -> Result<(), anyhow::Error> {
-        sqlx::query("UPDATE webhook_endpoints SET active = false WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn insert_webhook_delivery(
-        &self,
-        record: &crate::webhook_service::WebhookDeliveryRecord,
-    ) -> Result<(), AppError> {
-        sqlx::query(
-            "INSERT INTO webhook_deliveries (id, endpoint_id, event_type, payload, status_code, success, attempt, error, delivered_at, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
-        )
-        .bind(record.id)
-        .bind(record.endpoint_id)
-        .bind(&record.event_type)
-        .bind(&record.payload)
-        .bind(record.status_code.map(|c| c as i32))
-        .bind(record.success)
-        .bind(record.attempt as i32)
-        .bind(&record.error)
-        .bind(record.delivered_at)
-        .bind(record.duration_ms as i64)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
     fn row_to_compliance_check(
         &self,
         row: &sqlx::postgres::PgRow,

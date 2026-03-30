@@ -3,7 +3,6 @@ pub mod validation;
 
 use crate::database::Database;
 use crate::models::Event;
-use delivery::WebhookDelivery;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;

@@ -15,7 +15,20 @@ scrape_configs:
           - localhost
         labels:
           job: stellar-escrow
-          __path__: /var/log/*.log
+          __path__: /var/log/stellar-escrow/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            message: message
+            timestamp: timestamp
+      - labels:
+          level:
+      - match:
+          selector: '{job="stellar-escrow"} |= "ERROR"'
+          stages:
+            - labels:
+                error: "true"
 
   - job_name: docker
     docker_sd_configs:
@@ -23,4 +36,14 @@ scrape_configs:
         refresh_interval: 5s
     relabel_configs:
       - source_labels: ['__meta_docker_container_name']
+        regex: '/?(.*)'
         target_label: container
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            message: message
+      - labels:
+          level:

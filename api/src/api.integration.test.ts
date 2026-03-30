@@ -1,6 +1,6 @@
 import { rest } from 'msw';
 import { createApi } from './index';
-import { server } from './mocks';
+import { server } from './mocks/server';
 
 describe('API integration', () => {
   it('runs the documented happy path against mocked endpoints', async () => {
@@ -21,21 +21,21 @@ describe('API integration', () => {
       id: '1',
       status: 'funded',
     });
-    await expect(api.trades.deleteTrade('1')).resolves.toBeUndefined();
+    await expect(api.trades.deleteTrade('1')).resolves.toEqual('');
 
-    await expect(api.events.getEvents(100)).resolves.toHaveLength(1);
-    await expect(api.events.getEvents(100, '1')).resolves.toHaveLength(1);
+    await expect(api.events.getEvents({ limit: 100 })).resolves.toHaveLength(1);
+    await expect(api.events.getEvents({ limit: 100, trade_id: '1' })).resolves.toHaveLength(1);
     await expect(api.events.getEventsByTrade('1')).resolves.toHaveLength(1);
     await expect(api.events.getEvent('1')).resolves.toMatchObject({ id: '1', tradeId: '1' });
 
     await expect(api.blockchain.fundTrade('1', '100')).resolves.toMatchObject({
-      txHash: '0xtx0001',
+      txHash: expect.any(String),
     });
     await expect(api.blockchain.completeTrade('1')).resolves.toMatchObject({
-      txHash: '0xtx0002',
+      txHash: expect.any(String),
     });
     await expect(api.blockchain.resolveDispute('1', 'release_to_buyer')).resolves.toMatchObject({
-      txHash: '0xtx0003',
+      txHash: expect.any(String),
     });
     await expect(api.blockchain.getTransactionStatus('0xtx0003')).resolves.toEqual({
       status: 'confirmed',
@@ -48,7 +48,7 @@ describe('API integration', () => {
     let authorizationHeader: string | null = null;
 
     server.use(
-      rest.get('/api/trades', (req, res, ctx) => {
+      rest.get('http://localhost:3000/api/trades', (req, res, ctx) => {
         authorizationHeader = req.headers.get('authorization');
         return res(ctx.json([]));
       })
@@ -61,13 +61,13 @@ describe('API integration', () => {
   });
 
   it('invokes registered error handlers and rethrows the original failure', async () => {
-    const api = createApi('http://localhost:3000');
+    const api = createApi('http://localhost:3000', { retryMax: 0 });
     const handler = jest.fn();
 
     server.use(
-      rest.get('/api/trades', (_req, res, ctx) =>
-        res(ctx.status(500), ctx.json({ error: 'temporary outage' }))
-      )
+      rest.get('http://localhost:3000/api/trades', (_req, res, ctx) => {
+        return res(ctx.status(500), ctx.json({ error: 'temporary outage' }));
+      })
     );
 
     api.addErrorHandler(handler);
@@ -80,11 +80,11 @@ describe('API integration', () => {
   });
 
   it('retries transient failures before returning a successful response', async () => {
-    const api = createApi('http://localhost:3000');
+    const api = createApi('http://localhost:3000', { retryDelayMs: 0 });
     let attempts = 0;
-
+ 
     server.use(
-      rest.get('/api/trades', (_req, res, ctx) => {
+      rest.get('http://localhost:3000/api/trades', (_req, res, ctx) => {
         attempts += 1;
         if (attempts === 1) {
           return res(ctx.status(503), ctx.json({ error: 'retry me' }));

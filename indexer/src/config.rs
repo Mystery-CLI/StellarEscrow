@@ -30,6 +30,8 @@ pub struct Config {
     pub analytics: AnalyticsConfig,
     #[serde(default)]
     pub backup: BackupConfig,
+    #[serde(default)]
+    pub audit: AuditConfig,
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +105,19 @@ fn default_schema_version() -> u32 {
     1
 }
 
+/// Non-secret subset of `Config` for operators and deployment validation (issue #313).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicConfigSnapshot {
+    pub meta: MetaConfig,
+    pub server: ServerConfig,
+    pub stellar_network: String,
+    pub stellar_horizon_url: String,
+    pub stellar_contract_configured: bool,
+    pub cache_redis_configured: bool,
+    pub backup_interval_hours: u64,
+    pub gateway_instance_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub port: u16,
@@ -143,14 +158,22 @@ pub struct CacheConfig {
     /// TTL for event list responses (seconds, default: 10)
     #[serde(default = "default_events_ttl")]
     pub events_ttl_secs: u64,
+    /// TTL for search results (seconds, default: 30)
+    #[serde(default = "default_search_ttl")]
+    pub search_ttl_secs: u64,
+    /// TTL for analytics dashboard (seconds, default: 60)
+    #[serde(default = "default_analytics_ttl")]
+    pub analytics_ttl_secs: u64,
+    /// TTL for platform stats (seconds, default: 60)
+    #[serde(default = "default_stats_ttl")]
+    pub stats_ttl_secs: u64,
 }
 
-fn default_cache_ttl() -> u64 {
-    30
-}
-fn default_events_ttl() -> u64 {
-    10
-}
+fn default_cache_ttl() -> u64 { 30 }
+fn default_events_ttl() -> u64 { 10 }
+fn default_search_ttl() -> u64 { 30 }
+fn default_analytics_ttl() -> u64 { 60 }
+fn default_stats_ttl() -> u64 { 60 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StellarConfig {
@@ -466,6 +489,20 @@ impl Config {
             Err(ConfigValidationError(errors))
         }
     }
+
+    /// Safe, privacy-preserving view for `/config/public` (no API keys, DB URLs, or webhook secrets).
+    pub fn public_snapshot(&self) -> PublicConfigSnapshot {
+        PublicConfigSnapshot {
+            meta: self.meta.clone(),
+            server: self.server.clone(),
+            stellar_network: self.stellar.network.clone(),
+            stellar_horizon_url: self.stellar.horizon_url.clone(),
+            stellar_contract_configured: !self.stellar.contract_id.is_empty(),
+            cache_redis_configured: !self.cache.redis_url.is_empty(),
+            backup_interval_hours: self.backup.interval_hours,
+            gateway_instance_count: self.gateway.service_instances.len(),
+        }
+    }
 }
 
 impl Default for Config {
@@ -483,7 +520,7 @@ impl Default for Config {
             database: DatabaseConfig {
                 url: "postgres://indexer:password@localhost/stellar_escrow".to_string(),
                 max_connections: 10,
-                connect_timeout_seconds: 30,
+                min_connections: 2,
             },
             stellar: StellarConfig {
                 network: "testnet".to_string(),
@@ -499,11 +536,11 @@ impl Default for Config {
                 whitelist: vec![],
                 blacklist: vec![],
             },
+            auth: AuthConfig::default(),
             storage: StorageConfig {
                 base_dir: "./uploads".to_string(),
                 max_file_size_mb: 10,
             },
-            notification: NotificationConfig::default(),
             notification: NotificationConfig {
                 email_api_url: "https://api.sendgrid.com".to_string(),
                 email_api_key: String::new(),
@@ -516,9 +553,39 @@ impl Default for Config {
                 push_project_id: String::new(),
                 push_server_key: String::new(),
             },
+            cache: CacheConfig::default(),
             gateway: GatewayConfig::default(),
-
             integration: IntegrationConfig::default(),
+            compliance: ComplianceConfig::default(),
+            monitoring: MonitoringConfig::default(),
+            analytics: AnalyticsConfig::default(),
+            backup: BackupConfig::default(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Audit config
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditConfig {
+    /// Retention period in days (default 90). Logs older than this are purged.
+    #[serde(default = "default_audit_retention")]
+    pub retention_days: u32,
+    /// How often to run the retention purge, in hours (0 = disabled, default 24).
+    #[serde(default = "default_audit_purge_interval")]
+    pub purge_interval_hours: u64,
+}
+
+fn default_audit_retention() -> u32 { 90 }
+fn default_audit_purge_interval() -> u64 { 24 }
+
+impl Default for AuditConfig {
+    fn default() -> Self {
+        Self {
+            retention_days: default_audit_retention(),
+            purge_interval_hours: default_audit_purge_interval(),
         }
     }
 }

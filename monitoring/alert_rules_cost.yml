@@ -1,0 +1,47 @@
+groups:
+  - name: stellar_escrow_cost
+    rules:
+      - alert: BudgetWarning
+        expr: stellar_escrow_estimated_monthly_cost_usd / stellar_escrow_monthly_budget_usd * 100 > 80
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Monthly budget 80% consumed"
+          description: "Estimated spend ${{ $value | humanize }} has exceeded 80% of the monthly budget."
+
+      - alert: BudgetExceeded
+        expr: stellar_escrow_estimated_monthly_cost_usd / stellar_escrow_monthly_budget_usd * 100 > 100
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Monthly budget exceeded"
+          description: "Estimated spend ${{ $value | humanize }} has exceeded the monthly budget."
+
+      - alert: CostAnomalySpike
+        expr: delta(stellar_escrow_estimated_monthly_cost_usd[24h]) > 20
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cost spike detected"
+          description: "Estimated monthly cost increased by ${{ $value | humanize }} in the last 24 hours."
+
+      - alert: LowCPUUtilisation
+        expr: avg(100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[1h])) * 100)) < 10
+        for: 24h
+        labels:
+          severity: info
+        annotations:
+          summary: "Low CPU utilisation — consider downsizing"
+          description: "Average CPU utilisation is {{ $value | humanize }}% over 24h. Consider reducing instance size."
+
+      - alert: LowMemoryUtilisation
+        expr: avg((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100) < 20
+        for: 24h
+        labels:
+          severity: info
+        annotations:
+          summary: "Low memory utilisation — consider downsizing"
+          description: "Average memory utilisation is {{ $value | humanize }}% over 24h."

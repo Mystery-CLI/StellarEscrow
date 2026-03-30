@@ -10,6 +10,8 @@ A high-performance event indexing service for the Stellar Escrow smart contract 
 - **WebSocket Streaming**: Real-time event broadcasting to connected clients
 - **Event Replay**: Replay historical events for catch-up or analysis
 - **Configurable**: Flexible configuration for different networks and contracts
+- **Redis Caching**: Read-through caching, invalidation, monitoring, and warming for hot API paths
+- **Background Jobs**: Redis-backed queue with priorities, scheduling, retries, and monitoring
 
 ## Architecture
 
@@ -154,6 +156,14 @@ port = 3000
 ```toml
 [database]
 url = "postgres://user:password@localhost/stellar_escrow"
+```
+
+### Cache Configuration
+```toml
+[cache]
+redis_url = "redis://:password@localhost:6379"
+default_ttl_secs = 30
+events_ttl_secs = 10
 ```
 
 ### Stellar Configuration
