@@ -395,3 +395,64 @@ export async function executeScenario(
 
   return summary;
 }
+
+export function exportMetricsToPrometheus(summary: PerformanceSummary): string {
+  const timestamp = Date.now();
+  let metrics = '';
+
+  // Overall scenario metrics
+  metrics += `# HELP stellar_escrow_performance_scenario_duration_ms Total duration of performance scenario in milliseconds\n`;
+  metrics += `# TYPE stellar_escrow_performance_scenario_duration_ms gauge\n`;
+  metrics += `stellar_escrow_performance_scenario_duration_ms{scenario="${summary.scenario}"} ${summary.wallTimeMs} ${timestamp}\n\n`;
+
+  metrics += `# HELP stellar_escrow_performance_scenario_throughput_req_per_sec Throughput in requests per second\n`;
+  metrics += `# TYPE stellar_escrow_performance_scenario_throughput_req_per_sec gauge\n`;
+  metrics += `stellar_escrow_performance_scenario_throughput_req_per_sec{scenario="${summary.scenario}"} ${summary.throughputPerSecond} ${timestamp}\n\n`;
+
+  metrics += `# HELP stellar_escrow_performance_scenario_error_rate Error rate as a percentage\n`;
+  metrics += `# TYPE stellar_escrow_performance_scenario_error_rate gauge\n`;
+  metrics += `stellar_escrow_performance_scenario_error_rate{scenario="${summary.scenario}"} ${summary.errorRate * 100} ${timestamp}\n\n`;
+
+  // Latency metrics
+  metrics += `# HELP stellar_escrow_performance_scenario_avg_latency_ms Average latency in milliseconds\n`;
+  metrics += `# TYPE stellar_escrow_performance_scenario_avg_latency_ms gauge\n`;
+  metrics += `stellar_escrow_performance_scenario_avg_latency_ms{scenario="${summary.scenario}"} ${summary.avgLatencyMs} ${timestamp}\n\n`;
+
+  metrics += `# HELP stellar_escrow_performance_scenario_p95_latency_ms P95 latency in milliseconds\n`;
+  metrics += `# TYPE stellar_escrow_performance_scenario_p95_latency_ms gauge\n`;
+  metrics += `stellar_escrow_performance_scenario_p95_latency_ms{scenario="${summary.scenario}"} ${summary.p95LatencyMs} ${timestamp}\n\n`;
+
+  // Per-operation metrics
+  for (const operation of summary.operations) {
+    const operationName = operation.operation.replace(/[^a-zA-Z0-9_]/g, '_');
+
+    metrics += `# HELP stellar_escrow_performance_operation_sample_count Number of samples for operation\n`;
+    metrics += `# TYPE stellar_escrow_performance_operation_sample_count gauge\n`;
+    metrics += `stellar_escrow_performance_operation_sample_count{scenario="${summary.scenario}",operation="${operation.operation}"} ${operation.sampleCount} ${timestamp}\n\n`;
+
+    metrics += `# HELP stellar_escrow_performance_operation_error_rate Error rate for operation as percentage\n`;
+    metrics += `# TYPE stellar_escrow_performance_operation_error_rate gauge\n`;
+    metrics += `stellar_escrow_performance_operation_error_rate{scenario="${summary.scenario}",operation="${operation.operation}"} ${operation.errorRate * 100} ${timestamp}\n\n`;
+
+    metrics += `# HELP stellar_escrow_performance_operation_avg_latency_ms Average latency for operation in milliseconds\n`;
+    metrics += `# TYPE stellar_escrow_performance_operation_avg_latency_ms gauge\n`;
+    metrics += `stellar_escrow_performance_operation_avg_latency_ms{scenario="${summary.scenario}",operation="${operation.operation}"} ${operation.avgLatencyMs} ${timestamp}\n\n`;
+
+    metrics += `# HELP stellar_escrow_performance_operation_p95_latency_ms P95 latency for operation in milliseconds\n`;
+    metrics += `# TYPE stellar_escrow_performance_operation_p95_latency_ms gauge\n`;
+    metrics += `stellar_escrow_performance_operation_p95_latency_ms{scenario="${summary.scenario}",operation="${operation.operation}"} ${operation.p95LatencyMs} ${timestamp}\n\n`;
+  }
+
+  // Alert metrics
+  metrics += `# HELP stellar_escrow_performance_alerts_total Total number of performance alerts\n`;
+  metrics += `# TYPE stellar_escrow_performance_alerts_total gauge\n`;
+  metrics += `stellar_escrow_performance_alerts_total{scenario="${summary.scenario}"} ${summary.alerts.length} ${timestamp}\n\n`;
+
+  for (const alert of summary.alerts) {
+    metrics += `# HELP stellar_escrow_performance_alert_triggered Alert triggered for metric\n`;
+    metrics += `# TYPE stellar_escrow_performance_alert_triggered gauge\n`;
+    metrics += `stellar_escrow_performance_alert_triggered{scenario="${summary.scenario}",severity="${alert.severity}",metric="${alert.metric}"} 1 ${timestamp}\n\n`;
+  }
+
+  return metrics;
+}

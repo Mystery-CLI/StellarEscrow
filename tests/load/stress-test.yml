@@ -1,0 +1,80 @@
+config:
+  target: 'http://localhost:3000'
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 120
+      arrivalRate: 50
+      name: "High load burst"
+    - duration: 60
+      arrivalRate: 100
+      name: "Extreme load"
+    - duration: 30
+      arrivalRate: 10
+      name: "Recovery"
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+    timeout: 10000
+
+scenarios:
+  - name: "Heavy read operations"
+    weight: 50
+    flow:
+      - get:
+          url: "/api/trades"
+          expect:
+            - statusCode: 200
+      - get:
+          url: "/api/events"
+          qs:
+            limit: 100
+          expect:
+            - statusCode: 200
+      - get:
+          url: "/api/analytics/dashboard"
+          expect:
+            - statusCode: 200
+
+  - name: "Concurrent trade operations"
+    weight: 30
+    flow:
+      - post:
+          url: "/api/trades"
+          json:
+            amount: "{{ $randomInt(1000, 50000) }}"
+            asset: "USDC"
+            seller: "GASTRESS{{ $randomInt(1000, 9999) }}"
+            buyer: "GASTRESS{{ $randomInt(1000, 9999) }}"
+          expect:
+            - statusCode: 201
+          capture:
+            json: "$.id"
+            as: "tradeId"
+      - post:
+          url: "/api/trades/{{ tradeId }}/fund"
+          json:
+            transactionHash: "stress_tx_{{ tradeId }}"
+          expect:
+            - statusCode: 200
+      - post:
+          url: "/api/trades/{{ tradeId }}/dispute"
+          json:
+            reason: "Stress test dispute"
+          expect:
+            - statusCode: 200
+
+  - name: "Blockchain status checks"
+    weight: 20
+    flow:
+      - loop:
+          - get:
+              url: "/api/blockchain/status"
+              expect:
+                - statusCode: 200
+          - get:
+              url: "/api/blockchain/fees"
+              expect:
+                - statusCode: 200
+        count: 10
