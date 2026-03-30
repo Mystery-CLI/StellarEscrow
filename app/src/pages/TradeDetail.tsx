@@ -7,13 +7,23 @@ export default function TradeDetail() {
   const { data: trade, isLoading, error } = useGetTradeQuery(id!);
   const { data: events = [] } = useGetEventsByTradeQuery(id!);
 
-  if (isLoading) return <p>Loading…</p>;
-  if (error || !trade) return <p>Trade not found. <Link to="/">Back</Link></p>;
+  if (isLoading) return <p role="status" aria-live="polite">Loading trade details…</p>;
+  if (error || !trade)
+    return (
+      <div role="alert">
+        <p>Trade not found.</p>
+        <Link to="/" className="back-link">
+          Back to Dashboard
+        </Link>
+      </div>
+    );
 
   return (
-    <div className="trade-detail-grid">
-      <div>
-        <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Trade #{trade.id}</h1>
+    <main className="trade-detail-grid" aria-labelledby="trade-title">
+      <section>
+        <h1 id="trade-title" style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>
+          Trade #{trade.id}
+        </h1>
         <TradeCard
           tradeId={trade.id}
           seller={trade.seller}
@@ -21,12 +31,16 @@ export default function TradeDetail() {
           amount={trade.amount}
           status={trade.status}
           timestamp={trade.timestamp}
+          aria-label={`Trade details for trade #${trade.id}`}
         />
-      </div>
-      <div>
-        <h2 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Events</h2>
-        <EventFeed events={events} />
-      </div>
-    </div>
+      </section>
+
+      <section aria-labelledby="trade-events-title">
+        <h2 id="trade-events-title" style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
+          Events
+        </h2>
+        <EventFeed events={events} aria-label={`Event feed for trade #${trade.id}`} />
+      </section>
+    </main>
   );
 }

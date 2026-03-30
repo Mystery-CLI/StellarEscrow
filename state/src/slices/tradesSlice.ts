@@ -1,12 +1,15 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createEntityAdapter, PayloadAction } from '@reduxjs/toolkit';
 import { Trade, TradesState } from '../types';
 
-const initialState: TradesState = {
-  byId: {},
-  allIds: [],
+export const tradesAdapter = createEntityAdapter<Trade>({
+  selectId: (trade) => trade.id,
+  sortComparer: (a, b) => a.timestamp.localeCompare(b.timestamp),
+});
+
+const initialState: TradesState = tradesAdapter.getInitialState({
   loading: false,
   error: null,
-};
+});
 
 const tradesSlice = createSlice({
   name: 'trades',
@@ -18,31 +21,13 @@ const tradesSlice = createSlice({
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
     },
-    addTrade: (state, action: PayloadAction<Trade>) => {
-      const trade = action.payload;
-      state.byId[trade.id] = trade;
-      if (!state.allIds.includes(trade.id)) {
-        state.allIds.push(trade.id);
-      }
-    },
+    addTrade: tradesAdapter.upsertOne,
     updateTrade: (state, action: PayloadAction<Partial<Trade> & { id: string }>) => {
-      const { id, ...updates } = action.payload;
-      if (state.byId[id]) {
-        state.byId[id] = { ...state.byId[id], ...updates };
-      }
+      const { id, ...changes } = action.payload;
+      tradesAdapter.updateOne(state, { id, changes });
     },
-    setTrades: (state, action: PayloadAction<Trade[]>) => {
-      state.byId = {};
-      state.allIds = [];
-      action.payload.forEach((trade) => {
-        state.byId[trade.id] = trade;
-        state.allIds.push(trade.id);
-      });
-    },
-    removeTrade: (state, action: PayloadAction<string>) => {
-      delete state.byId[action.payload];
-      state.allIds = state.allIds.filter((id) => id !== action.payload);
-    },
+    setTrades: tradesAdapter.setAll,
+    removeTrade: tradesAdapter.removeOne,
   },
 });
 

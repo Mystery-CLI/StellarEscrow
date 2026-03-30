@@ -1,0 +1,79 @@
+config:
+  target: 'http://localhost:3000'
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: "Warm up phase"
+    - duration: 300
+      arrivalRate: 10
+      name: "Sustained load"
+    - duration: 60
+      arrivalRate: 20
+      name: "Increased load"
+    - duration: 60
+      arrivalRate: 5
+      name: "Cool down"
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+
+scenarios:
+  - name: "Get trades list"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/trades"
+          expect:
+            - statusCode: 200
+          capture:
+            json: "$.length"
+            as: "tradeCount"
+
+  - name: "Get events"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/events"
+          qs:
+            limit: 50
+          expect:
+            - statusCode: 200
+
+  - name: "Create and complete trade flow"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/trades"
+          json:
+            amount: "{{ $randomInt(100, 10000) }}"
+            asset: "USDC"
+            seller: "GASELLER123"
+            buyer: "GABUYER456"
+          expect:
+            - statusCode: 201
+          capture:
+            json: "$.id"
+            as: "tradeId"
+      - post:
+          url: "/api/trades/{{ tradeId }}/fund"
+          json:
+            transactionHash: "test_tx_{{ tradeId }}"
+          expect:
+            - statusCode: 200
+      - post:
+          url: "/api/trades/{{ tradeId }}/complete"
+          json:
+            transactionHash: "complete_tx_{{ tradeId }}"
+          expect:
+            - statusCode: 200
+
+  - name: "Search trades"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/trades/search"
+          qs:
+            q: "USDC"
+            status: "active"
+          expect:
+            - statusCode: 200

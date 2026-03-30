@@ -1,7 +1,7 @@
 import { tradeHandlers } from './mocks/handlers/trades';
 import { eventHandlers } from './mocks/handlers/events';
 import { blockchainHandlers } from './mocks/handlers/blockchain';
-export { resetMockData } from './mocks/data';
+import { integrationHandlers } from './mocks/handlers/integration';
 import { rest } from 'msw';
 import { setupServer } from 'msw/node';
 import { Event, Trade } from './models';
@@ -30,10 +30,6 @@ const initialEvents: Event[] = [
     data: {},
   },
 ];
-import { tradeHandlers } from './mocks/handlers/trades';
-import { eventHandlers } from './mocks/handlers/events';
-import { blockchainHandlers } from './mocks/handlers/blockchain';
-import { integrationHandlers } from './mocks/handlers/integration';
 
 let mockTrades: Trade[] = [];
 let mockEvents: Event[] = [];

@@ -1,8 +1,5 @@
-import { useState } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Routes, Route } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Button, Box, Container } from '@mui/material';
-import { NavLink } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import TradeDetail from './pages/TradeDetail';
 import CreateTrade from './pages/CreateTrade';
@@ -13,8 +10,6 @@ import ArbitratorRegister from './pages/ArbitratorRegister';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export default function App() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
   return (
     <ErrorBoundary>
       <div className="app">
@@ -41,9 +36,15 @@ export default function App() {
             </Button>
             <Button color="inherit" component={NavLink} to="/arbitrators/register">
               Become Arbitrator
+            <Button color="inherit" component={NavLink} to="/login">
+              Login
+            </Button>
+            <Button color="inherit" component={NavLink} to="/register">
+              Register
             </Button>
           </Toolbar>
         </AppBar>
+
         <Container component="main" sx={{ flex: 1, py: 4 }}>
           <ErrorBoundary>
             <Routes>
@@ -58,6 +59,8 @@ export default function App() {
           </ErrorBoundary>
         </Container>
       </Box>
+      </main>
+      </div>
     </ErrorBoundary>
   );
 }

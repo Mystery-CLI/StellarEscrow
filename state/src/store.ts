@@ -1,3 +1,5 @@
+import { configureStore, combineReducers, ThunkAction, Action, Middleware } from '@reduxjs/toolkit';
+import { persistStore, persistReducer, FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER } from 'redux-persist';
 import { configureStore, ThunkAction, Action } from '@reduxjs/toolkit';
 import {
   persistStore,
@@ -16,6 +18,7 @@ import tradesReducer from './slices/tradesSlice';
 import eventsReducer from './slices/eventsSlice';
 import uiReducer from './slices/uiSlice';
 import localeReducer from './slices/localeSlice';
+import filterPresetsReducer from './slices/filterPresetsSlice';
 import { escrowApi } from './api/escrowApi';
 
 // =========================
@@ -41,10 +44,23 @@ const persistConfig = {
   blacklist: ['events', escrowApi.reducerPath],
 };
 
+const rootReducer = combineReducers({
+  trades: tradesReducer,
+  events: eventsReducer,
+  ui: uiReducer,
+  locale: localeReducer,
+  [escrowApi.reducerPath]: escrowApi.reducer,
+});
+
+const appReducer = (state: ReturnType<typeof rootReducer> | undefined, action: Action<string>) => {
 const persistedReducer = persistReducer(persistConfig, (state: any, action: any) => {
   if (action.type === 'RESET_STATE') {
-    return undefined;
+    return rootReducer(undefined, action);
   }
+  return rootReducer(state, action);
+};
+
+const persistedReducer = persistReducer(persistConfig, appReducer);
 
   return {
     trades: tradesReducer(state?.trades, action),
@@ -74,6 +90,7 @@ export const store = configureStore({
           REGISTER,
         ],
       },
+    }).concat(escrowApi.middleware).concat(logger as Middleware),
     })
       .concat(escrowApi.middleware)
       .concat(logger as any), // ✅ fix logger type issue

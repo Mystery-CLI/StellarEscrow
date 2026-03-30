@@ -1,0 +1,82 @@
+{
+  "nav": {
+    "brand": "StellarEscrow",
+    "home": "Início"
+  },
+  "home": {
+    "title": "StellarEscrow",
+    "subtitle": "Garantia descentralizada na Stellar/Soroban",
+    "viewTrade": "Ver Negociação #1",
+    "viewTradeDesc": "Interface de financiamento de teste",
+    "comingSoon": "Em Breve",
+    "comingSoonDesc": "Criar negociações, painel do comprador"
+  },
+  "trade": {
+    "title": "Negociação #{id}",
+    "backToTrades": "← Voltar às negociações",
+    "loading": "Carregando detalhes da negociação...",
+    "status": "Status: {status}",
+    "created": "Criada: {time}",
+    "fundTrade": "Financiar Negociação",
+    "seller": "Vendedor",
+    "buyer": "Comprador",
+    "amount": "Valor",
+    "platformFee": "Taxa da Plataforma",
+    "you": "(você)",
+    "statusTimeline": "Linha do Tempo",
+    "tradeCreated": "Negociação Criada",
+    "tradeFunded": "Negociação Financiada",
+    "hoursAgo": "há {count} horas",
+    "statuses": {
+      "Created": "Criada",
+      "Funded": "Financiada",
+      "Completed": "Concluída",
+      "Disputed": "Em Disputa",
+      "Cancelled": "Cancelada"
+    }
+  },
+  "funding": {
+    "modalTitle": "Financiar Negociação #{id}",
+    "loadingPreview": "Carregando prévia...",
+    "youllPay": "Você pagará:",
+    "platformFee": "Taxa:",
+    "balance": "Saldo:",
+    "allowanceNeeded": "Permissão necessária:",
+    "allowanceDesc": "{amount} USDC para o contrato de garantia",
+    "approveUsdc": "Aprovar USDC",
+    "approving": "Aprovando...",
+    "usdcApproved": "USDC Aprovado ✓",
+    "readyToFund": "Pronto para financiar",
+    "cancel": "Cancelar",
+    "confirmFund": "Confirmar e Financiar",
+    "funding": "Financiando...",
+    "successTitle": "Negociação financiada com sucesso!",
+    "successTx": "Tx: {hash}",
+    "errorGeneric": "Ocorreu um erro"
+  },
+  "offline": {
+    "banner": "Você está offline. Alguns recursos podem não funcionar.",
+    "backOnline": "De volta online!"
+  },
+  "search": {
+    "placeholder": "Pesquisar negociações..."
+  },
+  "errors": {
+    "loadPreviewFailed": "Falha ao carregar prévia",
+    "approvalFailed": "Falha na aprovação",
+    "fundingFailed": "Falha no financiamento"
+  },
+  "currency": {
+    "usdc": "USDC",
+    "suffix": "USDC"
+  },
+  "language": {
+    "select": "Idioma",
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "pt": "Português",
+    "ar": "العربية",
+    "zh": "中文"
+  }
+}

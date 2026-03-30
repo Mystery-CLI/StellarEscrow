@@ -1,3 +1,4 @@
+import { EntityState } from '@reduxjs/toolkit';
 import { LocaleState } from './slices/localeSlice';
 
 // Trade state types
@@ -11,12 +12,10 @@ export interface Trade {
   timestamp: string;
 }
 
-export interface TradesState {
-  byId: Record<string, Trade>;
-  allIds: string[];
+export type TradesState = EntityState<Trade> & {
   loading: boolean;
   error: string | null;
-}
+};
 
 // Event state types
 export interface Event {
@@ -27,24 +26,37 @@ export interface Event {
   data: Record<string, any>;
 }
 
-export interface EventsState {
-  byId: Record<string, Event>;
-  allIds: string[];
+export type EventsState = EntityState<Event> & {
   loading: boolean;
   error: string | null;
-}
+};
 
-// UI state types
+// UI state types - Extended for advanced filtering
 export interface UIState {
   selectedTradeId: string | null;
   filters: {
     status?: string;
     tradeId?: string;
+    [key: string]: any;
   };
+  sortConfig: Array<{
+    key: string;
+    direction: 'asc' | 'desc';
+  }>;
   pagination: {
     page: number;
     pageSize: number;
   };
+  activePresetId?: string;
+}
+
+// Filter Presets state
+export interface FilterPresetsState {
+  presets: Record<string, any>; // FilterPreset objects
+  activePresetId: string | null;
+  loading: boolean;
+  error: string | null;
+  persistenceEnabled: boolean;
 }
 
 // Root state
@@ -53,4 +65,5 @@ export interface RootState {
   events: EventsState;
   ui: UIState;
   locale: LocaleState;
+  filterPresets?: FilterPresetsState;
 }
