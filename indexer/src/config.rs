@@ -167,6 +167,9 @@ pub struct CacheConfig {
     /// TTL for platform stats (seconds, default: 60)
     #[serde(default = "default_stats_ttl")]
     pub stats_ttl_secs: u64,
+    /// TTL for Soroban RPC read-only call results (seconds, default: 30)
+    #[serde(default = "default_rpc_ttl")]
+    pub rpc_ttl_secs: u64,
 }
 
 fn default_cache_ttl() -> u64 { 30 }
@@ -174,6 +177,7 @@ fn default_events_ttl() -> u64 { 10 }
 fn default_search_ttl() -> u64 { 30 }
 fn default_analytics_ttl() -> u64 { 60 }
 fn default_stats_ttl() -> u64 { 60 }
+fn default_rpc_ttl() -> u64 { 30 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StellarConfig {
@@ -588,4 +592,87 @@ impl Default for AuditConfig {
             purge_interval_hours: default_audit_purge_interval(),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Startup environment variable validation
+// ---------------------------------------------------------------------------
+
+/// Validates that all required environment variables are present and
+/// non-empty at application startup. Exits with code 1 and descriptive
+/// messages if any are missing.
+///
+/// Call this before `Config::load()` so failures are caught immediately.
+pub fn validate_env_vars() {
+    /// (env_var_name, description, required_always)
+    const REQUIRED: &[(&str, &str)] = &[
+        ("STELLAR_ESCROW__DATABASE__URL",
+         "PostgreSQL connection string for the indexer database"),
+        ("STELLAR_ESCROW__STELLAR__CONTRACT_ID",
+         "Deployed Soroban contract address (C...)"),
+        ("STELLAR_ESCROW__STELLAR__HORIZON_URL",
+         "Stellar Horizon API base URL"),
+        ("STELLAR_ESCROW__STELLAR__NETWORK",
+         "Stellar network: 'testnet' or 'mainnet'"),
+        ("STELLAR_ESCROW__AUTH__API_KEYS",
+         "Comma-separated list of valid API keys"),
+    ];
+
+    // Also accept the legacy flat-name variants used in docker-compose
+    const LEGACY_ALIASES: &[(&str, &str)] = &[
+        ("DATABASE_URL", "STELLAR_ESCROW__DATABASE__URL"),
+    ];
+
+    let mut missing: Vec<String> = Vec::new();
+    let mut invalid: Vec<String> = Vec::new();
+
+    for (var, desc) in REQUIRED {
+        // Check the canonical name first, then any legacy alias
+        let alias = LEGACY_ALIASES.iter().find(|(_, canonical)| canonical == var).map(|(a, _)| *a);
+        let value = std::env::var(var)
+            .ok()
+            .or_else(|| alias.and_then(|a| std::env::var(a).ok()));
+
+        match value {
+            None => missing.push(format!("  MISSING  {var}\n           {desc}")),
+            Some(v) if v.trim().is_empty() => {
+                missing.push(format!("  EMPTY    {var}\n           {desc}"))
+            }
+            Some(v) => {
+                // Format-level checks
+                if *var == "STELLAR_ESCROW__STELLAR__NETWORK"
+                    && v != "testnet"
+                    && v != "mainnet"
+                {
+                    invalid.push(format!(
+                        "  INVALID  {var}={v:?}\n           must be 'testnet' or 'mainnet'"
+                    ));
+                }
+                if *var == "STELLAR_ESCROW__STELLAR__CONTRACT_ID"
+                    && !v.starts_with('C')
+                {
+                    invalid.push(format!(
+                        "  INVALID  {var}={v:?}\n           Soroban contract IDs start with 'C'"
+                    ));
+                }
+            }
+        }
+    }
+
+    if missing.is_empty() && invalid.is_empty() {
+        tracing::info!("Environment variable validation passed ({} required vars present)", REQUIRED.len());
+        return;
+    }
+
+    eprintln!("\n[FATAL] Environment variable validation failed at startup\n");
+    if !missing.is_empty() {
+        eprintln!("Missing or empty variables:");
+        for m in &missing { eprintln!("{m}"); }
+    }
+    if !invalid.is_empty() {
+        eprintln!("\nInvalid variable values:");
+        for i in &invalid { eprintln!("{i}"); }
+    }
+    eprintln!("\nSet the variables above and restart the service.\n");
+    std::process::exit(1);
 }

@@ -1,12 +1,10 @@
 import { createIndexerApi } from './indexer';
 import { mockIndexerApi } from './mock';
 import type { ClientConfig } from './client';
-
-const USE_MOCK = import.meta.env.VITE_API_MOCK === 'true';
-const BASE_URL = import.meta.env.VITE_INDEXER_URL ?? 'http://localhost:3000';
+import { env } from '$lib/env';
 
 const config: ClientConfig = {
-  baseUrl: BASE_URL,
+  baseUrl: env.indexerUrl,
   retries: 3,
   onRequest(url, init) {
     // Attach auth token if present (e.g. from localStorage)
@@ -23,7 +21,7 @@ const config: ClientConfig = {
   },
 };
 
-export const indexerApi = USE_MOCK ? mockIndexerApi : createIndexerApi(config);
+export const indexerApi = env.apiMock ? mockIndexerApi : createIndexerApi(config);
 
 export { ApiRequestError } from './types';
 export { invalidateCache } from './client';

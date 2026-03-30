@@ -95,6 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse command line arguments
     let args = Args::parse();
 
+    // Validate required environment variables before loading config — fail fast with clear messages
+    config::validate_env_vars();
+
     // Load configuration (TOML file + STELLAR_ESCROW__* env var overrides)
     let config = Config::load(&args.config)?;
     info!(
@@ -276,7 +279,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         integration_service.clone(),
         webhook_service.clone(),
         job_queue.clone(),
-    );
+    ).with_cache_service(cache_service.clone());
 
     // Start event monitoring in background
     let monitor_handle = tokio::spawn(async move {
@@ -386,6 +389,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/cache/stats", get(get_cache_stats))
         .route("/cache/invalidate", post(invalidate_cache))
         .route("/cache/warm", post(warm_cache))
+        // Soroban RPC read-only cached endpoints
+        .route("/rpc/funding-preview", get(get_rpc_funding_preview))
+        .route("/rpc/trade-detail", get(get_rpc_trade_detail))
+        .route("/rpc/fee-info", get(get_rpc_fee_info))
+        .route("/rpc/platform-stats", get(get_rpc_platform_stats))
         // Backup
         .route("/backup/trigger", post(trigger_backup))
         .route("/backup/status", get(get_backup_status))
