@@ -6,12 +6,13 @@ import tradesReducer from './slices/tradesSlice';
 import eventsReducer from './slices/eventsSlice';
 import uiReducer from './slices/uiSlice';
 import localeReducer from './slices/localeSlice';
+import filterPresetsReducer from './slices/filterPresetsSlice';
 import { escrowApi } from './api/escrowApi';
 
 const persistConfig = {
   key: 'root',
   storage,
-  whitelist: ['trades', 'ui', 'locale'],
+  whitelist: ['trades', 'ui', 'locale', 'filterPresets'],
   blacklist: ['events', 'escrowApi'],
 };
 
@@ -24,6 +25,7 @@ const persistedReducer = persistReducer(persistConfig, (state, action) => {
     events: eventsReducer(state?.events, action),
     ui: uiReducer(state?.ui, action),
     locale: localeReducer(state?.locale, action),
+    filterPresets: filterPresetsReducer(state?.filterPresets, action),
   };
 });
 
@@ -33,6 +35,7 @@ export const store = configureStore({
     events: eventsReducer,
     ui: uiReducer,
     locale: localeReducer,
+    filterPresets: filterPresetsReducer,
     [escrowApi.reducerPath]: escrowApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
