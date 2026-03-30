@@ -4,5 +4,7 @@ export { escrowApi, useGetTradesQuery, useGetTradeQuery, useCreateTradeMutation,
 export * from './slices/eventsSlice';
 export * from './slices/uiSlice';
 export * from './slices/localeSlice';
+export * from './slices/filterPresetsSlice';
+export * from './hooks';
 export * from './selectors';
 export * from './types';

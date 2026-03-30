@@ -34,17 +34,32 @@ export interface EventsState {
   error: string | null;
 }
 
-// UI state types
+// UI state types - Extended for advanced filtering
 export interface UIState {
   selectedTradeId: string | null;
   filters: {
     status?: string;
     tradeId?: string;
+    [key: string]: any;
   };
+  sortConfig: Array<{
+    key: string;
+    direction: 'asc' | 'desc';
+  }>;
   pagination: {
     page: number;
     pageSize: number;
   };
+  activePresetId?: string;
+}
+
+// Filter Presets state
+export interface FilterPresetsState {
+  presets: Record<string, any>; // FilterPreset objects
+  activePresetId: string | null;
+  loading: boolean;
+  error: string | null;
+  persistenceEnabled: boolean;
 }
 
 // Root state
@@ -53,4 +68,5 @@ export interface RootState {
   events: EventsState;
   ui: UIState;
   locale: LocaleState;
+  filterPresets?: FilterPresetsState;
 }

@@ -16,6 +16,7 @@ import tradesReducer from './slices/tradesSlice';
 import eventsReducer from './slices/eventsSlice';
 import uiReducer from './slices/uiSlice';
 import localeReducer from './slices/localeSlice';
+import filterPresetsReducer from './slices/filterPresetsSlice';
 import { escrowApi } from './api/escrowApi';
 
 // =========================
