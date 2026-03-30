@@ -17,6 +17,7 @@ mod analytics_service;
 mod backup_service;
 mod cache_service;
 mod compliance_service;
+mod dispute_evidence_handlers;
 mod monitoring_service;
 mod webhook_service;
 mod job_queue;
@@ -56,6 +57,10 @@ use config::Config;
 use database::Database;
 use event_monitor::EventMonitor;
 use file_handlers::{delete_file, download_file, list_files, upload_file};
+use dispute_evidence_handlers::{
+    upload_dispute_evidence, list_dispute_evidence,
+    get_evidence_download_url, redeem_evidence_download, EvidenceState,
+};
 use fraud_service::FraudDetectionService;
 use gateway::{GatewayConfig, GatewayState};
 use handlers::{AppState, *};
@@ -302,7 +307,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/files", get(list_files))
         .route("/files/:category", post(upload_file))
         .route("/files/:id", get(download_file).delete(delete_file))
-        .with_state(storage_service);
+        .with_state(storage_service.clone());
+
+    let evidence_state = EvidenceState {
+        storage: storage_service.clone(),
+        db: database.clone(),
+    };
+    let evidence_router = Router::new()
+        .route("/disputes/:id/evidence", post(upload_dispute_evidence).get(list_dispute_evidence))
+        .route("/disputes/:id/evidence/:evidence_id/download-url", get(get_evidence_download_url))
+        .route("/evidence/download/:token", get(redeem_evidence_download))
+        .with_state(evidence_state);
 
     // Versioned API router (v1) - includes gateway-enhanced endpoints
     let v1_api = Router::new()
@@ -424,6 +439,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/audit/purge", delete(purge_audit_logs))
         .merge(admin_router)
         .merge(file_router)
+        .merge(evidence_router)
         .merge(Router::new().nest("/api/v1", v1_api))
         .with_state(AppState {
             database,

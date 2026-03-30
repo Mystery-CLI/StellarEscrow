@@ -1942,6 +1942,142 @@ impl Database {
         Ok(())
     }
 
+    // =========================================================================
+    // Dispute Evidence (Issue #125)
+    // =========================================================================
+
+    /// Verify that `address` is a buyer, seller, or arbitrator for the given dispute (trade_id).
+    /// Returns Forbidden if not a participant.
+    pub async fn check_dispute_participant(&self, dispute_id: i64, address: &str) -> Result<(), crate::error::AppError> {
+        use sqlx::Row;
+        // Participants are derived from trade events stored in the events table.
+        let row = sqlx::query(
+            r#"
+            SELECT COUNT(*) AS cnt
+            FROM events
+            WHERE event_type IN ('trade_created', 'dispute_raised', 'arbitrator_registered')
+              AND (
+                data->>'trade_id' = $1::text
+                AND (
+                    data->>'seller'     = $2
+                    OR data->>'buyer'   = $2
+                    OR data->>'raised_by' = $2
+                    OR data->>'arbitrator' = $2
+                )
+              )
+            "#,
+        )
+        .bind(dispute_id)
+        .bind(address)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let cnt: i64 = row.get("cnt");
+        if cnt == 0 {
+            return Err(crate::error::AppError::Forbidden(
+                "Only dispute participants or arbitrators may access evidence".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Insert a dispute evidence record linking a file to a dispute.
+    pub async fn insert_dispute_evidence(
+        &self,
+        dispute_id: i64,
+        file_id: uuid::Uuid,
+        uploader: &str,
+        description: Option<&str>,
+    ) -> Result<crate::models::DisputeEvidenceRecord, crate::error::AppError> {
+        let record = sqlx::query_as::<_, crate::models::DisputeEvidenceRecord>(
+            r#"
+            INSERT INTO dispute_evidence (dispute_id, file_id, uploader, description)
+            VALUES ($1, $2, $3, $4)
+            RETURNING *
+            "#,
+        )
+        .bind(dispute_id)
+        .bind(file_id)
+        .bind(uploader)
+        .bind(description)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(record)
+    }
+
+    /// List all evidence records for a dispute.
+    pub async fn list_dispute_evidence(
+        &self,
+        dispute_id: i64,
+    ) -> Result<Vec<crate::models::DisputeEvidenceRecord>, crate::error::AppError> {
+        let records = sqlx::query_as::<_, crate::models::DisputeEvidenceRecord>(
+            "SELECT * FROM dispute_evidence WHERE dispute_id = $1 ORDER BY created_at ASC",
+        )
+        .bind(dispute_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(records)
+    }
+
+    /// Fetch a single evidence record by its id.
+    pub async fn get_dispute_evidence(
+        &self,
+        evidence_id: uuid::Uuid,
+    ) -> Result<Option<crate::models::DisputeEvidenceRecord>, crate::error::AppError> {
+        let record = sqlx::query_as::<_, crate::models::DisputeEvidenceRecord>(
+            "SELECT * FROM dispute_evidence WHERE id = $1",
+        )
+        .bind(evidence_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(record)
+    }
+
+    /// Create a short-lived (15-minute) signed download token for an evidence file.
+    pub async fn create_evidence_download_token(
+        &self,
+        file_id: uuid::Uuid,
+        requester: &str,
+    ) -> Result<crate::models::EvidenceDownloadToken, crate::error::AppError> {
+        use chrono::Duration;
+        let expires_at = chrono::Utc::now() + Duration::minutes(15);
+        let record = sqlx::query_as::<_, crate::models::EvidenceDownloadToken>(
+            r#"
+            INSERT INTO evidence_download_tokens (file_id, requester, expires_at)
+            VALUES ($1, $2, $3)
+            RETURNING token, file_id, requester, expires_at, used, created_at
+            "#,
+        )
+        .bind(file_id)
+        .bind(requester)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(record)
+    }
+
+    /// Consume (mark used) a download token if it is valid and unexpired.
+    /// Returns None if the token is invalid, expired, or already used.
+    pub async fn consume_evidence_download_token(
+        &self,
+        token: uuid::Uuid,
+    ) -> Result<Option<crate::models::EvidenceDownloadToken>, crate::error::AppError> {
+        let record = sqlx::query_as::<_, crate::models::EvidenceDownloadToken>(
+            r#"
+            UPDATE evidence_download_tokens
+            SET used = TRUE
+            WHERE token = $1
+              AND used = FALSE
+              AND expires_at > NOW()
+            RETURNING token, file_id, requester, expires_at, used, created_at
+            "#,
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(record)
+    }
+
     fn row_to_compliance_check(
         &self,
         row: &sqlx::postgres::PgRow,
