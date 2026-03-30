@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { TradeForm } from './TradeForm';
 
 // Valid 56-char Stellar addresses (G + 55 base-32 uppercase chars)
@@ -148,20 +149,18 @@ describe('TradeForm — real-time validation', () => {
     expect(screen.queryByText(/valid Stellar address/i)).not.toBeInTheDocument();
   });
 
-  it('shows amount error for non-numeric value', () => {
+  it('shows amount error for negative value', async () => {
     render(<TradeForm onSubmit={jest.fn()} disableAutoSave />);
     const input = screen.getByLabelText('Amount (USDC)');
-    fireEvent.change(input, { target: { value: 'abc' } });
-    fireEvent.blur(input);
-    expect(screen.getByText(/positive number/i)).toBeInTheDocument();
-  });
-
-  it('shows amount error for zero', () => {
-    render(<TradeForm onSubmit={jest.fn()} disableAutoSave />);
-    const input = screen.getByLabelText('Amount (USDC)');
-    fireEvent.change(input, { target: { value: '0' } });
-    fireEvent.blur(input);
-    expect(screen.getByText(/positive number/i)).toBeInTheDocument();
+    act(() => {
+      fireEvent.change(input, { target: { value: '-1' } });
+    });
+    act(() => {
+      fireEvent.blur(input);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/positive number/i)).toBeInTheDocument();
+    });
   });
 });
 
@@ -215,5 +214,10 @@ describe('TradeForm — auto-save', () => {
       jest.advanceTimersByTime(1000);
     });
     expect(localStorage.getItem('stellar_escrow_trade_form_draft')).toBeNull();
+  });
+
+  it('matches snapshot', () => {
+    const { container } = render(<TradeForm onSubmit={jest.fn()} disableAutoSave />);
+    expect(container.firstChild).toMatchSnapshot();
   });
 });

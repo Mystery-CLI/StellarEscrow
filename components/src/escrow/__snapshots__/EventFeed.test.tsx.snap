@@ -1,0 +1,66 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`EventFeed matches snapshot 1`] = `
+<div
+  aria-label="Event feed"
+  class="event-feed"
+  role="log"
+>
+  <ul
+    class="event-list"
+  >
+    <li
+      class="event-item"
+      role="button"
+      tabindex="0"
+    >
+      <div
+        class="event-header"
+      >
+        <span
+          class="badge badge-info "
+        >
+          trade_created
+        </span>
+        <span
+          class="event-time"
+        >
+          2024-03-25 10:30:00
+        </span>
+      </div>
+      <p
+        class="event-trade"
+      >
+        Trade #
+        123
+      </p>
+    </li>
+    <li
+      class="event-item"
+      role="button"
+      tabindex="0"
+    >
+      <div
+        class="event-header"
+      >
+        <span
+          class="badge badge-success "
+        >
+          trade_completed
+        </span>
+        <span
+          class="event-time"
+        >
+          2024-03-25 11:00:00
+        </span>
+      </div>
+      <p
+        class="event-trade"
+      >
+        Trade #
+        124
+      </p>
+    </li>
+  </ul>
+</div>
+`;

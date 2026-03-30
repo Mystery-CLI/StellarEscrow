@@ -77,7 +77,7 @@ export const TradeVolumeChart: React.FC<TradeVolumeChartProps> = ({ data }) => {
   };
 
   return (
-    <div style={{ position: 'relative', height: '300px', width: '100%', padding: '10px' }}>
+    <div data-testid="trade-volume-chart" style={{ position: 'relative', height: '300px', width: '100%', padding: '10px' }}>
       <Line data={chartData} options={options} />
     </div>
   );

@@ -52,7 +52,7 @@ export const SuccessRateChart: React.FC<SuccessRateChartProps> = ({ data }) => {
   };
 
   return (
-    <div style={{ position: 'relative', height: '300px', width: '100%', padding: '10px' }}>
+    <div data-testid="success-rate-chart" style={{ position: 'relative', height: '300px', width: '100%', padding: '10px' }}>
       <Doughnut data={chartData} options={options} />
     </div>
   );

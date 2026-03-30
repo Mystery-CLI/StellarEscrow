@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import { axe } from 'jest-axe';
 import { Button } from './Button';
 
 describe('Button', () => {
@@ -30,5 +31,16 @@ describe('Button', () => {
     render(<Button size="lg">Large</Button>);
     const button = screen.getByText('Large');
     expect(button).toHaveClass('btn-lg');
+  });
+
+  it('has no accessibility violations', async () => {
+    const { container } = render(<Button>Accessible Button</Button>);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it('matches snapshot', () => {
+    const { container } = render(<Button variant="primary">Snapshot</Button>);
+    expect(container.firstChild).toMatchSnapshot();
   });
 });

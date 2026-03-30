@@ -1,0 +1,132 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`TradeForm — auto-save matches snapshot 1`] = `
+<form
+  class="trade-form"
+  novalidate=""
+>
+  <div
+    class="input-wrapper "
+  >
+    <label
+      class="input-label"
+      for=":r28:"
+    >
+      Seller Address
+    </label>
+    <div
+      class="input-field-row"
+    >
+      <input
+        autocomplete="off"
+        class="input"
+        id=":r28:"
+        placeholder="GABC…XYZ (56 characters)"
+        spellcheck="false"
+        value=""
+      />
+    </div>
+    <span
+      aria-live="polite"
+      class="input-error-text "
+      id=":r28:-error"
+    />
+  </div>
+  <div
+    class="input-wrapper "
+  >
+    <label
+      class="input-label"
+      for=":r29:"
+    >
+      Buyer Address
+    </label>
+    <div
+      class="input-field-row"
+    >
+      <input
+        autocomplete="off"
+        class="input"
+        id=":r29:"
+        placeholder="GABC…XYZ (56 characters)"
+        spellcheck="false"
+        value=""
+      />
+    </div>
+    <span
+      aria-live="polite"
+      class="input-error-text "
+      id=":r29:-error"
+    />
+  </div>
+  <div
+    class="input-wrapper "
+  >
+    <label
+      class="input-label"
+      for=":r2a:"
+    >
+      Amount (USDC)
+    </label>
+    <div
+      class="input-field-row"
+    >
+      <input
+        class="input"
+        id=":r2a:"
+        min="0.000001"
+        placeholder="0.00"
+        step="any"
+        type="number"
+        value=""
+      />
+    </div>
+    <span
+      aria-live="polite"
+      class="input-error-text "
+      id=":r2a:-error"
+    />
+  </div>
+  <div
+    class="input-wrapper "
+  >
+    <label
+      class="input-label"
+      for=":r2b:"
+    >
+      Arbitrator Address (Optional)
+    </label>
+    <div
+      class="input-field-row"
+    >
+      <input
+        aria-describedby=":r2b:-helper"
+        autocomplete="off"
+        class="input"
+        id=":r2b:"
+        placeholder="GABC…XYZ (56 characters)"
+        spellcheck="false"
+        value=""
+      />
+    </div>
+    <span
+      aria-live="polite"
+      class="input-error-text "
+      id=":r2b:-error"
+    />
+    <span
+      class="input-helper-text"
+      id=":r2b:-helper"
+    >
+      Leave blank to trade without an arbitrator
+    </span>
+  </div>
+  <button
+    aria-busy="false"
+    class="btn btn-primary btn-md"
+    type="submit"
+  >
+    Create Trade
+  </button>
+</form>
+`;

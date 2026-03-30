@@ -1,0 +1,38 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Input — accessibility matches snapshot 1`] = `
+<div
+  class="input-wrapper input-wrapper--error"
+>
+  <label
+    class="input-label"
+    for=":r9:"
+  >
+    Test Input
+  </label>
+  <div
+    class="input-field-row"
+  >
+    <input
+      aria-describedby=":r9:-error"
+      aria-invalid="true"
+      class="input input-error"
+      id=":r9:"
+    />
+    <span
+      aria-hidden="true"
+      class="input-icon input-icon--error"
+    >
+      ✕
+    </span>
+  </div>
+  <span
+    aria-live="polite"
+    class="input-error-text input-error-text--visible"
+    id=":r9:-error"
+    role="alert"
+  >
+    Test error
+  </span>
+</div>
+`;

@@ -1,0 +1,23 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Alert matches snapshot 1`] = `
+<div
+  class="alert alert-success"
+  role="alert"
+>
+  <div
+    class="alert-content"
+  >
+    <h4
+      class="alert-title"
+    >
+      Success
+    </h4>
+    <p
+      class="alert-message"
+    >
+      Operation completed
+    </p>
+  </div>
+</div>
+`;

@@ -55,6 +55,11 @@ describe('Input — accessibility', () => {
     expect(describedById).toBeTruthy();
     expect(document.getElementById(describedById!)).toHaveTextContent('Enter your email');
   });
+
+  it('matches snapshot', () => {
+    const { container } = render(<Input label="Test Input" error="Test error" helperText="Helper" />);
+    expect(container.firstChild).toMatchSnapshot();
+  });
 });
 
 describe('Input — validation states', () => {
@@ -70,14 +75,12 @@ describe('Input — validation states', () => {
 
   it('does not apply input-valid when error is also present', () => {
     render(<Input label="Email" error="Bad" valid />);
-    // error takes precedence — input-error class should be present, not input-valid
     expect(screen.getByLabelText('Email')).toHaveClass('input-error');
     expect(screen.getByLabelText('Email')).not.toHaveClass('input-valid');
   });
 
   it('shows error icon when error is present', () => {
     render(<Input label="Email" error="Required" />);
-    // The ✕ icon is aria-hidden, query by its container class
     const wrapper = document.querySelector('.input-icon--error');
     expect(wrapper).toBeInTheDocument();
   });
