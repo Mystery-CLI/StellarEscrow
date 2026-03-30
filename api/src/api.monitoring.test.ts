@@ -35,7 +35,7 @@ describe('API performance monitoring', () => {
         if (context.iteration % 2 === 0) {
           await context.measure('getTrades', () => api.trades.getTrades(10, context.iteration));
         } else {
-          await context.measure('getEvents', () => api.events.getEvents(10));
+          await context.measure('getEvents', () => api.events.getEvents({ limit: 10 }));
         }
       },
       monitor
@@ -88,7 +88,7 @@ describe('API performance monitoring', () => {
         },
       },
       async (context) => {
-        await context.measure('getEvents', () => api.events.getEvents(5));
+        await context.measure('getEvents', () => api.events.getEvents({ limit: 5 }));
       }
     );
 

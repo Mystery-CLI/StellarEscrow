@@ -317,6 +317,7 @@ pub struct GlobalSearchResponse {
     pub trades: Vec<TradeSearchResult>,
     pub users: Vec<DiscoveryResult>,
     pub arbitrators: Vec<DiscoveryResult>,
+    pub profiles: Vec<UserProfile>,
     pub suggestions: Vec<SearchSuggestion>,
 }
 
@@ -517,6 +518,28 @@ pub struct NotificationPreferences {
     pub updated_at: DateTime<Utc>,
 }
 
+impl NotificationPreferences {
+    pub fn default_for_address(address: impl Into<String>) -> Self {
+        Self {
+            address: address.into(),
+            email_enabled: false,
+            email_address: None,
+            sms_enabled: false,
+            phone_number: None,
+            push_enabled: false,
+            push_token: None,
+            on_trade_created: true,
+            on_trade_funded: true,
+            on_trade_completed: true,
+            on_trade_confirmed: true,
+            on_dispute_raised: true,
+            on_dispute_resolved: true,
+            on_trade_cancelled: true,
+            updated_at: Utc::now(),
+        }
+    }
+}
+
 /// Upsert payload — all fields optional so callers only send what they want to change.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateNotificationPreferences {
@@ -546,4 +569,78 @@ pub struct NotificationLogEntry {
     pub status: String,
     pub error: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+// =============================================================================
+// User Management Models
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UserProfile {
+    pub address: String,
+    pub username_hash: String,
+    pub contact_hash: String,
+    pub avatar_hash: Option<String>,
+    pub verification: String,
+    pub two_fa_enabled: bool,
+    pub registered_at: i64,
+    pub updated_at: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UserPreference {
+    pub address: String,
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UserAnalyticsRow {
+    pub address: String,
+    pub total_trades: i32,
+    pub trades_as_seller: i32,
+    pub trades_as_buyer: i32,
+    pub total_volume: i64,
+    pub completed_trades: i32,
+    pub disputed_trades: i32,
+    pub cancelled_trades: i32,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterUserRequest {
+    pub address: String,
+    pub username_hash: String,
+    pub contact_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileRequest {
+    pub username_hash: Option<String>,
+    pub contact_hash: Option<String>,
+    pub avatar_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetPreferenceRequest {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetVerificationRequest {
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserSearchQuery {
+    pub q: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PushRegistrationRequest {
+    pub device_token: String,
+    pub platform: String,
+    pub address: String,
 }

@@ -23,6 +23,9 @@ pub enum AppError {
     #[error("Invalid event data: {0}")]
     InvalidEventData(String),
 
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
     #[error("Event not found")]
     EventNotFound,
 
@@ -52,6 +55,12 @@ pub enum AppError {
 
     #[error("Storage error: {0}")]
     Storage(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
+    #[error("Bad request: {0}")]
+    BadRequest(String),
 }
 
 impl IntoResponse for AppError {
@@ -81,6 +90,11 @@ impl IntoResponse for AppError {
                 StatusCode::BAD_REQUEST,
                 "INVALID_EVENT_DATA",
                 "Invalid event data",
+            ),
+            AppError::BadRequest(_) => (
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                "Bad request",
             ),
             AppError::EventNotFound => {
                 (StatusCode::NOT_FOUND, "EVENT_NOT_FOUND", "Event not found")
@@ -118,6 +132,8 @@ impl IntoResponse for AppError {
                 "STORAGE_ERROR",
                 "Storage error",
             ),
+            AppError::Conflict(_) => (StatusCode::CONFLICT, "CONFLICT", "Resource already exists"),
+            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", "Bad request"),
         };
 
         let detail = self.to_string();

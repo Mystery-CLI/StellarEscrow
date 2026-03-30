@@ -1,5 +1,5 @@
 {
-  "name": "stellar-escrow-state",
+  "name": "@stellar-escrow/state",
   "version": "1.0.0",
   "description": "Redux state management for StellarEscrow",
   "main": "dist/index.js",

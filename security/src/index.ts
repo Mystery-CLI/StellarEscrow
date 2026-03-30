@@ -8,3 +8,5 @@ export * from './types';
 export * from './monitoring';
 export * from './scenarios';
 export * from './assessment';
+export * from './utils/sanitize';
+export * from './utils/secureStorage';

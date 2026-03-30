@@ -32,15 +32,15 @@ mod handlers;
 mod health;
 mod help;
 mod integration_service;
+mod job_queue;
 mod models;
 mod notification_service;
 mod rate_limit;
 mod rate_limit_handlers;
 mod storage;
+mod user_handlers;
 mod websocket;
 mod performance_service;
-mod compliance_service;
-mod monitoring_service;
 
 #[cfg(test)]
 mod test;
@@ -59,6 +59,8 @@ use help::{
     get_contact, get_docs, get_faqs, get_tutorial_by_id, get_tutorials, help_index, search_help,
 };
 use integration_service::IntegrationService;
+use job_queue::JobQueue;
+use job_queue::worker::JobWorker;
 use notification_service::NotificationService;
 use performance_service::PerformanceService;
 use rate_limit::RateLimiter;
@@ -184,6 +186,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize Cache Service
     let cache_service = Arc::new(CacheService::new(config.cache.clone()).await);
+    let cache_warmer = cache_service.clone();
+    let cache_db = database.clone();
+    let cache_contract_id = config.stellar.contract_id.clone();
+    tokio::spawn(async move {
+        if let Err(e) = cache_warmer.warm_core(&cache_db, &cache_contract_id).await {
+            warn!("Initial cache warm failed: {}", e);
+        }
+
+        let interval_secs = std::cmp::max(30, cache_warmer.ttl_default().as_secs());
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+        loop {
+            interval.tick().await;
+            if let Err(e) = cache_warmer.warm_core(&cache_db, &cache_contract_id).await {
+                warn!("Scheduled cache warm failed: {}", e);
+            }
+        }
+    });
 
     // Initialize Backup Service
     let mut backup_config = config.backup.clone();
@@ -200,6 +219,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let webhook_service = Arc::new(WebhookService::new(database.clone()));
     webhook_service.load_endpoints().await;
 
+    // Scheduled audit log retention purge
+    if config.audit.purge_interval_hours > 0 {
+        let db_purge = database.clone();
+        let retention_days = config.audit.retention_days as i64;
+        let interval_hours = config.audit.purge_interval_hours;
+        tokio::spawn(async move {
+            let interval = tokio::time::Duration::from_secs(interval_hours * 3600);
+            loop {
+                tokio::time::sleep(interval).await;
+                match db_purge.purge_old_audit_logs(retention_days).await {
+                    Ok(n) => tracing::info!("Audit retention: purged {} logs older than {} days", n, retention_days),
+                    Err(e) => tracing::warn!("Audit retention purge failed: {}", e),
+                }
+            }
+        });
+    }
+    // Initialize job queue + worker
+    let job_queue = Arc::new(tokio::sync::Mutex::new(
+        JobQueue::new(&config.cache.redis_url).await?
+    ));
+    let job_worker = Arc::new(JobWorker::new(job_queue.clone(), "indexer-job-worker"));
+    let worker_task = job_worker.clone();
+    tokio::spawn(async move {
+        if let Err(e) = worker_task.run().await {
+            warn!("Job worker exited with error: {}", e);
+        }
+    });
+
     // Start alert evaluation loop in background
     let monitoring_loop = monitoring_service.clone();
     tokio::spawn(async move {
@@ -214,6 +261,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fraud_service.clone(),
         notification_service.clone(),
         integration_service.clone(),
+        job_queue.clone(),
     );
 
     // Start event monitoring in background
@@ -289,9 +337,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(get_notification_preferences).put(upsert_notification_preferences),
         )
         .route("/notifications/log/:address", get(get_notification_log))
+        .route("/push/register", post(register_push_token))
+        .route("/push/unregister/:device_token", delete(unregister_push_token))
         // Performance monitoring
         .route("/performance/dashboard", get(get_performance_dashboard))
         .route("/performance/alerts", get(get_performance_alerts))
+        .route("/performance/record", post(record_performance_sample))
+        .route("/performance/history", get(get_performance_history))
+        .route("/performance/bottlenecks", get(get_performance_bottlenecks))
         // Compliance
         .route("/compliance/check", post(run_compliance_check))
         .route("/compliance/status/:address", get(get_compliance_status))
@@ -304,6 +357,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Integrations
         .route("/integrations/stats", get(get_integration_stats))
         .route("/integrations/log", get(get_integration_log))
+        // Jobs
+        .route("/jobs/stats", get(get_job_stats))
+        .route("/jobs/enqueue", post(enqueue_job))
+        .route("/jobs/schedule", post(schedule_job))
         // Analytics
         .route("/analytics/dashboard", get(get_analytics_dashboard))
         .route("/analytics/realtime", get(get_analytics_realtime))
@@ -311,6 +368,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Cache
         .route("/cache/stats", get(get_cache_stats))
         .route("/cache/invalidate", post(invalidate_cache))
+        .route("/cache/warm", post(warm_cache))
         // Backup
         .route("/backup/trigger", post(trigger_backup))
         .route("/backup/status", get(get_backup_status))
@@ -321,6 +379,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/webhooks/:id", delete(deactivate_webhook))
         .route("/webhooks/deliveries", get(get_webhook_deliveries))
         .route("/webhooks/stats", get(get_webhook_stats))
+        // Users
+        .route("/users", post(user_handlers::register_user))
+        .route("/users/search", get(user_handlers::search_users))
+        .route(
+            "/users/:address",
+            get(user_handlers::get_user).patch(user_handlers::update_user),
+        )
+        .route(
+            "/users/:address/preferences",
+            get(user_handlers::get_preferences).put(user_handlers::set_preference),
+        )
+        .route("/users/:address/analytics", get(user_handlers::get_user_analytics))
+        .route("/users/:address/verification", axum::routing::patch(user_handlers::set_verification))
         .route("/ws", get(ws_handler))
         .route("/help", get(help_index))
         .route("/help/faqs", get(get_faqs))
@@ -338,6 +409,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(Router::new().nest("/api/v1", v1_api))
         .with_state(AppState {
             database,
+            stellar_contract_id: config.stellar.contract_id.clone(),
+            job_queue,
+            job_worker,
             ws_manager,
             health: health_state,
             fraud_service,

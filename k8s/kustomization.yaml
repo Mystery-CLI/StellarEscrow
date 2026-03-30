@@ -12,6 +12,8 @@ resources:
   - base/pod-security.yaml
   - base/secrets-store.yaml
   - postgres/postgres.yaml
+  - redis/redis.yaml
   - indexer/indexer.yaml
   - api/api.yaml
   - client/client.yaml
+  - frontend/frontend.yaml

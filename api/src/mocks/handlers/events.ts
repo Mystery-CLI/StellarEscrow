@@ -1,18 +1,20 @@
 import { rest } from 'msw';
 import { mockEvents } from '../data';
 
+const API_BASE_URL = 'http://localhost:3000/api';
+
 export const eventHandlers = [
-  rest.get('/api/events', (req, res, ctx) => {
+  rest.get(`${API_BASE_URL}/events`, (req, res, ctx) => {
     const limit = req.url.searchParams.get('limit') || '100';
     return res(ctx.json(mockEvents.slice(0, parseInt(limit))));
   }),
 
-  rest.get('/api/events/trade/:tradeId', (req, res, ctx) => {
+  rest.get(`${API_BASE_URL}/events/trade/:tradeId`, (req, res, ctx) => {
     const events = mockEvents.filter((e) => e.tradeId === req.params.tradeId);
     return res(ctx.json(events));
   }),
 
-  rest.get('/api/events/:id', (req, res, ctx) => {
+  rest.get(`${API_BASE_URL}/events/:id`, (req, res, ctx) => {
     const event = mockEvents.find((e) => e.id === req.params.id);
     return event ? res(ctx.json(event)) : res(ctx.status(404), ctx.json({ error: 'Not found' }));
   }),

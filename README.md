@@ -56,3 +56,17 @@ cargo test  # Backend tests
 docker-compose up  # Indexer + DB
 ```
 
+## Smart Contract Testing
+
+The Soroban contract now has dedicated suites for edge cases, security scenarios, integration flows, stress tests, and performance benchmarks under `contract/tests/`.
+
+```bash
+npm run test:contract
+npm run test:contract:edge
+npm run test:contract:security
+npm run test:contract:integration
+npm run test:contract:performance
+npm run test:contract:stress
+npm run test:contract:coverage
+```
+

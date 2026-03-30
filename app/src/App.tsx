@@ -6,7 +6,9 @@ import { NavLink } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import TradeDetail from './pages/TradeDetail';
 import CreateTrade from './pages/CreateTrade';
-import Help from './pages/Help';
+import Register from './pages/Register';
+import Login from './pages/Login';
+import UserProfile from './pages/UserProfile';
 import { ErrorBoundary } from './ErrorBoundary';
 
 export default function App() {
@@ -19,19 +21,8 @@ export default function App() {
           <span className="nav-brand">StellarEscrow</span>
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/trades/new">New Trade</NavLink>
-          <NavLink to="/help">Help</NavLink>
-          <button 
-            className="nav-mobile-toggle" 
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Toggle navigation"
-            aria-expanded={isMenuOpen}
-          >
-            ☰
-          </button>
-          <div className={`nav-links ${isMenuOpen ? 'nav-links-open' : ''}`}>
-            <NavLink to="/" end onClick={() => setIsMenuOpen(false)}>Dashboard</NavLink>
-            <NavLink to="/trades/new" onClick={() => setIsMenuOpen(false)}>New Trade</NavLink>
-          </div>
+          <NavLink to="/login">Login</NavLink>
+          <NavLink to="/register">Register</NavLink>
         </nav>
         <main className="main">
       <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -54,7 +45,9 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/trades/new" element={<CreateTrade />} />
               <Route path="/trades/:id" element={<TradeDetail />} />
-              <Route path="/help" element={<Help />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/users/:address" element={<UserProfile />} />
             </Routes>
           </ErrorBoundary>
         </Container>

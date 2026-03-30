@@ -14,6 +14,19 @@ pub async fn send_email(
     subject: &str,
     body: &str,
 ) -> Result<(), String> {
+    if cfg.email_api_url.trim().is_empty()
+        || cfg.email_api_key.trim().is_empty()
+        || cfg.email_from.trim().is_empty()
+    {
+        return Err("email provider is not configured".to_string());
+    }
+    if to.trim().is_empty() {
+        return Err("email recipient is empty".to_string());
+    }
+    if subject.trim().is_empty() || body.trim().is_empty() {
+        return Err("email content is empty".to_string());
+    }
+
     let client = Client::new();
     // SendGrid-compatible POST /v3/mail/send
     let payload = json!({
@@ -46,6 +59,20 @@ pub async fn send_email(
 }
 
 pub async fn send_sms(cfg: &NotificationConfig, to: &str, body: &str) -> Result<(), String> {
+    if cfg.sms_api_url.trim().is_empty()
+        || cfg.sms_account_sid.trim().is_empty()
+        || cfg.sms_auth_token.trim().is_empty()
+        || cfg.sms_from.trim().is_empty()
+    {
+        return Err("sms provider is not configured".to_string());
+    }
+    if to.trim().is_empty() {
+        return Err("sms recipient is empty".to_string());
+    }
+    if body.trim().is_empty() {
+        return Err("sms content is empty".to_string());
+    }
+
     let client = Client::new();
     // Twilio-compatible POST /2010-04-01/Accounts/{sid}/Messages.json
     let url = format!(
@@ -81,6 +108,19 @@ pub async fn send_push(
     title: &str,
     body: &str,
 ) -> Result<(), String> {
+    if cfg.push_api_url.trim().is_empty()
+        || cfg.push_project_id.trim().is_empty()
+        || cfg.push_server_key.trim().is_empty()
+    {
+        return Err("push provider is not configured".to_string());
+    }
+    if token.trim().is_empty() {
+        return Err("push token is empty".to_string());
+    }
+    if title.trim().is_empty() || body.trim().is_empty() {
+        return Err("push content is empty".to_string());
+    }
+
     let client = Client::new();
     // FCM v1 HTTP API
     let payload = json!({
@@ -102,7 +142,7 @@ pub async fn send_push(
         .map_err(|e| e.to_string())?;
 
     if res.status().is_success() {
-        info!("Push sent to token {}", &token[..8]);
+        info!("Push sent to token {}", token_preview(token));
         Ok(())
     } else {
         let msg = format!(
@@ -113,4 +153,13 @@ pub async fn send_push(
         error!("{}", msg);
         Err(msg)
     }
+}
+
+fn token_preview(token: &str) -> &str {
+    let end = token
+        .char_indices()
+        .nth(8)
+        .map(|(idx, _)| idx)
+        .unwrap_or(token.len());
+    &token[..end]
 }
