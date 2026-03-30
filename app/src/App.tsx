@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Routes, Route } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Button, Box, Container } from '@mui/material';
-import { NavLink } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import TradeDetail from './pages/TradeDetail';
 import CreateTrade from './pages/CreateTrade';
@@ -52,6 +50,8 @@ export default function App() {
           </ErrorBoundary>
         </Container>
       </Box>
+      </main>
+      </div>
     </ErrorBoundary>
   );
 }

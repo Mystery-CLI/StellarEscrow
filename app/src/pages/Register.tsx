@@ -11,7 +11,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -31,19 +31,19 @@ export default function Register() {
       }
       navigate(`/users/${address}`);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={styles.card}>
-      <h2>Register</h2>
+    <main style={styles.card} aria-labelledby="register-title">
+      <h2 id="register-title">Register</h2>
       <p style={styles.hint}>
         Hashes are SHA-256 of the plaintext, computed client-side before submission.
       </p>
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} style={styles.form} aria-describedby="register-error">
         <label style={styles.label}>
           Stellar Address
           <input
@@ -52,6 +52,8 @@ export default function Register() {
             onChange={(e) => setAddress(e.target.value)}
             placeholder="G…"
             required
+            aria-required="true"
+            aria-label="Stellar Address"
           />
         </label>
         <label style={styles.label}>
@@ -60,8 +62,10 @@ export default function Register() {
             style={styles.input}
             value={usernameHash}
             onChange={(e) => setUsernameHash(e.target.value)}
-            placeholder="64-char hex"
+            placeholder="64-character hex"
             required
+            aria-required="true"
+            aria-label="Username Hash"
           />
         </label>
         <label style={styles.label}>
@@ -70,28 +74,57 @@ export default function Register() {
             style={styles.input}
             value={contactHash}
             onChange={(e) => setContactHash(e.target.value)}
-            placeholder="64-char hex"
+            placeholder="64-character hex"
             required
+            aria-required="true"
+            aria-label="Contact Hash"
           />
         </label>
-        {error && <p style={styles.error}>{error}</p>}
-        <button style={styles.btn} type="submit" disabled={loading}>
+
+        {error && (
+          <p id="register-error" role="alert" style={styles.error}>
+            {error}
+          </p>
+        )}
+
+        <button
+          style={styles.btn}
+          type="submit"
+          disabled={loading}
+          aria-busy={loading}
+        >
           {loading ? 'Registering…' : 'Register'}
         </button>
       </form>
+
       <p style={{ marginTop: '1rem', fontSize: '0.875rem' }}>
         Already registered? <Link to="/login">Login</Link>
       </p>
-    </div>
+    </main>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  card: { maxWidth: 480, margin: '2rem auto', padding: '2rem', border: '1px solid #e2e8f0', borderRadius: 8 },
+  card: {
+    maxWidth: 480,
+    margin: '2rem auto',
+    padding: '2rem',
+    border: '1px solid #e2e8f0',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
   hint: { fontSize: '0.8rem', color: '#666', marginBottom: '1rem' },
   form: { display: 'flex', flexDirection: 'column', gap: '1rem' },
   label: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.875rem', fontWeight: 500 },
   input: { padding: '0.5rem', border: '1px solid #cbd5e0', borderRadius: 4, fontSize: '0.875rem' },
-  btn: { padding: '0.6rem', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' },
+  btn: {
+    padding: '0.6rem',
+    background: '#1a1a2e',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: '0.875rem',
+  },
   error: { color: '#e53e3e', fontSize: '0.875rem' },
 };
