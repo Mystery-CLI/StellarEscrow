@@ -252,6 +252,71 @@ pub fn has_arbitrator(env: &Env, arbitrator: &Address) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Arbitrator self-registration with fee (Issue #120)
+// ---------------------------------------------------------------------------
+const ARB_FEE_PREFIX: &str = "AF";
+const ARB_LIST_KEY:   &str = "ARBLIST";
+
+/// Store an arbitrator's self-declared service fee (i128 stroops).
+pub fn save_arbitrator_fee(env: &Env, arbitrator: &Address, fee: i128) {
+    let key = (ARB_FEE_PREFIX, arbitrator);
+    env.storage().persistent().set(&key, &fee);
+}
+
+/// Remove an arbitrator's fee entry on deregistration.
+pub fn remove_arbitrator_fee(env: &Env, arbitrator: &Address) {
+    let key = (ARB_FEE_PREFIX, arbitrator);
+    env.storage().persistent().remove(&key);
+}
+
+/// Return the stored fee for a registered arbitrator, or 0 if not found.
+pub fn get_arbitrator_fee(env: &Env, arbitrator: &Address) -> i128 {
+    let key = (ARB_FEE_PREFIX, arbitrator);
+    env.storage().persistent().get(&key).unwrap_or(0)
+}
+
+/// Append `arbitrator` to the persistent registry list (no-op if already present).
+pub fn add_to_arbitrator_list(env: &Env, arbitrator: &Address) {
+    let mut list: soroban_sdk::Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&ARB_LIST_KEY)
+        .unwrap_or_else(|| soroban_sdk::Vec::new(env));
+    for i in 0..list.len() {
+        if list.get(i).unwrap() == *arbitrator {
+            return;
+        }
+    }
+    list.push_back(arbitrator.clone());
+    env.storage().persistent().set(&ARB_LIST_KEY, &list);
+}
+
+/// Remove `arbitrator` from the persistent registry list.
+pub fn remove_from_arbitrator_list(env: &Env, arbitrator: &Address) {
+    let list: soroban_sdk::Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&ARB_LIST_KEY)
+        .unwrap_or_else(|| soroban_sdk::Vec::new(env));
+    let mut new_list = soroban_sdk::Vec::new(env);
+    for i in 0..list.len() {
+        let a = list.get(i).unwrap();
+        if a != *arbitrator {
+            new_list.push_back(a);
+        }
+    }
+    env.storage().persistent().set(&ARB_LIST_KEY, &new_list);
+}
+
+/// Return the full list of registered arbitrators.
+pub fn get_arbitrator_list(env: &Env) -> soroban_sdk::Vec<Address> {
+    env.storage()
+        .persistent()
+        .get(&ARB_LIST_KEY)
+        .unwrap_or_else(|| soroban_sdk::Vec::new(env))
+}
+
+// ---------------------------------------------------------------------------
 // Multi-Signature Arbitration Votes
 // ---------------------------------------------------------------------------
 

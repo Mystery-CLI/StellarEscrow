@@ -627,3 +627,56 @@ fn test_analytics_active_trades() {
     let result2 = client.analytics_query(&crate::analytics::TimeWindow::AllTime);
     assert_eq!(result2.all_time.active_trades, 0);
 }
+
+// ---------------------------------------------------------------------------
+// Issue #120 — Arbitrator self-registration registry
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_register_arbitrator_self_succeeds() {
+    let (env, _, _, _, _, _, client) = setup();
+    let arb = Address::generate(&env);
+    client.register_arbitrator_self(&arb, &500i128);
+    assert!(client.is_arbitrator_registered(&arb));
+    assert_eq!(client.get_arbitrator_fee(&arb), 500i128);
+    let list = client.get_arbitrators();
+    assert!(list.contains(&arb));
+}
+
+#[test]
+fn test_register_arbitrator_self_zero_fee_fails() {
+    let (env, _, _, _, _, _, client) = setup();
+    let arb = Address::generate(&env);
+    assert!(client.try_register_arbitrator_self(&arb, &0i128).is_err());
+}
+
+#[test]
+fn test_register_arbitrator_self_negative_fee_fails() {
+    let (env, _, _, _, _, _, client) = setup();
+    let arb = Address::generate(&env);
+    assert!(client.try_register_arbitrator_self(&arb, &(-1i128)).is_err());
+}
+
+#[test]
+fn test_deregister_arbitrator_succeeds() {
+    let (env, _, _, _, _, _, client) = setup();
+    let arb = Address::generate(&env);
+    client.register_arbitrator_self(&arb, &100i128);
+    assert!(client.is_arbitrator_registered(&arb));
+    client.deregister_arbitrator(&arb);
+    assert!(!client.is_arbitrator_registered(&arb));
+    let list = client.get_arbitrators();
+    assert!(!list.contains(&arb));
+}
+
+#[test]
+fn test_get_arbitrators_returns_all_registered() {
+    let (env, _, _, _, _, _, client) = setup();
+    let arb1 = Address::generate(&env);
+    let arb2 = Address::generate(&env);
+    client.register_arbitrator_self(&arb1, &100i128);
+    client.register_arbitrator_self(&arb2, &200i128);
+    let list = client.get_arbitrators();
+    assert!(list.contains(&arb1));
+    assert!(list.contains(&arb2));
+}
