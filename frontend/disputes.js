@@ -28,7 +28,8 @@
             const formData = new FormData();
             formData.append('trade_id', tradeId);
             formData.append('reason', reason);
-            
+
+            // Legacy: attach files directly for any server-side handler that reads them
             evidence.forEach((file, index) => {
                 formData.append(`evidence_${index}`, file);
             });
@@ -39,8 +40,15 @@
             });
 
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            
+
             const data = await response.json();
+
+            // Upload evidence to the dedicated storage backend (Issue #125)
+            const uploader = data.raised_by || '';
+            if (uploader) {
+                await uploadStagedEvidence(data.id || tradeId, uploader);
+            }
+
             dispatchDisputeEvent('raised', { disputeId: data.id, tradeId });
             return { success: true, disputeId: data.id };
         } catch (error) {
@@ -48,7 +56,6 @@
             return { success: false, error: error.message };
         }
     }
-
     async function getDisputeDetails(disputeId) {
         try {
             const response = await fetch(`${DISPUTE_API}/${disputeId}`);
@@ -100,15 +107,17 @@
     // ============================================
 
     function validateEvidence(file) {
+        // Delegate to EvidenceService when available, fall back to local check
+        if (window.EvidenceService) {
+            return window.EvidenceService.validateEvidenceFile(file);
+        }
         if (file.size > MAX_EVIDENCE_SIZE) {
             return { valid: false, error: 'File exceeds 5MB limit' };
         }
-        
         const allowed = ['image/jpeg', 'image/png', 'application/pdf', 'text/plain'];
         if (!allowed.includes(file.type)) {
             return { valid: false, error: 'File type not allowed' };
         }
-        
         return { valid: true };
     }
 
@@ -132,6 +141,48 @@
 
     function removeEvidence(evidenceId) {
         disputeState.evidence = disputeState.evidence.filter(e => e.id !== evidenceId);
+    }
+
+    /**
+     * Upload all staged evidence files to the backend storage service.
+     * Called after a dispute is successfully raised.
+     * @param {number|string} disputeId  - trade_id / dispute identifier
+     * @param {string}        uploader   - Stellar address
+     */
+    async function uploadStagedEvidence(disputeId, uploader) {
+        if (!window.EvidenceService || disputeState.evidence.length === 0) return;
+
+        const results = await Promise.allSettled(
+            disputeState.evidence.map(({ file }) =>
+                window.EvidenceService.uploadEvidence(disputeId, file, uploader)
+            )
+        );
+
+        const failed = results.filter(r => r.status === 'rejected' || !r.value?.success);
+        if (failed.length > 0) {
+            console.warn(`${failed.length} evidence file(s) failed to upload.`);
+        }
+    }
+
+    /**
+     * Load and render evidence for the currently displayed dispute.
+     * @param {number|string} disputeId
+     * @param {string}        requester
+     */
+    async function loadAndRenderEvidence(disputeId, requester) {
+        if (!window.EvidenceService) return;
+
+        const container = document.getElementById('dispute-evidence-list');
+        if (!container) return;
+
+        container.innerHTML = '<p>Loading evidence…</p>';
+
+        const result = await window.EvidenceService.listEvidence(disputeId, requester);
+        if (result.success) {
+            window.EvidenceService.renderEvidenceList(container, result.evidence, disputeId, requester);
+        } else {
+            container.innerHTML = `<p class="error-state">Could not load evidence: ${result.error}</p>`;
+        }
     }
 
     // ============================================
@@ -280,18 +331,25 @@
                     </div>
                 ` : ''}
 
-                ${dispute.evidence && dispute.evidence.length > 0 ? `
-                    <div class="evidence-section">
+                <div class="evidence-section">
+                    <div class="evidence-section-header">
                         <h4>Evidence</h4>
-                        <div class="evidence-files">
-                            ${dispute.evidence.map(e => `
-                                <a href="${e.url}" class="evidence-link" target="_blank" rel="noopener">
-                                    📎 ${escapeHtml(e.name)}
-                                </a>
-                            `).join('')}
-                        </div>
+                        <label class="btn btn-sm btn-secondary evidence-upload-label" for="evidence-detail-input">
+                            + Add Evidence
+                        </label>
+                        <input
+                            type="file"
+                            id="evidence-detail-input"
+                            class="sr-only"
+                            accept=".jpg,.jpeg,.png,.webp,.pdf"
+                            multiple
+                            aria-label="Upload evidence files"
+                        />
                     </div>
-                ` : ''}
+                    <div id="dispute-evidence-list" class="evidence-list" aria-live="polite">
+                        <p>Loading evidence…</p>
+                    </div>
+                </div>
 
                 ${dispute.resolution ? `
                     <div class="resolution-section">
@@ -307,6 +365,36 @@
                 ` : ''}
             </div>
         `;
+
+        // Wire up the inline evidence upload input
+        const evidenceInput = container.querySelector('#evidence-detail-input');
+        if (evidenceInput) {
+            evidenceInput.addEventListener('change', async (e) => {
+                const files = Array.from(e.target.files);
+                const uploader = dispute.raised_by || '';
+                for (const file of files) {
+                    const validation = validateEvidence(file);
+                    if (!validation.valid) {
+                        showToast(validation.error, 'error');
+                        continue;
+                    }
+                    if (window.EvidenceService && uploader) {
+                        const result = await window.EvidenceService.uploadEvidence(
+                            dispute.trade_id, file, uploader
+                        );
+                        if (!result.success) {
+                            showToast(`Upload failed: ${result.error}`, 'error');
+                        }
+                    }
+                }
+                e.target.value = '';
+                // Refresh the evidence list
+                await loadAndRenderEvidence(dispute.trade_id, dispute.raised_by || '');
+            });
+        }
+
+        // Load evidence from the storage backend
+        loadAndRenderEvidence(dispute.trade_id, dispute.raised_by || '');
     }
 
     function displayDisputesList(disputes) {
@@ -423,6 +511,8 @@
         resolveDispute,
         addEvidence,
         removeEvidence,
+        uploadStagedEvidence,
+        loadAndRenderEvidence,
         displayDisputeDetails,
         displayDisputesList,
         initDisputeUI,
