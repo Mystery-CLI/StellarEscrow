@@ -164,6 +164,58 @@ impl StellarEscrowContract {
         Ok(())
     }
 
+    // -------------------------------------------------------------------------
+    // Issue #120 — Arbitrator self-registration registry
+    // -------------------------------------------------------------------------
+
+    /// Self-register as an arbitrator with a declared service fee.
+    /// Requires the arbitrator's own auth. Fee must be > 0.
+    pub fn register_arbitrator_self(
+        env: Env,
+        arbitrator: Address,
+        fee: i128,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        arbitrator.require_auth();
+        if fee <= 0 {
+            return Err(ContractError::InvalidFeeBps); // reuse closest error variant
+        }
+        storage::save_arbitrator(&env, &arbitrator);
+        storage::save_arbitrator_fee(&env, &arbitrator, fee);
+        storage::add_to_arbitrator_list(&env, &arbitrator);
+        env.events().publish(
+            (soroban_sdk::Symbol::new(&env, "arbitrator"), soroban_sdk::Symbol::new(&env, "registered")),
+            arbitrator.clone(),
+        );
+        Ok(())
+    }
+
+    /// Self-deregister as an arbitrator. Requires the arbitrator's own auth.
+    pub fn deregister_arbitrator(env: Env, arbitrator: Address) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        require_not_paused(&env)?;
+        arbitrator.require_auth();
+        storage::remove_arbitrator(&env, &arbitrator);
+        storage::remove_arbitrator_fee(&env, &arbitrator);
+        storage::remove_from_arbitrator_list(&env, &arbitrator);
+        env.events().publish(
+            (soroban_sdk::Symbol::new(&env, "arbitrator"), soroban_sdk::Symbol::new(&env, "deregistered")),
+            arbitrator.clone(),
+        );
+        Ok(())
+    }
+
+    /// Return the full list of registered arbitrators (read-only).
+    pub fn get_arbitrators(env: Env) -> soroban_sdk::Vec<Address> {
+        storage::get_arbitrator_list(&env)
+    }
+
+    /// Return the service fee for a registered arbitrator.
+    pub fn get_arbitrator_fee(env: Env, arbitrator: Address) -> i128 {
+        storage::get_arbitrator_fee(&env, &arbitrator)
+    }
+
     pub fn is_arbitrator_registered(env: Env, arbitrator: Address) -> bool {
         storage::has_arbitrator(&env, &arbitrator)
     // -------------------------------------------------------------------------
