@@ -55,6 +55,10 @@ impl Database {
         Self { pool }
     }
 
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+(&self, event: &Event) -> Result<(), AppError> {
     /// Record a slow query to the slow_query_log table (fire-and-forget).
     /// Only logs queries exceeding `threshold_ms`.
     pub fn log_slow_query(
