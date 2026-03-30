@@ -1,4 +1,5 @@
 import { rest } from 'msw';
+import { Trade } from '../../models';
 import { mockTrades } from '../data';
 import { Trade } from '../../models';
 
@@ -18,6 +19,9 @@ export const tradeHandlers = [
   rest.post(`${API_BASE_URL}/trades`, (req, res, ctx) => {
     const body = (req.body ?? {}) as Partial<Trade>;
     const newTrade: Trade = { id: String(mockTrades.length + 1), ...body } as Trade;
+  rest.post('/api/trades', (req, res, ctx) => {
+    const body = req.body as Partial<Trade> | null;
+    const newTrade: Trade = { id: String(mockTrades.length + 1), ...(body ?? {}) } as Trade;
     mockTrades.push(newTrade);
     return res(ctx.status(201), ctx.json(newTrade));
   }),
