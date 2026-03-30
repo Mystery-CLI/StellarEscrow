@@ -142,3 +142,21 @@ export type {
   ScenarioExecutionContext,
 } from './performance';
 
+// API Gateway
+export {
+  ApiGateway,
+  loadGatewayConfig,
+  authenticate,
+  LoadBalancer,
+  RateLimiter as GatewayRateLimiter,
+  transformRequest,
+  transformResponse,
+} from './gateway';
+export type {
+  GatewayConfig,
+  UpstreamConfig,
+  RateLimitConfig as GatewayRateLimitConfig,
+  GatewayRequest,
+  GatewayResponse,
+  AuthResult,
+} from './gateway';
