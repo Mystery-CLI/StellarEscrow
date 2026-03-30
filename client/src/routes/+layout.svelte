@@ -5,6 +5,7 @@
   import ThemeToggle from '$lib/ThemeToggle.svelte';
   import SearchBar from '$lib/SearchBar.svelte';
   import OfflineIndicator from '$lib/OfflineIndicator.svelte';
+  import FaucetButton from '$lib/FaucetButton.svelte';
   import LanguageSwitcher from '$lib/LanguageSwitcher.svelte';
   import { collectWebVitals } from '$lib/perf';
   import { setupI18n, textDir, t } from '$lib/i18n';
@@ -34,6 +35,7 @@
   <header class="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-3 flex items-center gap-4">
     <a href="/" class="font-bold text-lg text-[var(--accent)] shrink-0">{$t('nav.brand')}</a>
     <div class="flex-1"><SearchBar /></div>
+    <FaucetButton />
     <LanguageSwitcher />
     <ThemeToggle />
   </header>
