@@ -226,11 +226,39 @@ pub async fn replay_events(
     ))
 }
 
+/// GET /ws?token=<jwt>  — authenticated WebSocket upgrade.
+///
+/// Clients must pass a valid JWT via the `token` query parameter or
+/// `Authorization: Bearer <token>` header. On success the connection is
+/// upgraded; on failure a 401 is returned before the upgrade.
 pub async fn ws_handler(
     State(state): State<AppState>,
+    Query(params): Query<WsConnectParams>,
+    headers: axum::http::HeaderMap,
     ws: axum::extract::ws::WebSocketUpgrade,
 ) -> Response {
-    ws.on_upgrade(move |socket| state.ws_manager.handle_connection(socket))
+    // Resolve token from query param or Authorization header
+    let token = params.token.as_deref().or_else(|| {
+        headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+    });
+
+    let subject = match token.and_then(|t| state.ws_manager.validate_token(t)) {
+        Some(sub) => sub,
+        None => {
+            return (axum::http::StatusCode::UNAUTHORIZED, "Invalid or missing token")
+                .into_response();
+        }
+    };
+
+    ws.on_upgrade(move |socket| state.ws_manager.handle_connection(socket, subject))
+}
+
+#[derive(Deserialize)]
+pub struct WsConnectParams {
+    pub token: Option<String>,
 }
 
 /// GET /status — indexer sync state for loading indicators.

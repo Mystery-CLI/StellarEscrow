@@ -202,6 +202,13 @@ pub struct AuthConfig {
     pub api_keys: Vec<String>,
     #[serde(default)]
     pub admin_keys: Vec<String>,
+    /// Secret used to sign/verify JWT tokens for WebSocket authentication.
+    #[serde(default = "default_jwt_secret")]
+    pub jwt_secret: String,
+}
+
+fn default_jwt_secret() -> String {
+    "change-me-in-production".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
