@@ -10,8 +10,9 @@ export const BROWSER_MATRIX = {
     { name: 'Edge',    minVersion: 90,  engine: 'chromium' },
   ],
   mobile: [
-    { name: 'Chrome Android', device: 'Pixel 5',   engine: 'chromium' },
-    { name: 'Safari iOS',     device: 'iPhone 12', engine: 'webkit'   },
+    { name: 'Chrome Android',   device: 'Pixel 5',    engine: 'chromium' },
+    { name: 'Safari iOS',       device: 'iPhone 12',  engine: 'webkit'   },
+    { name: 'Samsung Internet', device: 'Galaxy S9+', engine: 'chromium' },
   ],
 } as const;
 

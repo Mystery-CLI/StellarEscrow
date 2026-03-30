@@ -36,6 +36,11 @@ export class ApiGateway {
   async handleRequest(req: GatewayRequest): Promise<GatewayResponse> {
     const start = Date.now();
 
+    // Special case: metrics endpoint
+    if (req.path === '/metrics') {
+      return this.handleMetricsRequest();
+    }
+
     // 1. Authentication
     const authResult = authenticate(
       req.headers['authorization'],
@@ -113,6 +118,33 @@ export class ApiGateway {
       body: responseBody,
       upstream: upstream.name,
       latencyMs,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Metrics endpoint handler
+  // ---------------------------------------------------------------------------
+
+  private handleMetricsRequest(): GatewayResponse {
+    // In a real implementation, this would collect metrics from a global metrics store
+    // For now, return a basic metrics response
+    const metrics = `# HELP stellar_escrow_gateway_up Gateway is up and running
+# TYPE stellar_escrow_gateway_up gauge
+stellar_escrow_gateway_up 1
+
+# HELP stellar_escrow_gateway_requests_total Total number of requests processed
+# TYPE stellar_escrow_gateway_requests_total counter
+stellar_escrow_gateway_requests_total 0
+`;
+
+    return {
+      status: 200,
+      headers: {
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-cache',
+      },
+      body: metrics,
+      latencyMs: 0,
     };
   }
 

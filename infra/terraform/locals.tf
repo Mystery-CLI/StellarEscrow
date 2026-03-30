@@ -3,6 +3,8 @@ locals {
 
   name_prefix = "stellarescrow-${var.environment}"
 
+  # ── Environment Configurations ──────────────────────────────────────────────
+
   env_config = {
     development = {
       db_multi_az                = false
