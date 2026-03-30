@@ -157,6 +157,10 @@ resource "aws_db_instance" "primary" {
   # Auto minor version upgrades during maintenance window
   auto_minor_version_upgrade = true
 
+  # Security best practices
+  publicly_accessible                   = false
+  iam_database_authentication_enabled = true
+
   tags = { Name = "${var.name_prefix}-postgres-primary" }
 }
 
@@ -207,4 +211,63 @@ resource "aws_iam_role" "rds_enhanced_monitoring" {
 resource "aws_iam_role_policy_attachment" "rds_enhanced_monitoring" {
   role       = aws_iam_role.rds_enhanced_monitoring.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+}
+
+# ── CloudWatch Alarms ────────────────────────────────────────────────────────
+
+resource "aws_cloudwatch_metric_alarm" "cpu_high" {
+  alarm_name          = "${var.name_prefix}-rds-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/RDS"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = var.cpu_alarm_threshold
+  alarm_description   = "Average database CPU utilization is too high."
+  alarm_actions       = var.alarm_sns_arn != "" ? [var.alarm_sns_arn] : []
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.primary.identifier }
+}
+
+resource "aws_cloudwatch_metric_alarm" "free_storage_low" {
+  alarm_name          = "${var.name_prefix}-rds-free-storage-low"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "FreeStorageSpace"
+  namespace           = "AWS/RDS"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = var.free_storage_alarm_gb * 1024 * 1024 * 1024 # GB to Bytes
+  alarm_description   = "Average database free storage space is too low."
+  alarm_actions       = var.alarm_sns_arn != "" ? [var.alarm_sns_arn] : []
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.primary.identifier }
+}
+
+resource "aws_cloudwatch_metric_alarm" "connections_high" {
+  alarm_name          = "${var.name_prefix}-rds-connections-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "DatabaseConnections"
+  namespace           = "AWS/RDS"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = var.connections_alarm
+  alarm_description   = "Average database connections is too high."
+  alarm_actions       = var.alarm_sns_arn != "" ? [var.alarm_sns_arn] : []
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.primary.identifier }
+}
+
+resource "aws_cloudwatch_metric_alarm" "replica_lag" {
+  count               = var.create_read_replica ? 1 : 0
+  alarm_name          = "${var.name_prefix}-rds-replica-lag-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "ReplicaLag"
+  namespace           = "AWS/RDS"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "300" # 5 minutes
+  alarm_description   = "Average database replica lag is too high."
+  alarm_actions       = var.alarm_sns_arn != "" ? [var.alarm_sns_arn] : []
+  dimensions          = { DBInstanceIdentifier = aws_db_instance.replica[0].identifier }
 }

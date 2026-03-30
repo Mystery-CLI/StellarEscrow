@@ -66,6 +66,8 @@ resource "aws_lb" "main" {
   enable_deletion_protection       = var.enable_deletion_protection
   enable_cross_zone_load_balancing = true
   idle_timeout                     = 60
+  drop_invalid_header_fields       = true
+  enable_http2                     = true
 
   # Access logs — bucket must exist; omit if not configured
   # access_logs { bucket = "..." enabled = true }
@@ -234,5 +236,77 @@ resource "aws_lb_listener_rule" "api" {
 
   condition {
     path_pattern { values = ["/api/*"] }
+  }
+}
+
+# ── Autoscaling ─────────────────────────────────────────────────────────────
+
+resource "aws_appautoscaling_target" "ecs" {
+  max_capacity       = var.autoscaling_max_capacity
+  min_capacity       = var.autoscaling_min_capacity
+  resource_id        = "service/${var.ecs_cluster_name}/${var.ecs_service_name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "cpu" {
+  name               = "${var.name_prefix}-cpu-scaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification { predefined_metric_type = "ECSServiceAverageCPUUtilization" }
+    target_value = var.scale_out_cpu_threshold
+  }
+}
+
+resource "aws_appautoscaling_policy" "requests" {
+  name               = "${var.name_prefix}-request-scaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ALBRequestCountPerTarget"
+      resource_label         = "${aws_lb.main.arn_suffix}/${aws_lb_target_group.api.arn_suffix}"
+    }
+    target_value = var.scale_out_request_threshold
+  }
+}
+
+# ── CloudWatch Alarms ────────────────────────────────────────────────────────
+
+resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
+  alarm_name          = "${var.name_prefix}-alb-5xx-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "10"
+  alarm_description   = "Average ALB 5XX error count is too high."
+  alarm_actions       = var.alarm_sns_arn != "" ? [var.alarm_sns_arn] : []
+  dimensions          = { LoadBalancer = aws_lb.main.arn_suffix }
+}
+
+resource "aws_cloudwatch_metric_alarm" "unhealthy_hosts" {
+  alarm_name          = "${var.name_prefix}-alb-unhealthy-hosts"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "UnHealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "1"
+  alarm_description   = "Unhealthy host count is too high."
+  alarm_actions       = var.alarm_sns_arn != "" ? [var.alarm_sns_arn] : []
+  dimensions = {
+    LoadBalancer = aws_lb.main.arn_suffix
+    TargetGroup  = aws_lb_target_group.api.arn_suffix
   }
 }
