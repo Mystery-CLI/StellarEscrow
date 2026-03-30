@@ -8,4 +8,4 @@ output "replica_endpoint" {
 }
 output "db_name" { value = aws_db_instance.primary.db_name }
 output "security_group_id" { value = aws_security_group.db.id }
-output "dashboard_name" { value = "" }
+output "dashboard_name" { value = aws_cloudwatch_dashboard.db.dashboard_name }

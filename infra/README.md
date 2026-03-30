@@ -56,9 +56,13 @@ terraform apply
 
 ### Plan
 
+For multi-environment state management, provide the environment-specific state key during initialization:
+
 ```bash
 cd infra/terraform
-terraform init
+# Initialize for staging
+terraform init -backend-config="key=stellar-escrow/staging/terraform.tfstate"
+
 terraform plan -var-file="environments/staging.tfvars" \
                -var="db_password=$DB_PASSWORD"
 ```
@@ -111,5 +115,24 @@ The `terraform.yml` workflow:
 3. Applies to **staging** on merge to `develop`
 4. Applies to **production** on merge to `main` (requires GitHub environment approval)
 
-Required GitHub secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`TF_DB_PASSWORD`, `STELLAR_CONTRACT_ID`.
+## Troubleshooting
+
+### State Locking
+
+If a previous run crashed, you may need to release the DynamoDB lock manually:
+
+```bash
+terraform force-unlock <LOCK_ID>
+```
+
+### Backend Initialization
+
+If you switch environments, you MUST re-initialize with the new key:
+
+```bash
+terraform init -reconfigure -backend-config="key=stellar-escrow/production/terraform.tfstate"
+```
+
+### Resource Deletion Failure
+
+RDS snapshots or CloudWatch logs may prevent VPC deletion if they are still being processed. Wait 60 seconds and retry the `destroy`.
