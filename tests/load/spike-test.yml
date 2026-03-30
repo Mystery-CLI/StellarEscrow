@@ -1,0 +1,61 @@
+config:
+  target: 'http://localhost:3000'
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: "Baseline load"
+    - duration: 30
+      arrivalRate: 200
+      name: "Sudden spike"
+    - duration: 60
+      arrivalRate: 5
+      name: "Recovery"
+    - duration: 30
+      arrivalRate: 300
+      name: "Second spike"
+    - duration: 60
+      arrivalRate: 5
+      name: "Final recovery"
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+    timeout: 15000
+
+scenarios:
+  - name: "Spike read operations"
+    weight: 60
+    flow:
+      - get:
+          url: "/api/trades"
+          qs:
+            limit: 100
+          expect:
+            - statusCode: 200
+      - get:
+          url: "/api/events"
+          qs:
+            limit: 200
+          expect:
+            - statusCode: 200
+
+  - name: "Spike trade creation"
+    weight: 40
+    flow:
+      - post:
+          url: "/api/trades"
+          json:
+            amount: "{{ $randomInt(500, 10000) }}"
+            asset: "USDC"
+            seller: "GASPIKE{{ $randomInt(1000, 9999) }}"
+            buyer: "GASPIKE{{ $randomInt(1000, 9999) }}"
+          expect:
+            - statusCode: 201
+          capture:
+            json: "$.id"
+            as: "tradeId"
+      - post:
+          url: "/api/trades/{{ tradeId }}/fund"
+          json:
+            transactionHash: "spike_tx_{{ tradeId }}"
+          expect:
+            - statusCode: 200

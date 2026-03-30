@@ -1,0 +1,165 @@
+{
+  "title": "StellarEscrow Performance Testing",
+  "uid": "stellar-escrow-performance",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Performance Test Status",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "up{job=\"stellar-escrow-performance\"}",
+          "legendFormat": "Test Runner"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "API Throughput (req/sec)",
+      "type": "graph",
+      "gridPos": { "x": 6, "y": 0, "w": 9, "h": 8 },
+      "targets": [
+        {
+          "expr": "stellar_escrow_performance_scenario_throughput_req_per_sec",
+          "legendFormat": "{{scenario}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "API Latency P95 (ms)",
+      "type": "graph",
+      "gridPos": { "x": 15, "y": 0, "w": 9, "h": 8 },
+      "targets": [
+        {
+          "expr": "stellar_escrow_performance_scenario_p95_latency_ms",
+          "legendFormat": "{{scenario}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Rate (%)",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "stellar_escrow_performance_scenario_error_rate",
+          "legendFormat": "{{scenario}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Performance Alerts",
+      "type": "table",
+      "gridPos": { "x": 8, "y": 4, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "stellar_escrow_performance_alert_triggered",
+          "legendFormat": "{{scenario}} - {{severity}} - {{metric}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Load Test Scenarios",
+      "type": "table",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "stellar_escrow_performance_scenario_duration_ms",
+          "legendFormat": "{{scenario}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Operation-Level Latency",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "stellar_escrow_performance_operation_p95_latency_ms",
+          "legendFormat": "{{operation}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Contract Performance (CPU Instructions)",
+      "type": "graph",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "stellar_escrow_contract_instructions_total",
+          "legendFormat": "{{operation}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Resource Usage Trends",
+      "type": "graph",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{pod=~\"stellar-escrow.*\"}[5m])",
+          "legendFormat": "CPU - {{pod}}"
+        },
+        {
+          "expr": "container_memory_usage_bytes{pod=~\"stellar-escrow.*\"}",
+          "legendFormat": "Memory - {{pod}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Database Performance",
+      "type": "graph",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "pg_stat_activity_count{datname=\"stellar_escrow\"}",
+          "legendFormat": "Active Connections"
+        },
+        {
+          "expr": "rate(pg_stat_database_tup_fetched{datname=\"stellar_escrow\"}[5m])",
+          "legendFormat": "Rows Fetched/sec"
+        }
+      ]
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "links": []
+}
