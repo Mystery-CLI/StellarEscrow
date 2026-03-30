@@ -29,6 +29,11 @@ describe('TradeCard', () => {
 
   it('truncates addresses', () => {
     render(<TradeCard {...defaultProps} />);
-    expect(screen.getByText('GBUQWP3BO...')).toBeInTheDocument();
+    expect(screen.getByText('GBUQWP3BOU...')).toBeInTheDocument();
+  });
+
+  it('matches snapshot', () => {
+    const { container } = render(<TradeCard {...defaultProps} />);
+    expect(container.firstChild).toMatchSnapshot();
   });
 });

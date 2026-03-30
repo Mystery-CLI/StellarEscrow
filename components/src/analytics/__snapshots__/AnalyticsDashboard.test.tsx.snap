@@ -1,0 +1,84 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`AnalyticsDashboard matches snapshot 1`] = `
+<div
+  style="font-family: system-ui, sans-serif; padding: 20px; width: 100%; max-width: 1200px; margin: 0px auto; background: rgb(248, 250, 252); border-radius: 12px;"
+>
+  <div
+    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;"
+  >
+    <h2
+      style="margin: 0px; color: rgb(30, 41, 59);"
+    >
+      Analytics Dashboard
+    </h2>
+    <div
+      style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;"
+    >
+      <select
+        style="padding: 8px 12px; justify-self: auto; border-radius: 8px; border: 1px solid #cbd5e1; background: white; min-width: 120px;"
+      >
+        <option
+          value="7d"
+        >
+          Last 7 Days
+        </option>
+        <option
+          value="30d"
+        >
+          Last 30 Days
+        </option>
+        <option
+          value="90d"
+        >
+          Last 90 Days
+        </option>
+      </select>
+      <select
+        style="padding: 8px 12px; justify-self: auto; border-radius: 8px; border: 1px solid #cbd5e1; background: white; min-width: 120px;"
+      >
+        <option
+          value="all"
+        >
+          All Trades
+        </option>
+        <option
+          value="crypto"
+        >
+          Crypto Only
+        </option>
+        <option
+          value="fiat"
+        >
+          Fiat Only
+        </option>
+      </select>
+      <button
+        style="padding: 8px 16px; background: rgb(59, 130, 246); color: white; border-radius: 8px; cursor: pointer; opacity: 1; font-weight: 500; min-width: 120px;"
+      >
+        Export Data
+      </button>
+    </div>
+  </div>
+  <div
+    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;"
+  >
+    <div
+      style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); grid-column: 1 / -1;"
+    >
+      <div
+        data-data="[{"time":"Day 1","volume":9780},{"time":"Day 2","volume":4070},{"time":"Day 3","volume":2650},{"time":"Day 4","volume":1120},{"time":"Day 5","volume":4712},{"time":"Day 6","volume":2814},{"time":"Day 7","volume":7648},{"time":"Day 8","volume":4411},{"time":"Day 9","volume":1937},{"time":"Day 10","volume":10354},{"time":"Day 11","volume":4024},{"time":"Day 12","volume":4932},{"time":"Day 13","volume":5644},{"time":"Day 14","volume":4938},{"time":"Day 15","volume":3294},{"time":"Day 16","volume":3842},{"time":"Day 17","volume":4182},{"time":"Day 18","volume":10632},{"time":"Day 19","volume":3977},{"time":"Day 20","volume":8837},{"time":"Day 21","volume":2488},{"time":"Day 22","volume":2019},{"time":"Day 23","volume":9663},{"time":"Day 24","volume":4553},{"time":"Day 25","volume":10537},{"time":"Day 26","volume":7400},{"time":"Day 27","volume":10543},{"time":"Day 28","volume":6903}]"
+        data-testid="trade-volume-chart"
+      />
+    </div>
+    <div
+      style="background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); display: flex; justify-content: center;"
+    >
+      <div
+        data-data="{"success":379,"failed":50}"
+        data-testid="success-rate-chart"
+      />
+    </div>
+  </div>
+</div>
+`;

@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@stellar-escrow/components": "*",
-    "@stellar-escrow/state": "*",
     "@emotion/react": "^11.11.3",
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.15.3",

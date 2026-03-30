@@ -1,0 +1,14 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`TradeVolumeChart matches snapshot 1`] = `
+<div
+  data-testid="trade-volume-chart"
+  style="position: relative; height: 300px; width: 100%; padding: 10px;"
+>
+  <div
+    data-data="{"labels":["Day 1","Day 2","Day 3"],"datasets":[{"label":"Trade Volume","data":[1000,1500,1200],"borderColor":"rgb(75, 192, 192)","backgroundColor":"rgba(75, 192, 192, 0.2)","tension":0.4,"fill":true}]}"
+    data-options="{"responsive":true,"maintainAspectRatio":false,"plugins":{"legend":{"position":"top"},"title":{"display":true,"text":"Trade Volume Over Time"}},"scales":{"y":{"beginAtZero":true,"title":{"display":true,"text":"Volume ($)"}},"x":{"title":{"display":true,"text":"Time Frame"}}}}"
+    data-testid="line-chart"
+  />
+</div>
+`;

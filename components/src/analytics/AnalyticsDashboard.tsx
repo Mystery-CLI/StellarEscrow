@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fetchAnalyticsData } from './api';
 import { TradeVolumeChart, TradeVolumeData } from './TradeVolumeChart';
 import { SuccessRateChart, SuccessRateData } from './SuccessRateChart';
 
@@ -9,29 +10,6 @@ export interface AnalyticsData {
   volume: TradeVolumeData[];
   successRate: SuccessRateData;
 }
-
-// Mock API Call
-const fetchAnalyticsData = async (timeRange: TimeRange, tradeType: TradeType): Promise<AnalyticsData> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const multiplier = timeRange === '7d' ? 1 : timeRange === '30d' ? 4 : 12;
-      const typeMultiplier = tradeType === 'all' ? 1 : tradeType === 'crypto' ? 0.7 : 0.3;
-      
-      const mockData: AnalyticsData = {
-        volume: Array.from({ length: multiplier * 7 }).map((_, i) => ({
-          time: `Day ${i + 1}`,
-          volume: Math.floor(Math.random() * 10000 * typeMultiplier) + 1000,
-        })),
-        successRate: {
-          success: Math.floor((80 + Math.random() * 15) * typeMultiplier * multiplier),
-          failed: Math.floor((5 + Math.random() * 15) * typeMultiplier * multiplier),
-        },
-      };
-      
-      resolve(mockData);
-    }, 800);
-  });
-};
 
 export const AnalyticsDashboard: React.FC = () => {
   const [data, setData] = useState<AnalyticsData | null>(null);

@@ -1,0 +1,85 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`TradeCard matches snapshot 1`] = `
+<div
+  class="card trade-card"
+  role="button"
+  tabindex="0"
+>
+  <div
+    class="card-content"
+  >
+    <div
+      class="trade-card-header"
+    >
+      <div>
+        <h4
+          class="trade-id"
+        >
+          Trade #
+          123
+        </h4>
+        <p
+          class="trade-timestamp"
+        >
+          2024-03-25 10:30:00
+        </p>
+      </div>
+      <span
+        class="badge badge-info "
+      >
+        created
+      </span>
+    </div>
+    <div
+      class="trade-card-body"
+    >
+      <div
+        class="trade-party"
+      >
+        <span
+          class="party-label"
+        >
+          Seller:
+        </span>
+        <span
+          class="party-address"
+        >
+          GBUQWP3BOU
+          ...
+        </span>
+      </div>
+      <div
+        class="trade-party"
+      >
+        <span
+          class="party-label"
+        >
+          Buyer:
+        </span>
+        <span
+          class="party-address"
+        >
+          GBBD47UZQ5
+          ...
+        </span>
+      </div>
+      <div
+        class="trade-amount"
+      >
+        <span
+          class="amount-label"
+        >
+          Amount:
+        </span>
+        <span
+          class="amount-value"
+        >
+          100.50
+           USDC
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+`;
