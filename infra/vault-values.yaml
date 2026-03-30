@@ -1,0 +1,324 @@
+# HashiCorp Vault Helm Configuration for StellarEscrow
+# Deploy with: helm install vault hashicorp/vault -f vault-values.yaml -n vault --create-namespace
+
+server:
+  enabled: true
+  
+  image:
+    repository: "vault"
+    tag: "1.15.0"
+    
+  # HA Storage Backend Configuration
+  ha:
+    enabled: true
+    replicas: 3
+    config: |
+      ui = true
+      listener "tcp" {
+        address = "[::]:8200"
+        tls_cert_file = "/vault/userconfig/tls/tls.crt"
+        tls_key_file = "/vault/userconfig/tls/tls.key"
+      }
+      
+      storage "raft" {
+        path = "/vault/data"
+        node_id = "raft_node_1"
+        leader_ca_cert_file = "/vault/userconfig/tls/ca.crt"
+        leader_client_cert_file = "/vault/userconfig/tls/tls.crt"
+        leader_client_key_file = "/vault/userconfig/tls/tls.key"
+      }
+      
+      service_registration "kubernetes" {}
+
+  # Persistent storage for raft snapshots
+  dataStorage:
+    size: 10Gi
+    enabled: true
+    
+  # Pod Security Settings
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    fsGroup: 1000
+    
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+      
+  # Vault Startup Configuration
+  postStart:
+    - /bin/sh
+    - -c
+    - |
+      sleep 5
+      # Configure auth methods
+      vault auth enable kubernetes || true
+      vault auth enable oidc || true
+      
+  # RBAC
+  serviceAccount:
+    create: true
+    name: vault
+    
+  # Anti-affinity for HA
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - vault
+        topologyKey: kubernetes.io/hostname
+
+ui:
+  enabled: true
+  serviceType: "ClusterIP"
+  serviceNodePort: null
+  externalPort: 8200
+
+# Injector for automatic secret injection into pods
+injector:
+  enabled: true
+  image:
+    repository: "hashicorp/vault-k8s"
+    tag: "1.3.1"
+  metrics:
+    enabled: true
+
+# Prometheus monitoring
+telemetry:
+  enabled: true
+  prometheusOperator: true
+
+---
+# Vault Secret Policies
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-policies
+  namespace: vault
+data:
+  api-policy.hcl: |
+    # API application policy
+    path "secret/data/postgres/prod" {
+      capabilities = ["read"]
+    }
+    
+    path "secret/data/stellar/testnet-key" {
+      capabilities = ["read"]
+    }
+    
+    path "secret/data/stellar/mainnet-key" {
+      capabilities = ["read"]
+    }
+    
+    path "secret/data/alerts/slack-webhook" {
+      capabilities = ["read"]
+    }
+    
+    path "aws/creds/s3-access" {
+      capabilities = ["read"]
+    }
+    
+    path "pki/issue/api-cert" {
+      capabilities = ["create", "update"]
+    }
+  
+  indexer-policy.hcl: |
+    # Indexer service policy
+    path "secret/data/stellar/mainnet-key" {
+      capabilities = ["read"]
+    }
+    
+    path "secret/data/stellar/testnet-key" {
+      capabilities = ["read"]
+    }
+    
+    path "secret/data/postgres/prod" {
+      capabilities = ["read"]
+    }
+    
+    path "secret/data/alerts/slack-webhook" {
+      capabilities = ["read"]
+    }
+  
+  admin-policy.hcl: |
+    # Admin/DevOps policy (restricted)
+    path "secret/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+    
+    path "auth/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+    
+    path "sys/policy/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+
+---
+# Kubernetes Auth Method Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-auth-k8s
+  namespace: vault
+data:
+  setup.sh: |
+    #!/bin/sh
+    
+    # Enable Kubernetes auth
+    vault auth enable kubernetes || true
+    
+    # Configure Kubernetes auth
+    vault write auth/kubernetes/config \
+      token_reviewer_jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token \
+      kubernetes_host="https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT" \
+      kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    
+    # Create role for API service
+    vault write auth/kubernetes/role/api \
+      bound_service_account_names=api \
+      bound_service_account_namespaces=production \
+      policies=api-policy \
+      ttl=24h
+    
+    # Create role for Indexer service
+    vault write auth/kubernetes/role/indexer \
+      bound_service_account_names=indexer \
+      bound_service_account_namespaces=production \
+      policies=indexer-policy \
+      ttl=24h
+    
+    echo "Vault Kubernetes auth configured successfully"
+
+---
+# Vault ServiceAccount for Kubernetes Auth
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-auth
+  namespace: production
+
+---
+# Vault ClusterRoleBinding for Token Review
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-token-review
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: vault-auth
+    namespace: vault
+
+---
+# Example: Secret Storage - PostgreSQL Credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: production
+stringData:
+  config.json: |
+    {
+      "vault_addr": "https://vault.vault.svc.cluster.local:8200",
+      "vault_path": "secret/data/postgres/prod",
+      "auth_method": "kubernetes",
+      "role": "api"
+    }
+
+---
+# Vault Injector Example Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+      annotations:
+        # Vault injector annotations
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-secret-database: "secret/database/config"
+        vault.hashicorp.com/agent-inject-template-database: |
+          {{- with secret "secret/database/config" -}}
+          export DB_USER="{{ .Data.data.username }}"
+          export DB_PASSWORD="{{ .Data.data.password }}"
+          {{- end }}
+        vault.hashicorp.com/role: "api"
+    spec:
+      serviceAccountName: api
+      containers:
+        - name: api
+          image: stellar-escrow/api:latest
+          ports:
+            - containerPort: 4000
+          env:
+            - name: VAULT_ADDR
+              value: "https://vault.vault.svc.cluster.local:8200"
+            - name: VAULT_SKIP_VERIFY
+              value: "false"
+          volumeMounts:
+            - name: vault-token
+              mountPath: /vault/secrets
+      volumes:
+        - name: vault-token
+          emptyDir:
+            medium: Memory
+
+---
+# Secret Rotation Job (Kubernetes CronJob)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-rotate-secrets
+  namespace: production
+spec:
+  schedule: "0 2 * * 0"  # Every Sunday at 02:00 UTC
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: vault-admin
+          containers:
+            - name: rotator
+              image: vault:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  vault login -method=kubernetes role=admin
+                  
+                  # Rotate PostgreSQL password
+                  echo "Rotating PostgreSQL password..."
+                  vault generate-password \
+                    --format=json \
+                    --length=32 | jq -r '.password' > /tmp/new_pass.txt
+                    
+                  NEW_PASS=$(cat /tmp/new_pass.txt)
+                  vault write secret/postgres/prod \
+                    username=app_user \
+                    password="$NEW_PASS"
+                  
+                  echo "✓ Password rotated successfully"
+              env:
+                - name: VAULT_ADDR
+                  value: https://vault.vault.svc.cluster.local:8200
+          restartPolicy: OnFailure
