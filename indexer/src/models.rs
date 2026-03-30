@@ -644,3 +644,34 @@ pub struct PushRegistrationRequest {
     pub platform: String,
     pub address: String,
 }
+
+// =============================================================================
+// Dispute Evidence Models (Issue #125)
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct DisputeEvidenceRecord {
+    pub id: Uuid,
+    pub dispute_id: i64,
+    pub file_id: Uuid,
+    pub uploader: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisputeEvidenceResponse {
+    pub evidence: DisputeEvidenceRecord,
+    pub file: FileRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct EvidenceDownloadToken {
+    pub token: Uuid,
+    pub file_id: Uuid,
+    pub requester: String,
+    pub expires_at: DateTime<Utc>,
+    pub used: bool,
+    pub created_at: DateTime<Utc>,
+}
