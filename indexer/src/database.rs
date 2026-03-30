@@ -56,7 +56,7 @@ impl Database {
     }
 
     pub async fn insert_event(&self, event: &Event) -> Result<(), AppError> {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             INSERT INTO events (id, event_type, category, schema_version, contract_id, ledger, transaction_hash, timestamp, data, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -75,6 +75,11 @@ impl Database {
         .bind(event.created_at)
         .execute(&self.pool)
         .await?;
+
+        if result.rows_affected() > 0 {
+            self.insert_analytics_event(&event.event_type, &event.data, event.ledger)
+                .await?;
+        }
 
         Ok(())
     }
@@ -112,6 +117,15 @@ impl Database {
 
             if result.rows_affected() > 0 {
                 inserted += 1;
+
+                sqlx::query(
+                    "INSERT INTO analytics_events (event_type, data, ledger) VALUES ($1, $2, $3)"
+                )
+                .bind(&event.event_type)
+                .bind(&event.data)
+                .bind(event.ledger)
+                .execute(&mut *tx)
+                .await?;
             }
         }
 
@@ -1214,18 +1228,49 @@ impl Database {
         Ok(())
     }
 
+    pub async fn prune_analytics_events_older_than(&self, retention_days: u32) -> Result<u64, AppError> {
+        if retention_days == 0 {
+            return Ok(0);
+        }
+
+        let result = sqlx::query(
+            "DELETE FROM analytics_events WHERE recorded_at < NOW() - ($1::INT * INTERVAL '1 day')"
+        )
+        .bind(retention_days as i32)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
     pub async fn get_analytics_events_in_range(
         &self,
         from: chrono::DateTime<chrono::Utc>,
         to: chrono::DateTime<chrono::Utc>,
+        event_type: Option<&str>,
+        limit: i64,
     ) -> Result<Vec<crate::analytics_service::export::AnalyticsRow>, AppError> {
-        let rows = sqlx::query(
-            "SELECT event_type, ledger, data, recorded_at FROM analytics_events WHERE recorded_at >= $1 AND recorded_at <= $2 ORDER BY recorded_at DESC LIMIT 10000"
-        )
-        .bind(from)
-        .bind(to)
-        .fetch_all(&self.pool)
-        .await?;
+        let clamped_limit = limit.clamp(1, 50_000);
+        let rows = if let Some(event_type) = event_type {
+            sqlx::query(
+                "SELECT event_type, ledger, data, recorded_at FROM analytics_events WHERE recorded_at >= $1 AND recorded_at <= $2 AND event_type = $3 ORDER BY recorded_at DESC LIMIT $4"
+            )
+            .bind(from)
+            .bind(to)
+            .bind(event_type)
+            .bind(clamped_limit)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query(
+                "SELECT event_type, ledger, data, recorded_at FROM analytics_events WHERE recorded_at >= $1 AND recorded_at <= $2 ORDER BY recorded_at DESC LIMIT $3"
+            )
+            .bind(from)
+            .bind(to)
+            .bind(clamped_limit)
+            .fetch_all(&self.pool)
+            .await?
+        };
 
         Ok(rows.into_iter().map(|r| crate::analytics_service::export::AnalyticsRow {
             event_type: r.get("event_type"),
@@ -1233,6 +1278,157 @@ impl Database {
             data: r.get("data"),
             recorded_at: r.get("recorded_at"),
         }).collect())
+    }
+
+    pub async fn get_top_analytics_event_types(&self, limit: i64) -> Result<Vec<(String, u64)>, AppError> {
+        let rows = sqlx::query(
+            "SELECT event_type, COUNT(*)::BIGINT AS cnt FROM analytics_events GROUP BY event_type ORDER BY cnt DESC LIMIT $1"
+        )
+        .bind(limit.clamp(1, 100))
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let key: String = r.get("event_type");
+                let count: i64 = r.get("cnt");
+                (key, count.max(0) as u64)
+            })
+            .collect())
+    }
+
+    pub async fn get_top_analytics_categories(&self, limit: i64) -> Result<Vec<(String, u64)>, AppError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                split_part(event_type, '_', 1) AS category,
+                COUNT(*)::BIGINT AS cnt
+            FROM analytics_events
+            GROUP BY category
+            ORDER BY cnt DESC
+            LIMIT $1
+            "#
+        )
+        .bind(limit.clamp(1, 100))
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let key: String = r.get("category");
+                let count: i64 = r.get("cnt");
+                (key, count.max(0) as u64)
+            })
+            .collect())
+    }
+
+    pub async fn get_analytics_trend_24h(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<crate::analytics_service::AnalyticsTrendPoint>, AppError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                date_trunc('minute', recorded_at) AS minute,
+                COUNT(*)::BIGINT AS events,
+                COALESCE(SUM((data->>'amount')::BIGINT), 0)::BIGINT AS volume_stroops,
+                COUNT(*) FILTER (WHERE event_type = 'trade_created')::BIGINT AS trades_created,
+                COUNT(*) FILTER (WHERE event_type = 'trade_confirmed')::BIGINT AS trades_completed
+            FROM analytics_events
+            WHERE recorded_at >= NOW() - INTERVAL '24 hours'
+            GROUP BY minute
+            ORDER BY minute DESC
+            LIMIT $1
+            "#
+        )
+        .bind(limit.clamp(1, 1_440))
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| crate::analytics_service::AnalyticsTrendPoint {
+                minute: r.get("minute"),
+                events: (r.get::<i64, _>("events")).max(0) as u64,
+                volume_stroops: (r.get::<i64, _>("volume_stroops")).max(0) as u64,
+                trades_created: (r.get::<i64, _>("trades_created")).max(0) as u64,
+                trades_completed: (r.get::<i64, _>("trades_completed")).max(0) as u64,
+            })
+            .collect())
+    }
+
+    pub async fn get_realtime_analytics_window(
+        &self,
+        window_seconds: u64,
+    ) -> Result<crate::analytics_service::aggregator::MetricWindow, AppError> {
+        let seconds = (window_seconds as i64).clamp(10, 86_400);
+
+        let total_row = sqlx::query(
+            r#"
+            SELECT
+                COUNT(*)::BIGINT AS total_events,
+                COUNT(*) FILTER (WHERE event_type = 'trade_created')::BIGINT AS trades_created,
+                COUNT(*) FILTER (WHERE event_type = 'trade_funded')::BIGINT AS trades_funded,
+                COUNT(*) FILTER (WHERE event_type = 'trade_confirmed')::BIGINT AS trades_completed,
+                COUNT(*) FILTER (WHERE event_type = 'dispute_raised')::BIGINT AS disputes_raised,
+                COALESCE(SUM((data->>'amount')::BIGINT), 0)::BIGINT AS volume_stroops
+            FROM analytics_events
+            WHERE recorded_at >= NOW() - ($1::BIGINT * INTERVAL '1 second')
+            "#
+        )
+        .bind(seconds)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let by_type_rows = sqlx::query(
+            r#"
+            SELECT event_type, COUNT(*)::BIGINT AS cnt
+            FROM analytics_events
+            WHERE recorded_at >= NOW() - ($1::BIGINT * INTERVAL '1 second')
+            GROUP BY event_type
+            ORDER BY cnt DESC
+            "#
+        )
+        .bind(seconds)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut event_counts = std::collections::HashMap::new();
+        for row in by_type_rows {
+            let event_type: String = row.get("event_type");
+            let count: i64 = row.get("cnt");
+            event_counts.insert(event_type, count.max(0) as u64);
+        }
+
+        let trades_created = (total_row.get::<i64, _>("trades_created")).max(0) as u64;
+        let trades_completed = (total_row.get::<i64, _>("trades_completed")).max(0) as u64;
+        let disputes_raised = (total_row.get::<i64, _>("disputes_raised")).max(0) as u64;
+        let completion_rate_bps = if trades_created > 0 {
+            ((trades_completed * 10_000) / trades_created) as u32
+        } else {
+            0
+        };
+        let dispute_rate_bps = if trades_created > 0 {
+            ((disputes_raised * 10_000) / trades_created) as u32
+        } else {
+            0
+        };
+
+        Ok(crate::analytics_service::aggregator::MetricWindow {
+            window_seconds: seconds as u64,
+            event_counts,
+            total_events: (total_row.get::<i64, _>("total_events")).max(0) as u64,
+            trades_created,
+            trades_funded: (total_row.get::<i64, _>("trades_funded")).max(0) as u64,
+            trades_completed,
+            disputes_raised,
+            volume_stroops: (total_row.get::<i64, _>("volume_stroops")).max(0) as u64,
+            completion_rate_bps,
+            dispute_rate_bps,
+            captured_at: Some(Utc::now()),
+        })
     }
 
     pub async fn get_trade_stats(&self) -> Result<crate::analytics_service::TradeStats, AppError> {
@@ -1291,26 +1487,70 @@ impl Database {
         let total_trades: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM events WHERE event_type = 'trade_created'"
         ).fetch_one(&self.pool).await?;
+        let repeat_traders: i64 = sqlx::query_scalar(
+            r#"
+            WITH participants AS (
+                SELECT data->>'seller' AS address
+                FROM events
+                WHERE event_type = 'trade_created' AND data->>'seller' IS NOT NULL
+                UNION ALL
+                SELECT data->>'buyer' AS address
+                FROM events
+                WHERE event_type = 'trade_created' AND data->>'buyer' IS NOT NULL
+            )
+            SELECT COUNT(*)::BIGINT
+            FROM (
+                SELECT address
+                FROM participants
+                GROUP BY address
+                HAVING COUNT(*) > 1
+            ) repeated
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
 
         Ok(crate::analytics_service::UserBehavior {
             unique_sellers: sellers as u64,
             unique_buyers: buyers as u64,
-            repeat_traders: 0, // computed separately if needed
+            repeat_traders: repeat_traders.max(0) as u64,
             avg_trades_per_user: total_trades as f64 / total_users as f64,
         })
     }
 
     pub async fn get_platform_metrics(&self) -> Result<crate::analytics_service::PlatformMetrics, AppError> {
-        let total_events: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
-            .fetch_one(&self.pool).await?;
-        let active_trades: i64 = sqlx::query_scalar(
-            "SELECT COUNT(DISTINCT data->>'trade_id') FROM events WHERE event_type = 'trade_created'"
-        ).fetch_one(&self.pool).await.unwrap_or(0);
+        let created: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::BIGINT FROM events WHERE event_type = 'trade_created'"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let terminal: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::BIGINT FROM events WHERE event_type IN ('trade_confirmed', 'trade_cancelled', 'dispute_raised')"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+
+        let events_last_5m: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::BIGINT FROM analytics_events WHERE recorded_at >= NOW() - INTERVAL '5 minutes'"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+
+        let total_fees_collected: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM((data->>'fee')::BIGINT), 0)::BIGINT FROM events WHERE event_type = 'trade_confirmed'"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
 
         Ok(crate::analytics_service::PlatformMetrics {
-            events_per_minute: 0.0, // computed from real-time aggregator
-            active_trades: active_trades as u64,
-            total_fees_collected: 0,
+            events_per_minute: events_last_5m as f64 / 5.0,
+            active_trades: created.saturating_sub(terminal) as u64,
+            total_fees_collected: total_fees_collected.max(0) as u64,
             websocket_connections: 0,
             api_requests_per_minute: 0.0,
         })
