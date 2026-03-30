@@ -81,4 +81,8 @@ impl Cache {
             let _: Result<(), _> = redis::cmd("DEL").arg(&keys).query_async(&mut conn).await;
         }
     }
+
+    pub fn is_connected(&self) -> bool {
+        self.client.is_some()
+    }
 }

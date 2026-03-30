@@ -2,6 +2,11 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::Json,
+    routing::{get, patch, post, put},
+    Router,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -11,6 +16,7 @@ use crate::handlers::AppState;
 use crate::models::{
     RegisterUserRequest, SetPreferenceRequest, SetVerificationRequest, UpdateProfileRequest,
     UserAnalyticsRow, UserPreference, UserProfile, UserSearchQuery,
+    UserAnalyticsRow, UserPreference, UserProfile,
 };
 
 /// POST /users — register a new user profile

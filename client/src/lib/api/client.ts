@@ -1,5 +1,29 @@
 import { ApiRequestError } from './types';
 
+// ---------------------------------------------------------------------------
+// Simple in-memory GET cache with TTL
+// ---------------------------------------------------------------------------
+interface CacheEntry { value: unknown; expiresAt: number }
+const cache = new Map<string, CacheEntry>();
+
+export function cachedFetch<T>(
+  key: string,
+  ttlMs: number,
+  fetcher: () => Promise<T>
+): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && Date.now() < hit.expiresAt) return Promise.resolve(hit.value as T);
+  return fetcher().then((value) => {
+    cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+    return value;
+  });
+}
+
+export function invalidateCache(prefix?: string) {
+  if (!prefix) { cache.clear(); return; }
+  for (const key of cache.keys()) if (key.startsWith(prefix)) cache.delete(key);
+}
+
 const RETRY_STATUSES = new Set([429, 502, 503, 504]);
 const DEFAULT_RETRIES = 3;
 const BASE_DELAY_MS = 300;

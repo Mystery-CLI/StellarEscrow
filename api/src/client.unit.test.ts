@@ -78,18 +78,15 @@ describe('ApiClient unit', () => {
   });
 
   it('parses terminal HTTP failures into ApiError objects', async () => {
-    const client = new ApiClient({
-      baseURL: 'http://localhost:3000/api',
-      retryConfig: { maxRetries: 0, delayMs: 0, backoffMultiplier: 1 },
-    });
-
-    mockAxiosInstance.get.mockRejectedValueOnce({
+    new ApiClient({ baseURL: 'http://localhost:3000/api' });
+    const error = {
       code: 'ERR_BAD_REQUEST',
       message: 'Request failed with status code 404',
       response: { status: 404, data: { error: 'missing' } },
-    });
+    } as any;
 
-    await expect(client.get('/trades/missing')).rejects.toMatchObject({
+    const errorHandler = mockAxiosInstance.interceptors.response.use.mock.calls[0][1];
+    await expect(errorHandler(error)).rejects.toMatchObject({
       code: 'ERR_BAD_REQUEST',
       message: 'Request failed with status code 404',
       status: 404,

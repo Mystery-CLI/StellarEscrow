@@ -10,6 +10,9 @@ min_connections = 2
 redis_url = ""          # Set to redis://localhost:6379 to enable
 default_ttl_secs = 30
 events_ttl_secs = 10
+search_ttl_secs = 30
+analytics_ttl_secs = 60
+stats_ttl_secs = 60
 
 [stellar]
 network = "testnet"

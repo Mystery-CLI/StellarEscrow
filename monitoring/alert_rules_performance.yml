@@ -1,0 +1,74 @@
+groups:
+  - name: stellar_escrow_performance
+    rules:
+      - alert: HighAvgLatency
+        expr: stellar_escrow_api_avg_response_ms > 500
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High average API latency"
+          description: "Average response time is {{ $value }}ms (threshold: 500ms)."
+
+      - alert: CriticalAvgLatency
+        expr: stellar_escrow_api_avg_response_ms > 2000
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical average API latency"
+          description: "Average response time is {{ $value }}ms (threshold: 2000ms)."
+
+      - alert: HighP95Latency
+        expr: stellar_escrow_api_p95_response_ms > 1000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P95 API latency"
+          description: "P95 response time is {{ $value }}ms (threshold: 1000ms)."
+
+      - alert: CriticalP95Latency
+        expr: stellar_escrow_api_p95_response_ms > 5000
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical P95 API latency"
+          description: "P95 response time is {{ $value }}ms (threshold: 5000ms)."
+
+      - alert: HighAPIErrorRate
+        expr: stellar_escrow_error_rate > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API error rate"
+          description: "Error rate is {{ $value }}% (threshold: 5%)."
+
+      - alert: CriticalAPIErrorRate
+        expr: stellar_escrow_error_rate > 20
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical API error rate"
+          description: "Error rate is {{ $value }}% (threshold: 20%)."
+
+      - alert: SlowDBQueries
+        expr: stellar_escrow_db_query_duration_ms > 500
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries detected"
+          description: "DB query duration is {{ $value }}ms (threshold: 500ms)."
+
+      - alert: LowThroughput
+        expr: stellar_escrow_api_requests_per_minute < 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Very low API throughput"
+          description: "Requests per minute dropped to {{ $value }}."

@@ -89,7 +89,7 @@ export class ApiClient {
   private async retryRequest<T>(fn: () => Promise<T>, attempt = 0): Promise<T> {
     try {
       return await fn();
-    } catch (error) {
+    } catch (error: any) {
       if (attempt < this.retryConfig.maxRetries && this.shouldRetry(error)) {
         const delay = this.retryConfig.delayMs * Math.pow(this.retryConfig.backoffMultiplier, attempt);
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -100,8 +100,9 @@ export class ApiClient {
   }
 
   private shouldRetry(error: any): boolean {
-    if (error.response?.status) {
-      return error.response.status >= 500 || error.response.status === 408 || error.response.status === 429;
+    const status = error.status || error.response?.status;
+    if (status) {
+      return status >= 500 || status === 408 || status === 429;
     }
     return error.code === 'ECONNABORTED' || error.code === 'ENOTFOUND';
   }

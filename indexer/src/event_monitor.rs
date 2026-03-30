@@ -10,7 +10,7 @@ use crate::config::StellarConfig;
 use crate::database::Database;
 use crate::error::AppError;
 use crate::fraud_service::FraudDetectionService;
-use crate::job_queue::{JobQueue, types::{Job, JobType}};
+use crate::job_queue::{JobQueue, types::{Job, JobPriority, JobType}};
 use crate::models::{Event, WebSocketMessage};
 use crate::websocket::WebSocketManager;
 
@@ -277,6 +277,9 @@ impl EventMonitor {
         };
         self.ws_manager.broadcast(ws_message).await;
 
+        // Notifications are best-effort and should not block the rest of event processing.
+        self.notification_service.process_event(event).await;
+
         // Fraud detection for high-value trade events
         let report = match event.event_type.as_str() {
             "trade_created" => self.fraud_service.process_event(event).await,
@@ -305,25 +308,118 @@ impl EventMonitor {
             }
         }
 
-        // Enqueue background job
-        let job = Job {
-            job_type: JobType::Event,
-            event_id: event.id.to_string(),
-            trade_id: event
-                .data
-                .get("trade_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string(),
-            payload: event.data.clone(),
+        let trade_id = event
+            .data
+            .get("trade_id")
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| value.to_string())
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let event_priority = match event.event_type.as_str() {
+            "dispute_raised" | "dispute_resolved" => JobPriority::Critical,
+            "trade_created" | "trade_funded" | "trade_confirmed" => JobPriority::High,
+            _ => JobPriority::Normal,
         };
+        let event_job = Job::new(
+            JobType::Event,
+            event.id.to_string(),
+            trade_id.clone(),
+            event.data.clone(),
+            event_priority,
+        );
+
+        let notification_job = Job::new(
+            JobType::Notification,
+            event.id.to_string(),
+            trade_id,
+            serde_json::json!({
+                "event_type": event.event_type,
+                "timestamp": event.timestamp,
+                "data": event.data,
+            }),
+            JobPriority::High,
+        );
+
+        // Update user analytics for trade lifecycle events
+        self.update_user_analytics(event).await;
 
         // Update user analytics for trade lifecycle events
         self.update_user_analytics(event).await;
 
         let mut queue = self.job_queue.lock().await;
-        if let Err(e) = queue.enqueue(job).await {
-            error!("Failed to enqueue job for event {}: {}", event.id, e);
+        if let Err(e) = queue.enqueue(event_job).await {
+            error!("Failed to enqueue event job for event {}: {}", event.id, e);
+        }
+        if let Err(e) = queue.enqueue(notification_job).await {
+            error!("Failed to enqueue notification job for event {}: {}", event.id, e);
+        }
+    }
+
+    async fn update_user_analytics(&self, event: &Event) {
+        let d = &event.data;
+        let upsert = |address: &str, seller: bool, buyer: bool, amount: i64, completed: bool, disputed: bool, cancelled: bool| {
+            let pool = self.database.pool().clone();
+            let address = address.to_string();
+            tokio::spawn(async move {
+                let _ = sqlx::query(
+                    r#"
+                    INSERT INTO user_analytics
+                        (address, total_trades, trades_as_seller, trades_as_buyer,
+                         total_volume, completed_trades, disputed_trades, cancelled_trades, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                    ON CONFLICT (address) DO UPDATE SET
+                        total_trades     = user_analytics.total_trades     + EXCLUDED.total_trades,
+                        trades_as_seller = user_analytics.trades_as_seller + EXCLUDED.trades_as_seller,
+                        trades_as_buyer  = user_analytics.trades_as_buyer  + EXCLUDED.trades_as_buyer,
+                        total_volume     = user_analytics.total_volume     + EXCLUDED.total_volume,
+                        completed_trades = user_analytics.completed_trades + EXCLUDED.completed_trades,
+                        disputed_trades  = user_analytics.disputed_trades  + EXCLUDED.disputed_trades,
+                        cancelled_trades = user_analytics.cancelled_trades + EXCLUDED.cancelled_trades,
+                        updated_at       = NOW()
+                    "#,
+                )
+                .bind(&address)
+                .bind(if seller || buyer { 1i32 } else { 0 })
+                .bind(if seller { 1i32 } else { 0 })
+                .bind(if buyer { 1i32 } else { 0 })
+                .bind(amount)
+                .bind(if completed { 1i32 } else { 0 })
+                .bind(if disputed { 1i32 } else { 0 })
+                .bind(if cancelled { 1i32 } else { 0 })
+                .execute(&pool)
+                .await;
+            });
+        };
+
+        match event.event_type.as_str() {
+            "trade_created" => {
+                let seller = d.get("seller").and_then(|v| v.as_str()).unwrap_or_default();
+                let buyer  = d.get("buyer").and_then(|v| v.as_str()).unwrap_or_default();
+                let amount = d.get("amount").and_then(|v| v.as_i64()).unwrap_or(0);
+                upsert(seller, true,  false, amount, false, false, false);
+                upsert(buyer,  false, true,  amount, false, false, false);
+            }
+            "trade_confirmed" => {
+                let seller = d.get("seller").and_then(|v| v.as_str()).unwrap_or_default();
+                let buyer  = d.get("buyer").and_then(|v| v.as_str()).unwrap_or_default();
+                upsert(seller, false, false, 0, true, false, false);
+                upsert(buyer,  false, false, 0, true, false, false);
+            }
+            "trade_disputed" => {
+                let seller = d.get("seller").and_then(|v| v.as_str()).unwrap_or_default();
+                let buyer  = d.get("buyer").and_then(|v| v.as_str()).unwrap_or_default();
+                upsert(seller, false, false, 0, false, true, false);
+                upsert(buyer,  false, false, 0, false, true, false);
+            }
+            "trade_cancelled" => {
+                let seller = d.get("seller").and_then(|v| v.as_str()).unwrap_or_default();
+                upsert(seller, false, false, 0, false, false, true);
+            }
+            _ => {}
         }
     }
 

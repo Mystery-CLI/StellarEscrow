@@ -33,6 +33,11 @@ blacklist = []
 base_dir = "./uploads"
 max_file_size_mb = 10
 
+[cache]
+redis_url = ""
+default_ttl_secs = 30
+events_ttl_secs = 10
+
 [notification]
 email_api_url = "https://api.sendgrid.com"
 email_api_key = ""

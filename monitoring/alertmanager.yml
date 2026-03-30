@@ -1,5 +1,9 @@
 global:
   resolve_timeout: 5m
+  smtp_smarthost: '${SMTP_HOST:-localhost:587}'
+  smtp_from: '${SMTP_FROM:-alerts@stellarescrow.app}'
+  smtp_auth_username: '${SMTP_USER:-}'
+  smtp_auth_password: '${SMTP_PASSWORD:-}'
 
 route:
   group_by: ['alertname', 'severity']
@@ -12,21 +16,47 @@ route:
         severity: critical
       receiver: 'critical'
       repeat_interval: 1h
+    - match:
+        severity: high
+      receiver: 'high'
+      repeat_interval: 2h
 
 receivers:
   - name: 'default'
     webhook_configs:
-      - url: '${ALERT_WEBHOOK_URL:-http://localhost:3000/monitoring/alerts}'
+      - url: '${ALERT_WEBHOOK_URL:-http://indexer:3000/monitoring/alerts}'
+        send_resolved: true
+
+  - name: 'high'
+    webhook_configs:
+      - url: '${ALERT_WEBHOOK_URL:-http://indexer:3000/monitoring/alerts}'
+        send_resolved: true
+    email_configs:
+      - to: '${ONCALL_EMAIL:-oncall@stellarescrow.app}'
         send_resolved: true
 
   - name: 'critical'
     webhook_configs:
-      - url: '${INCIDENT_WEBHOOK_URL:-http://localhost:3000/monitoring/alerts}'
+      - url: '${INCIDENT_WEBHOOK_URL:-http://indexer:3000/monitoring/alerts}'
         send_resolved: true
+    email_configs:
+      - to: '${ONCALL_EMAIL:-oncall@stellarescrow.app}'
+        send_resolved: true
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_ROUTING_KEY:-}'
+        description: '[CRITICAL] {{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        severity: critical
+        client: 'StellarEscrow Alertmanager'
+        client_url: '${GRAFANA_URL:-http://localhost:3002}'
 
 inhibit_rules:
   - source_match:
       severity: 'critical'
     target_match:
       severity: 'high'
+    equal: ['alertname']
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
     equal: ['alertname']
