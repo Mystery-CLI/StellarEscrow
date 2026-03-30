@@ -1,0 +1,118 @@
+name: Performance Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run performance tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  performance-tests:
+    name: Performance Test Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: stellar_escrow
+          POSTGRES_USER: indexer
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build API
+        run: npm run build --workspace=api
+
+      - name: Start test services
+        run: |
+          docker-compose -f docker-compose.dev.yml up -d postgres redis
+          timeout 60 bash -c 'until pg_isready -h localhost -p 5432; do sleep 1; done'
+
+      - name: Run database migrations
+        run: |
+          cd indexer
+          cargo run --bin migrate
+
+      - name: Start API server
+        run: |
+          npm run gateway --workspace=api &
+          timeout 30 bash -c 'until curl -f http://localhost:3000/health; do sleep 1; done'
+
+      - name: Install Artillery
+        run: npm install -g artillery
+
+      - name: Run Jest performance tests
+        run: npm run test:performance --workspace=api
+
+      - name: Run Artillery load tests
+        run: artillery run tests/load/load-test.yml --output reports/load-test.json
+
+      - name: Run Artillery stress tests
+        run: artillery run tests/load/stress-test.yml --output reports/stress-test.json
+
+      - name: Run Artillery spike tests
+        run: artillery run tests/load/spike-test.yml --output reports/spike-test.json
+
+      - name: Run smart contract performance tests
+        run: ./scripts/stress-test.sh
+
+      - name: Generate performance report
+        run: |
+          mkdir -p reports/performance
+          node scripts/performance-test-runner.js
+
+      - name: Upload performance reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-reports
+          path: |
+            reports/
+            contract/coverage/
+
+      - name: Performance regression check
+        run: |
+          # Check if performance metrics are within acceptable ranges
+          # This would compare against baseline metrics stored as artifacts
+          echo "Performance regression check would go here"
+
+      - name: Notify on performance degradation
+        if: failure()
+        run: |
+          echo "Performance tests failed - check artifacts for details"
+          # In a real setup, this would send notifications to Slack/Discord

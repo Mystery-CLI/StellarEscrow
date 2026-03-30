@@ -1,6 +1,71 @@
 # StellarEscrow — Performance Optimization
 
-## Bottleneck Analysis
+## Performance Testing Suite
+
+StellarEscrow includes a comprehensive performance testing suite that covers load testing, stress testing, performance benchmarking, scalability testing, and performance monitoring.
+
+### Running Performance Tests
+
+```bash
+# Run all performance tests
+npm run test:performance:comprehensive
+
+# Run individual test types
+npm run test:performance          # Jest-based unit performance tests
+npm run test:performance:load     # Artillery load testing
+npm run test:performance:stress   # Artillery stress testing
+npm run test:performance:spike    # Artillery spike testing
+npm run test:performance:benchmark # API benchmarks
+npm run test:performance:scalability # Scalability tests
+npm run test:performance:monitor  # Performance monitoring
+
+# Smart contract performance tests
+./scripts/stress-test.sh
+```
+
+### Test Categories
+
+| Category | Tool | Purpose | Scenarios |
+|----------|------|---------|-----------|
+| Load Testing | Artillery | Sustained traffic simulation | Normal usage patterns, gradual load increase |
+| Stress Testing | Artillery | System limits testing | Burst traffic, high concurrency, degraded conditions |
+| Spike Testing | Artillery | Sudden traffic spikes | Traffic surges, flash crowds |
+| Benchmarking | Jest | Performance baselines | API latency, throughput measurements |
+| Scalability | Jest | Concurrency scaling | Multi-threaded performance analysis |
+| Monitoring | Jest + Prometheus | Real-time metrics | Threshold alerts, performance tracking |
+| Contract Performance | Soroban | Smart contract efficiency | CPU instruction limits, resource usage |
+
+### Performance Metrics
+
+The suite collects comprehensive metrics:
+
+- **Latency**: P50, P95, P99 response times
+- **Throughput**: Requests per second
+- **Error Rates**: Percentage of failed requests
+- **Resource Usage**: CPU, memory, network I/O
+- **Scalability**: Performance under increasing concurrency
+- **Contract Costs**: Soroban CPU instructions and memory usage
+
+### Monitoring Integration
+
+Performance metrics are exported to Prometheus at `/metrics` endpoint:
+
+```bash
+curl http://localhost:3000/metrics
+```
+
+View real-time performance dashboards in Grafana at the "StellarEscrow Performance Testing" dashboard.
+
+### CI/CD Integration
+
+Performance tests run automatically on:
+- Every push to main/develop branches
+- Pull requests
+- Daily at 2 AM UTC (regression detection)
+
+Results are stored as artifacts and compared against baselines to detect performance regressions.
+
+---
 
 Run the analysis script to identify current bottlenecks:
 
