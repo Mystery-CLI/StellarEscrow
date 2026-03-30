@@ -69,3 +69,8 @@ variable "connections_alarm" {
   type    = number
   default = 200
 }
+
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}

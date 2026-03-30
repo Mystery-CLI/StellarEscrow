@@ -58,6 +58,7 @@ module "load_balancer" {
   scale_out_cpu_threshold     = 70
   scale_in_cpu_threshold      = 30
   scale_out_request_threshold = 1000
+  aws_region                  = var.aws_region
 }
 
 module "api" {
@@ -105,4 +106,5 @@ module "database" {
   cpu_alarm_threshold      = 80
   free_storage_alarm_gb    = 5
   connections_alarm        = 200
+  aws_region               = var.aws_region
 }

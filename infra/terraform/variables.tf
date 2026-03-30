@@ -21,6 +21,10 @@ variable "app_version" {
 variable "vpc_cidr" {
   type    = string
   default = "10.0.0.0/16"
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr))
+    error_message = "vpc_cidr must be a valid CIDR block."
+  }
 }
 
 variable "availability_zones" {
@@ -33,6 +37,10 @@ variable "db_instance_class" {
   description = "RDS primary instance class"
   type        = string
   default     = "db.t3.micro"
+  validation {
+    condition     = can(regex("^db\\.", var.db_instance_class))
+    error_message = "db_instance_class must start with 'db.'."
+  }
 }
 
 variable "db_name" {
@@ -88,6 +96,10 @@ variable "api_image" {
 variable "api_cpu" {
   type    = number
   default = 256
+  validation {
+    condition     = contains([256, 512, 1024, 2048, 4096], var.api_cpu)
+    error_message = "api_cpu must be one of 256, 512, 1024, 2048, or 4096."
+  }
 }
 
 variable "api_memory" {
