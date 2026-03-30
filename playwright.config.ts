@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
  * StellarEscrow — Cross-Browser Test Matrix
  *
  * Desktop: Chrome, Firefox, Safari (WebKit), Edge
- * Mobile:  Chrome Android (Pixel 5), Safari iOS (iPhone 12)
+ * Mobile:  Chrome Android (Pixel 5), Safari iOS (iPhone 12), Samsung Internet (Galaxy S9+)
  */
 export default defineConfig({
   testDir: './tests/browser',
@@ -50,6 +50,10 @@ export default defineConfig({
     {
       name: 'mobile-safari',
       use: { ...devices['iPhone 12'] },
+    },
+    {
+      name: 'mobile-samsung',
+      use: { ...devices['Galaxy S9+'] },
     },
   ],
 

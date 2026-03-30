@@ -10,15 +10,21 @@ import { loadConfig, ApiConfig } from './config';
 import { API_ENDPOINT_CONTRACTS } from './contracts';
 import { ComplianceApi } from './compliance/compliance';
 
+// =========================
+// HELPERS
+// =========================
+
 function normalizeBaseUrl(baseURL: string): string {
   const trimmed = baseURL.replace(/\/+$/, '');
 
   try {
     const url = new URL(trimmed);
     const normalizedPath = url.pathname.replace(/\/+$/, '');
+
     if (!normalizedPath || normalizedPath === '/') {
       url.pathname = '/api';
     }
+
     return url.toString().replace(/\/+$/, '');
   } catch {
     if (!trimmed || trimmed.endsWith('/api')) {
@@ -28,8 +34,13 @@ function normalizeBaseUrl(baseURL: string): string {
   }
 }
 
+// =========================
+// MAIN API CLASS
+// =========================
+
 export class EscrowApi {
   private client: ApiClient;
+
   public trades: TradesApi;
   public events: EventsApi;
   public blockchain: BlockchainApi;
@@ -37,11 +48,16 @@ export class EscrowApi {
 
   constructor(config: ApiClientConfig) {
     this.client = new ApiClient(config);
+
     this.trades = new TradesApi(this.client);
     this.events = new EventsApi(this.client);
     this.blockchain = new BlockchainApi(this.client);
     this.compliance = new ComplianceApi(this.client);
   }
+
+  // =========================
+  // INTERCEPTORS
+  // =========================
 
   addRequestInterceptor(interceptor: RequestInterceptor) {
     this.client.addRequestInterceptor(interceptor);
@@ -60,7 +76,7 @@ export class EscrowApi {
     this.client.addResponseInterceptor(interceptor);
   }
 
-  addErrorHandler(handler: (error: any) => void) {
+  addErrorHandler(handler: (error: unknown) => void) {
     this.client.addErrorInterceptor(async (error) => {
       handler(error);
       throw error;
@@ -73,11 +89,14 @@ export class EscrowApi {
 
   addResponseLogger() {
     this.client.addResponseInterceptor((response) => {
-      console.log(`[API] ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
+      console.log(
+        `[API] ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`
+      );
       return response;
     });
   }
 }
+
 
 export const createApi = (
   baseURL: string,
@@ -87,6 +106,21 @@ export const createApi = (
     baseUrl: normalizeBaseUrl(baseURL),
     ...configOverrides,
   });
+
+// =========================
+// FACTORY
+// =========================
+
+export const createApi = (
+  baseURL: string,
+  mockEnabled = false
+): EscrowApi => {
+  const cfg = loadConfig({
+    baseUrl: normalizeBaseUrl(baseURL),
+    mockEnabled,
+  });
+
+
   return new EscrowApi({
     baseURL: cfg.baseUrl,
     timeout: cfg.timeoutMs,
@@ -98,17 +132,25 @@ export const createApi = (
     },
   });
 };
+
+// =========================
+// EXPORTS
+// =========================
+
 export { ComplianceApi } from './compliance/compliance';
 export { ApiClient } from './client';
 export { TradesApi, EventsApi, BlockchainApi } from './resources';
 export { loadConfig } from './config';
 export { API_ENDPOINT_CONTRACTS } from './contracts';
+
 export {
   PerformanceMonitor,
   evaluateThresholds,
   executeScenario,
 } from './performance';
+
 export type { Trade, Event } from './models';
+
 export type {
   ApiClientConfig,
   ApiError,
@@ -117,7 +159,9 @@ export type {
   ResponseInterceptor,
   RetryConfig,
 } from './types';
+
 export type { ApiConfig };
+
 export {
   ApiConnector,
   IntegrationMonitor,
@@ -131,6 +175,9 @@ export type {
   IntegrationProvider,
   IntegrationStatus,
 } from './integration';
+
+
+
 export type {
   OperationPerformanceSummary,
   PerformanceAlert,
@@ -140,6 +187,7 @@ export type {
   PerformanceSummary,
   PerformanceThresholds,
   ScenarioExecutionContext,
+
 } from './performance';
 
 // API Gateway
@@ -160,3 +208,5 @@ export type {
   GatewayResponse,
   AuthResult,
 } from './gateway';
+
+} from './performance';
