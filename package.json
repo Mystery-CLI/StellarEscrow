@@ -55,5 +55,8 @@
     "testing/uat",
     "testing/accessibility",
     "tests"
-  ]
+  ],
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.2"
+  }
 }
