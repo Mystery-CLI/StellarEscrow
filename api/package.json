@@ -18,7 +18,7 @@
     "test:benchmark": "jest --runInBand benchmark",
     "test:scalability": "jest --runInBand scalability",
     "test:monitoring": "jest --runInBand monitoring",
-    "test:performance": "jest --runInBand --testPathPattern='api\\.(load|stress|benchmark|scalability|monitoring)\\.test\\.ts'",
+    "test:performance": "jest --runInBand --testPathPattern=api.*.test.ts --testNamePattern=\"(load|stress|benchmark|scalability|monitoring)\"",
     "test:docs": "jest --runInBand documentation",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --runInBand"
