@@ -4,11 +4,20 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from 'axios';
-import { ApiClientConfig, ApiError, RetryConfig, RequestInterceptor, ResponseInterceptor, ErrorInterceptor } from './types';
+
+import {
+  ApiClientConfig,
+  ApiError,
+  RetryConfig,
+  RequestInterceptor,
+  ResponseInterceptor,
+  ErrorInterceptor,
+} from './types';
 
 export class ApiClient {
   private client: AxiosInstance;
   private retryConfig: RetryConfig;
+
   private requestInterceptors: RequestInterceptor[] = [];
   private responseInterceptors: ResponseInterceptor[] = [];
   private errorInterceptors: ErrorInterceptor[] = [];
@@ -28,21 +37,29 @@ export class ApiClient {
     this.setupInterceptors();
   }
 
+  // =========================
+  // INTERCEPTORS
+  // =========================
+
   private setupInterceptors() {
     this.client.interceptors.request.use((config) => {
       let nextConfig: InternalAxiosRequestConfig = config;
+
       for (const interceptor of this.requestInterceptors) {
         nextConfig = interceptor(nextConfig);
       }
+
       return nextConfig;
     });
 
     this.client.interceptors.response.use(
       (response: AxiosResponse) => {
         let nextResponse = response;
+
         for (const interceptor of this.responseInterceptors) {
           nextResponse = interceptor(nextResponse);
         }
+
         return nextResponse;
       },
       (error: AxiosError) => this.handleError(error)
@@ -61,72 +78,113 @@ export class ApiClient {
     this.errorInterceptors.push(interceptor);
   }
 
+  // =========================
+  // ERROR HANDLING
+  // =========================
+
   private async handleError(error: AxiosError): Promise<any> {
     for (const interceptor of this.errorInterceptors) {
       try {
         return await interceptor(error);
-      } catch (e) {
-        // Continue to next interceptor
+      } catch {
+        // try next interceptor
       }
     }
+
     throw this.parseError(error);
   }
 
   private parseError(error: AxiosError): ApiError {
-    const details =
-      error.response?.data && typeof error.response.data === 'object'
-        ? (error.response.data as Record<string, any>)
-        : undefined;
-
     return {
       code: error.code || 'UNKNOWN_ERROR',
       message: error.message,
       status: error.response?.status || 0,
-      details,
+      details: error.response?.data as Record<string, any> | undefined,
     };
   }
+
+  // =========================
+  // RETRY LOGIC
+  // =========================
 
   private async retryRequest<T>(fn: () => Promise<T>, attempt = 0): Promise<T> {
     try {
       return await fn();
-    } catch (error) {
-      if (attempt < this.retryConfig.maxRetries && this.shouldRetry(error)) {
-        const delay = this.retryConfig.delayMs * Math.pow(this.retryConfig.backoffMultiplier, attempt);
+    } catch (error: any) {
+      if (
+        attempt < this.retryConfig.maxRetries &&
+        this.shouldRetry(error)
+      ) {
+        const delay =
+          this.retryConfig.delayMs *
+          Math.pow(this.retryConfig.backoffMultiplier, attempt);
+
         await new Promise((resolve) => setTimeout(resolve, delay));
+
         return this.retryRequest(fn, attempt + 1);
       }
-      throw error;
+
+      // If error is already a parsed ApiError (has 'code' and 'status'), rethrow as-is.
+      // Otherwise parse it so callers always receive ApiError shape.
+      if (error.code !== undefined && typeof error.status === 'number') {
+        throw error;
+      }
+      throw this.parseError(error);
     }
   }
 
   private shouldRetry(error: any): boolean {
-    if (error.response?.status) {
-      return error.response.status >= 500 || error.response.status === 408 || error.response.status === 429;
+    const status = error.response?.status ?? error.status ?? 0;
+
+    if (status) {
+      return (
+        status === 502 ||
+        status === 503 ||
+        status === 504 ||
+        status === 408 ||
+        status === 429
+      );
     }
-    return error.code === 'ECONNABORTED' || error.code === 'ENOTFOUND';
+
+    return (
+      error.code === 'ECONNABORTED' ||
+      error.code === 'ENOTFOUND'
+    );
   }
+
+  // =========================
+  // HTTP METHODS
+  // =========================
 
   async get<T = any>(url: string, config?: any): Promise<T> {
     return this.retryRequest(() =>
-      this.client.get<T>(url, config).then((res: AxiosResponse<T>) => res.data)
+      this.client
+        .get<T>(url, config)
+        .then((res: AxiosResponse<T>) => res.data)
     );
   }
 
   async post<T = any>(url: string, data?: any, config?: any): Promise<T> {
     return this.retryRequest(() =>
-      this.client.post<T>(url, data, config).then((res: AxiosResponse<T>) => res.data)
+      this.client
+        .post<T>(url, data, config)
+        .then((res: AxiosResponse<T>) => res.data)
     );
   }
 
   async patch<T = any>(url: string, data?: any, config?: any): Promise<T> {
     return this.retryRequest(() =>
-      this.client.patch<T>(url, data, config).then((res: AxiosResponse<T>) => res.data)
+      this.client
+        .patch<T>(url, data, config)
+        .then((res: AxiosResponse<T>) => res.data)
     );
   }
 
   async delete<T = any>(url: string, config?: any): Promise<T> {
     return this.retryRequest(() =>
-      this.client.delete<T>(url, config).then((res: AxiosResponse<T>) => res.data)
+      this.client
+        .delete<T>(url, config)
+        .then((res: AxiosResponse<T>) => res.data)
     );
   }
 }

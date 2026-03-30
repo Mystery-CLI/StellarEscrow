@@ -2,10 +2,11 @@ import { rest } from 'msw';
 import { createApi } from './index';
 import { server } from './mocks';
 
+const BASE = 'http://localhost:3000';
+
 describe('API integration', () => {
   it('runs the documented happy path against mocked endpoints', async () => {
     const api = createApi('http://localhost:3000');
-
     await expect(api.trades.getTrades(10, 0)).resolves.toHaveLength(1);
     await expect(api.trades.getTrade('1')).resolves.toMatchObject({ id: '1' });
     await expect(
@@ -22,12 +23,10 @@ describe('API integration', () => {
       status: 'funded',
     });
     await expect(api.trades.deleteTrade('1')).resolves.toBeUndefined();
-
     await expect(api.events.getEvents(100)).resolves.toHaveLength(1);
     await expect(api.events.getEvents(100, '1')).resolves.toHaveLength(1);
     await expect(api.events.getEventsByTrade('1')).resolves.toHaveLength(1);
     await expect(api.events.getEvent('1')).resolves.toMatchObject({ id: '1', tradeId: '1' });
-
     await expect(api.blockchain.fundTrade('1', '100')).resolves.toMatchObject({
       txHash: '0xtx0001',
     });
@@ -48,7 +47,7 @@ describe('API integration', () => {
     let authorizationHeader: string | null = null;
 
     server.use(
-      rest.get('/api/trades', (req, res, ctx) => {
+      rest.get(`${BASE}/api/trades`, (req, res, ctx) => {
         authorizationHeader = req.headers.get('authorization');
         return res(ctx.json([]));
       })
@@ -65,7 +64,7 @@ describe('API integration', () => {
     const handler = jest.fn();
 
     server.use(
-      rest.get('/api/trades', (_req, res, ctx) =>
+      rest.get(`${BASE}/api/trades`, (_req, res, ctx) =>
         res(ctx.status(500), ctx.json({ error: 'temporary outage' }))
       )
     );
@@ -84,7 +83,7 @@ describe('API integration', () => {
     let attempts = 0;
 
     server.use(
-      rest.get('/api/trades', (_req, res, ctx) => {
+      rest.get(`${BASE}/api/trades`, (_req, res, ctx) => {
         attempts += 1;
         if (attempts === 1) {
           return res(ctx.status(503), ctx.json({ error: 'retry me' }));

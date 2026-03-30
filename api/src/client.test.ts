@@ -1,5 +1,5 @@
-import { ApiClient } from '../client';
-import { ApiError } from '../types';
+import { ApiClient } from './client';
+import { ApiError } from './types';
 
 describe('ApiClient', () => {
   let client: ApiClient;
@@ -42,7 +42,7 @@ describe('ApiClient', () => {
     });
 
     let attempts = 0;
-    client.addErrorInterceptor(async (error) => {
+    client.addErrorInterceptor(async (error: any) => {
       attempts++;
       if (attempts < 2) {
         throw error;

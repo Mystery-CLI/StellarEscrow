@@ -4,6 +4,10 @@ export interface ApiResponse<T = any> {
   message?: string;
 }
 
+// =========================
+// API ERROR (STRICT + TEST SAFE)
+// =========================
+
 export interface ApiError {
   code: string;
   message: string;
@@ -11,11 +15,19 @@ export interface ApiError {
   details?: Record<string, any>;
 }
 
+// =========================
+// RETRY CONFIG
+// =========================
+
 export interface RetryConfig {
   maxRetries: number;
   delayMs: number;
   backoffMultiplier: number;
 }
+
+// =========================
+// CLIENT CONFIG
+// =========================
 
 export interface ApiClientConfig {
   baseURL: string;
@@ -24,16 +36,18 @@ export interface ApiClientConfig {
   mockEnabled?: boolean;
 }
 
-export interface RequestInterceptor {
-  (config: any): any;
-}
+// =========================
+// INTERCEPTORS (TYPED 🔥)
+// =========================
 
-export interface ResponseInterceptor {
-  (response: any): any;
-}
+export type RequestInterceptor = (config: any) => any;
 
-export interface ErrorInterceptor {
-  (error: any): Promise<any>;
-}
+export type ResponseInterceptor = (response: any) => any;
+
+export type ErrorInterceptor = (error: any) => Promise<any>;
+
+// =========================
+// EXPORT MODELS
+// =========================
 
 export type { Trade, Event } from './models';
