@@ -739,43 +739,52 @@ impl StellarEscrowContract {
         storage::get_trade(&env, trade_id)
     }
 
-    pub fn withdraw_fees(env: Env, to: Address) -> Result<(), ContractError> {
+    /// Withdraw accumulated protocol fees for a specific currency to a recipient.
+    /// Only the admin may call this. Panics if `amount` exceeds the available balance.
+    pub fn withdraw_fees(
+        env: Env,
+        admin: Address,
+        currency: Address,
+        amount: i128,
+        recipient: Address,
+    ) -> Result<(), ContractError> {
+        require_initialized(&env)?;
+        admin.require_auth();
+        if admin != storage::get_admin(&env)? {
+            return Err(ContractError::Unauthorized);
+        }
+        if amount <= 0 {
+            return Err(ContractError::NoFeesToWithdraw);
+        }
+        let available = storage::get_currency_fees(&env, &currency) as i128;
+        if amount > available {
+            return Err(ContractError::NoFeesToWithdraw);
+        }
+        storage::set_currency_fees(&env, &currency, (available - amount) as u64);
+        token::Client::new(&env, &currency).transfer(
+            &env.current_contract_address(),
+            &recipient,
+            &amount,
+        );
+        env.events().publish(
+            (
+                soroban_sdk::Symbol::new(&env, "fees"),
+                soroban_sdk::Symbol::new(&env, "withdrawn"),
+                recipient.clone(),
+            ),
+            (currency, amount),
+        );
+        Ok(())
+    }
+
+    /// Legacy single-currency fee withdrawal (USDC accumulated fees).
+    pub fn withdraw_fees_legacy(env: Env, to: Address) -> Result<(), ContractError> {
         require_initialized(&env)?;
         let admin = storage::get_admin(&env)?;
         admin.require_auth();
         let fees = storage::get_accumulated_fees(&env)?;
         if fees == 0 {
             return Err(ContractError::NoFeesToWithdraw);
-        require_not_paused(&env)?;
-        let mut trade = get_trade(&env, trade_id)?;
-        if trade.status != TradeStatus::Created {
-            return Err(ContractError::InvalidStatus);
-        }
-        trade.seller.require_auth();
-        trade.status = TradeStatus::Cancelled;
-        save_trade(&env, trade_id, &trade);
-        events::emit_trade_cancelled(&env, trade_id);
-        analytics::on_trade_cancelled(&env);
-        Ok(())
-    }
-
-    /// anyone can call this once the expiry has
-    /// passed and the trade is Funded or Completed (not Disputed/Cancelled).
-    /// Funds are released to the seller minus the platform fee.
-    pub fn claim_time_release(env: Env, trade_id: u64) -> Result<(), ContractError> {
-        if !is_initialized(&env) {
-            return Err(ContractError::NotInitialized);
-        }
-        require_not_paused(&env)?;
-
-        let trade = get_trade(&env, trade_id)?;
-        if trade.status != TradeStatus::Funded && trade.status != TradeStatus::Completed {
-            return Err(ContractError::InvalidStatus);
-        }
-        let expiry = trade.expiry_time.ok_or(ContractError::InvalidExpiry)?;
-        // Stellar ledger timestamp is always UTC seconds — no timezone handling needed
-        if env.ledger().timestamp() < expiry {
-            return Err(ContractError::TradeNotExpired);
         }
         usdc_client(&env)?.transfer(&env.current_contract_address(), &to, &(fees as i128));
         storage::set_accumulated_fees(&env, 0);
