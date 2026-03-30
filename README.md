@@ -70,3 +70,21 @@ npm run test:contract:stress
 npm run test:contract:coverage
 ```
 
+## Test Automation Framework
+
+A full test automation framework is available under `scripts/` and `testing/`:
+
+- `npm run test:orchestrate` (runs unit, api, uat, a11y workflows sequentially)
+- `npm run test:analytics` (aggregates orchestration/test suite results)
+- `npm run test:maintain` (flaky/broken test maintenance rules)
+
+Example local invocation:
+
+```bash
+# health-check before running unit regression against API
+node scripts/orchestrate.js --suite unit --env ci
+```
+
+CI workflow is in `.github/workflows/test-framework.yml` with nightly schedules, PR comments, artifact upload, and report snapshot.
+
+
